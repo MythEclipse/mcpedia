@@ -3,14 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.33.2",
-  "workspaces": [
-    "apps/*",
-    "packages/*",
-    "scripts"
-  ],
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
+    "build:bundles": "node scripts/build-bundles.mjs",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "index": "tsx scripts/indexer.ts",
