@@ -1,19 +1,25 @@
+# Source-of-truth copy of /etc/systemd/system/mcpedia-web.service.
+#
+# Installed by scripts/deploy-direct.sh during a deploy (byte-identical to the
+# live unit, comments aside — that is the invariant the deploy relies on).
+# The launchers these ExecStart lines point at live in /opt/mcpedia-*/bin and
+# exec system Node; there is no bun and no Nix path left anywhere in them.
 [Unit]
-Description=MCPedia Web (Next.js docs UI + search)
+Description=MCPedia Web (native)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=/home/code/mcpedia
-# Loads DATABASE_URL, EMBED_*, REDIS_*, WEBHOOK_SECRET from the repo .env.
-# CONTENT_ROOT defaults to /home/code/mcpedia/content when unset.
 Environment=PORT=4016
 Environment=NODE_ENV=production
 EnvironmentFile=/home/code/mcpedia/.env
-ExecStart=/home/code/.bun/bin/bun run --cwd apps/web start
-Restart=on-failure
+ExecStart=/opt/mcpedia-web/bin/mcpedia-web
+Restart=always
 RestartSec=3
+User=code
+Group=code
 
 [Install]
 WantedBy=multi-user.target

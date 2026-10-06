@@ -1,10 +1,26 @@
 name: CI
 
+# Two jobs, both pnpm + Node:
+#
+#   test    — the gate. typecheck, the test suite, the three production
+#             bundles and the Next.js build must all succeed on the runner
+#             before anything reaches the host.
+#   deploy  — copies scripts/deploy-direct.sh to the host and runs it there
+#             with this SHA. Building happens ON the host (see the comments in
+#             that script), so CI and production share one node_modules and a
+#             bundle can never be built against a different lockfile than the
+#             one the gate verified.
+#
+# The old pipeline built Nix derivations, pushed them to the Attic cache and
+# flipped a `nix-env` profile. Nix was uninstalled from the host, so every one
+# of those steps is dead; the systemd units under /opt/mcpedia-* are the
+# deployment target now.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -19,308 +35,80 @@ permissions:
 
 jobs:
   test:
-    name: typecheck + tests
+    name: typecheck + tests + build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          bun-version: "1.4.0"
+          node-version: 22
+          cache: pnpm
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: bun run typecheck
+        run: pnpm typecheck
 
       - name: Test
-        run: bun run test
+        run: pnpm test
 
-      # Build .next for web — Next.js/Turbopack has a Bun incompatibility
-      # in the Nix sandbox. The web derivation (web.nix) packages this
-      # pre-built .next into a Nix store path.
-      - name: Build Next.js .next
-        working-directory: apps/web
-        run: bun run build
+      # Build the three service bundles on the runner too: a source change that
+      # esbuild refuses to bundle should fail here, not halfway through a
+      # deploy on the host.
+      - name: Build service bundles
+        run: pnpm build:bundles
 
-      - name: Tar .next
-        run: tar -C apps/web --exclude='.next/cache' -czf web-next.tar.gz .next
+      - name: Build Next.js
+        run: pnpm --filter @mcpedia/web build
 
-      - name: Upload web .next artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mcpedia-web-next
-          path: web-next.tar.gz
-          if-no-files-found: error
-
-  build-and-deploy:
-    name: build + deploy (Nix) — ${{ matrix.service }}
+  deploy:
+    name: deploy to host
     needs: test
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [api, mcp, worker]
-
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v16
-        with:
-          determinate: false
-          extra-conf: |
-            sandbox = false
-            accept-flake-config = true
-            # Attic caches as substituters: lets CI pull the prebuilt attic
-            # client (and any cached deps/builds) over HTTPS.
-            extra-substituters = https://attic.asepharyana.my.id/gmw https://attic.asepharyana.my.id/mcpedia
-            extra-trusted-public-keys = gmw:Fq2Anzuhkb+T/hftWnPcveHSi21/RzIgIOeG8pCJa88= mcpedia:MNAtF2xaeKSFFVu7r3zOp2Jktu1jKHIQmcT+ePEfv9o=
-
-      - name: Cache Nix
-        uses: DeterminateSystems/magic-nix-cache-action@v14
-        with:
-          use-flakehub: false
-
-      - name: Build ${{ matrix.service }}
-        id: build
-        run: |
-          nix build ".#${{ matrix.service }}" --impure --option sandbox false --print-build-logs
-          STORE_PATH=$(readlink result)
-          echo "store-path=$STORE_PATH" >> "$GITHUB_OUTPUT"
-          echo "Build OK ${{ matrix.service }}: $STORE_PATH"
 
       - name: Setup SSH key
         env:
           SSH_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+          # GitHub secrets store raw keys; a CRLF turns every ssh invocation
+          # into "invalid format".
           sed -i 's/\r$//' ~/.ssh/id_ed25519
           ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null 2>&1 || { echo "SSH key invalid"; exit 1; }
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          chmod 600 ~/.ssh/known_hosts
 
-      # ── Push build to Attic binary cache ───────────────────────────────
-      # Bootstrap the attic client from the gmw cache (pre-built closure,
-      # pulled over HTTPS via the configured extra-substituters), then
-      # push to the mcpedia cache. This is FASTER than nix copy --to ssh://
-      # because the VPS substitutes (downloads) from the cache over HTTPS
-      # instead of a single-stream SSH copy.
-      - name: Push to Attic cache
-        id: push-attic
-        env:
-          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
-          STORE_PATH: ${{ steps.build.outputs.store-path }}
+      - name: Deploy via scripts/deploy-direct.sh
+        # The script is scp'd from THIS checkout, never run from
+        # /home/code/mcpedia: a fix to the deploy script could never take
+        # effect if the copy that applies it is the stale one.
         run: |
-          ATTIC_DIR="/nix/store/fygyy3yk4rqdknxkiwkqambpnhyax0k4-attic-0.1.0"
-          mkdir -p "$HOME/.config/attic"
-          cat > "$HOME/.config/attic/config.toml" <<EOF
-          default-server = "pub"
-          [servers.pub]
-          endpoint = "https://attic.asepharyana.my.id"
-          token = "$ATTIC_TOKEN"
-          EOF
-
-          ATTIC_BIN=""
-          # Fast path: pull attic client from gmw cache
-          if nix-store --realise "$ATTIC_DIR" 2>/dev/null; then
-            ATTIC_BIN="$ATTIC_DIR/bin/attic"
-          fi
-
-          push_ok=""
-          if [ -n "$ATTIC_BIN" ] && [ -x "$ATTIC_BIN" ]; then
-            for attempt in 1 2 3; do
-              if "$ATTIC_BIN" push pub:mcpedia "$STORE_PATH" --jobs 4 --ignore-upstream-cache-filter; then
-                echo "✅ Pushed $STORE_PATH to Attic"
-                push_ok=1
-                break
-              fi
-              echo "⚠️ Attic push attempt $attempt/3 failed; retrying in 10s..."
-              sleep 10
-            done
-          fi
-
-          if [ -z "$push_ok" ]; then
-            echo "Attic push failed; copying store path directly to VPS"
-            nix copy --to "ssh://${VPS_USER}@${VPS_HOST}" "$STORE_PATH"
-            echo "push-fallback=ssh" >> "$GITHUB_OUTPUT"
-          else
-            echo "push-method=attic" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Deploy on VPS
-        env:
-          STORE_PATH: ${{ steps.build.outputs.store-path }}
-          SERVICE: ${{ matrix.service }}
-          VPS_HOST: ${{ secrets.SSH_DEPLOY_HOST }}
-          VPS_USER: ${{ secrets.SSH_DEPLOY_USER }}
-        run: |
-          PROFILE="mcpedia-${SERVICE}"
-          # Substitute from Attic cache (fast — downloads over HTTPS)
-          # Falls back to SSH copy if substitution fails
-          REALISE_RESULT=$(ssh "$VPS_USER@$VPS_HOST" \
-            "sudo /nix/var/nix/profiles/default/bin/nix-store --realise '$STORE_PATH' 2>&1 || true")
-          echo "$REALISE_RESULT"
-
-          # Update profile + sync git repo + restart
+          echo "=== Deploying ${{ github.sha }} to $VPS_HOST ==="
+          scp -q scripts/deploy-direct.sh "$VPS_USER@$VPS_HOST:/tmp/mcpedia-deploy.sh"
           ssh "$VPS_USER@$VPS_HOST" \
-            "sudo /nix/var/nix/profiles/default/bin/nix-env \
-              --profile /nix/var/nix/profiles/$PROFILE \
-              --set '$STORE_PATH' && \
-            (cd /home/code/mcpedia && git fetch origin main && git reset --hard origin/main || true) && \
-            sudo systemctl restart $PROFILE && \
-            sleep 3 && \
-            sudo systemctl status $PROFILE --no-pager --no-legend | head -5"
+            "sed -i 's/\r$//' /tmp/mcpedia-deploy.sh && bash /tmp/mcpedia-deploy.sh ${{ github.sha }}"
+          echo "deploy finished"
 
-      - name: Verify service
-        env:
-          VPS_HOST: ${{ secrets.SSH_DEPLOY_HOST }}
-          VPS_USER: ${{ secrets.SSH_DEPLOY_USER }}
-          SERVICE: ${{ matrix.service }}
-        run: |
-          PORT_MAP="api:4017 mcp:4021 worker:4018"
-          PORT=$(echo "$PORT_MAP" | grep "$SERVICE" | awk -F: '{print $2}')
-          ssh "$VPS_USER@$VPS_HOST" \
-            "curl -s -o /dev/null -w '%{http_code}' http://localhost:$PORT/health 2>/dev/null \
-             || systemctl is-active \"mcpedia-$SERVICE\""
-
-  deploy-web:
-    name: build + deploy (web)
-    needs: test
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.0"
-
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v16
-        with:
-          determinate: false
-          extra-conf: |
-            sandbox = false
-            accept-flake-config = true
-            extra-substituters = https://attic.asepharyana.my.id/gmw https://attic.asepharyana.my.id/mcpedia
-            extra-trusted-public-keys = gmw:Fq2Anzuhkb+T/hftWnPcveHSi21/RzIgIOeG8pCJa88= mcpedia:MNAtF2xaeKSFFVu7r3zOp2Jktu1jKHIQmcT+ePEfv9o=
-
-      - name: Cache Nix
-        uses: DeterminateSystems/magic-nix-cache-action@v14
-        with:
-          use-flakehub: false
-
-      - name: Download web .next artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: mcpedia-web-next
-          path: /tmp/web-next
-
-      - name: Unpack .next
-        run: tar -xzf /tmp/web-next/web-next.tar.gz -C apps/web/
-
-      - name: Install deps (for bunx in web.nix)
-        run: bun install --frozen-lockfile
-
-      - name: Build web Nix derivation
-        id: build
-        run: |
-          REPO_ROOT="$(pwd)"
-          nix-build -E \
-            "let pkgs = import <nixpkgs> {}; in pkgs.callPackage ${REPO_ROOT}/web.nix {
-              webNextDir = ${REPO_ROOT}/apps/web/.next;
-            }" \
-            --impure --option sandbox false
-          STORE_PATH=$(readlink result)
-          echo "store-path=$STORE_PATH" >> "$GITHUB_OUTPUT"
-
-      - name: Setup SSH key
-        env:
-          SSH_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          sed -i 's/\r$//' ~/.ssh/id_ed25519
-          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null 2>&1 || { echo "SSH key invalid"; exit 1; }
-          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          chmod 600 ~/.ssh/known_hosts
-
-      - name: Push to Attic cache
-        id: push-attic
-        env:
-          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
-          STORE_PATH: ${{ steps.build.outputs.store-path }}
-        run: |
-          ATTIC_DIR="/nix/store/fygyy3yk4rqdknxkiwkqambpnhyax0k4-attic-0.1.0"
-          mkdir -p "$HOME/.config/attic"
-          cat > "$HOME/.config/attic/config.toml" <<EOF
-          default-server = "pub"
-          [servers.pub]
-          endpoint = "https://attic.asepharyana.my.id"
-          token = "$ATTIC_TOKEN"
-          EOF
-
-          ATTIC_BIN=""
-          if nix-store --realise "$ATTIC_DIR" 2>/dev/null; then
-            ATTIC_BIN="$ATTIC_DIR/bin/attic"
-          fi
-
-          push_ok=""
-          if [ -n "$ATTIC_BIN" ] && [ -x "$ATTIC_BIN" ]; then
-            for attempt in 1 2 3; do
-              if "$ATTIC_BIN" push pub:mcpedia "$STORE_PATH" --jobs 4 --ignore-upstream-cache-filter; then
-                echo "✅ Pushed $STORE_PATH to Attic"
-                push_ok=1
-                break
-              fi
-              echo "⚠️ Attic push attempt $attempt/3 failed; retrying in 10s..."
-              sleep 10
-            done
-          fi
-
-          if [ -z "$push_ok" ]; then
-            echo "Attic push failed; copying store path directly to VPS"
-            nix copy --to "ssh://${VPS_USER}@${VPS_HOST}" "$STORE_PATH"
-          fi
-
-      - name: Deploy on VPS
-        env:
-          STORE_PATH: ${{ steps.build.outputs.store-path }}
-          VPS_HOST: ${{ secrets.SSH_DEPLOY_HOST }}
-          VPS_USER: ${{ secrets.SSH_DEPLOY_USER }}
-        run: |
-          # Update profile + sync git repo + sync .next + restart
-          ssh "$VPS_USER@$VPS_HOST" \
-            "sudo /nix/var/nix/profiles/default/bin/nix-store --realise '$STORE_PATH' && \
-            sudo /nix/var/nix/profiles/default/bin/nix-env \
-              --profile /nix/var/nix/profiles/mcpedia-web \
-              --set '$STORE_PATH' && \
-            (cd /home/code/mcpedia && git fetch origin main && git reset --hard origin/main) && \
-            sudo rm -rf /home/code/mcpedia/apps/web/.next && \
-            sudo cp -r '$STORE_PATH/share/mcpedia-web/.next' /home/code/mcpedia/apps/web/.next && \
-            sudo systemctl restart mcpedia-web && \
-            sleep 3 && \
-            sudo systemctl status mcpedia-web --no-pager --no-legend | head -5"
-
-      - name: Verify public URL
-        env:
-          VPS_HOST: ${{ secrets.SSH_DEPLOY_HOST }}
-          VPS_USER: ${{ secrets.SSH_DEPLOY_USER }}
+      - name: Verify services
         run: |
           ssh "$VPS_USER@$VPS_HOST" \
-            "curl -sk -o /dev/null -w '%{http_code}' https://wiki.asepharyana.my.id/"
+            "for u in mcpedia-api mcpedia-mcp mcpedia-worker mcpedia-web; do \
+               printf '  %-16s -> %s\n' \"\$u\" \"\$(systemctl is-active \$u)\"; \
+             done; \
+             echo '--- HTTP ---'; \
+             for url in http://127.0.0.1:4020/health http://127.0.0.1:4016/ https://wiki.asepharyana.my.id/; do \
+               code=\$(curl -sk -o /dev/null -w '%{http_code}' --max-time 8 \$url); \
+               printf '  %s -> %s\n' \"\$url\" \"\$code\"; \
+             done"

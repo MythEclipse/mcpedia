@@ -1,25 +1,25 @@
+# Source-of-truth copy of /etc/systemd/system/mcpedia-api.service.
+#
+# Installed by scripts/deploy-direct.sh during a deploy (byte-identical to the
+# live unit, comments aside — that is the invariant the deploy relies on).
+# The launchers these ExecStart lines point at live in /opt/mcpedia-*/bin and
+# exec system Node; there is no bun and no Nix path left anywhere in them.
 [Unit]
-Description=MCPedia API (tRPC/Hono + git-sync webhooks)
+Description=MCPedia API (native)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=/home/code/mcpedia
-# Loads DATABASE_URL, REDIS_*, EMBED_*, WEBHOOK_SECRET from the repo .env
-# (.env is gitignored; for prod, point this at a deployed secret file).
 EnvironmentFile=/home/code/mcpedia/.env
-# Absolute bun path (systemd has a minimal PATH; /usr/bin/env bun fails).
-ExecStart=/home/code/.bun/bin/bun --cwd apps/api src/index.ts
-Restart=on-failure
+ExecStart=/opt/mcpedia-api/bin/mcpedia-api
+Restart=always
 RestartSec=5
 User=code
 Group=code
-# The API needs WEBHOOK_SECRET; fail-fast is built into the app if it's missing.
 NoNewPrivileges=true
 PrivateTmp=true
-MemoryMax=512M
-TasksMax=256
 
 [Install]
 WantedBy=multi-user.target

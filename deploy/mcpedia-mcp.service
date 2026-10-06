@@ -1,24 +1,27 @@
+# Source-of-truth copy of /etc/systemd/system/mcpedia-mcp.service.
+#
+# Installed by scripts/deploy-direct.sh during a deploy (byte-identical to the
+# live unit, comments aside — that is the invariant the deploy relies on).
+# The launchers these ExecStart lines point at live in /opt/mcpedia-*/bin and
+# exec system Node; there is no bun and no Nix path left anywhere in them.
 [Unit]
-Description=MCPedia MCP server (Streamable HTTP)
+Description=MCPedia MCP server (native)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=/home/code/mcpedia
-# Loads DATABASE_URL, EMBED_* from the repo .env (MCP tools read the KB).
 EnvironmentFile=/home/code/mcpedia/.env
-# Absolute bun path (systemd has a minimal PATH; /usr/bin/env bun fails).
 Environment=MCP_PORT=4021
-ExecStart=/home/code/.bun/bin/bun --cwd apps/mcp src/http.ts
-Restart=on-failure
+ExecStart=/opt/mcpedia-mcp/bin/mcpedia-mcp
+Restart=always
 RestartSec=5
 User=code
 Group=code
 NoNewPrivileges=true
 PrivateTmp=true
 MemoryMax=512M
-TasksMax=256
 
 [Install]
 WantedBy=multi-user.target
