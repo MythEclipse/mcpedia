@@ -11,6 +11,6 @@
     "gray-matter": "^4.0.3"
   },
   "scripts": {
-    "test": "bun test"
+    "test": "node --test"
   }
 }

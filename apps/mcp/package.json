@@ -7,12 +7,12 @@
     "mcpedia-mcp": "./src/index.ts"
   },
   "scripts": {
-    "start": "bun run src/index.ts",
-    "serve:http": "bun run src/http.ts",
+    "start": "tsx src/index.ts",
+    "serve:http": "tsx src/http.ts",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "smoke": "bun run src/smoke.ts",
-    "test": "bun test"
+    "smoke": "tsx src/smoke.ts",
+    "test": "node --test"
   },
   "dependencies": {
     "@mcpedia/config": "workspace:*",

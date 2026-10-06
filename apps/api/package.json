@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run src/index.ts",
-    "start": "bun run src/index.ts",
+    "dev": "tsx src/index.ts",
+    "start": "tsx src/index.ts",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "node --test"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",

@@ -17,6 +17,9 @@
 **/.next/
 /out/
 
+# Previous bun-built Next output, kept locally as a rollback artifact only.
+apps/web/.next.bun-old-*/
+
 # production
 /build
 

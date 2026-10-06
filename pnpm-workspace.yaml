@@ -1,0 +1,19 @@
+# pnpm workspace (replaces bun's implicit `workspaces` field in package.json).
+#
+# bun auto-discovered `apps/*`, `packages/*` and `scripts`. pnpm needs to be
+# told explicitly, and the globs are kept identical so the dependency graph
+# resolves to exactly the same set of local packages.
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "scripts"
+
+# Lifecycle scripts pnpm blocks by default. Each entry is opted in deliberately:
+#   esbuild          - downloads its platform binary; without it the bundler is dead.
+#   msgpackr-extract - native accelerator used by the Redis client in @mcpedia/queue.
+#   unrs-resolver    - native resolver used by Next.js when building apps/web.
+# Listing them here keeps `pnpm install` non-interactive and reproducible in CI.
+onlyBuiltDependencies:
+  - esbuild
+  - msgpackr-extract
+  - unrs-resolver

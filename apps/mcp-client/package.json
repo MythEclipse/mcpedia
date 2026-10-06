@@ -7,13 +7,13 @@
     "mcpedia-mcp-client": "./src/index.ts"
   },
   "scripts": {
-    "start": "bun run src/index.ts",
-    "chat": "bun run src/index.ts",
-    "ask": "bun run src/ask.ts",
+    "start": "tsx src/index.ts",
+    "chat": "tsx src/index.ts",
+    "ask": "tsx src/ask.ts",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "build": "bun build src/index.ts --outdir=dist --format=esm",
-    "test": "bun test"
+    "build": "esbuild src/index.ts --outdir=dist --platform=node --format=esm",
+    "test": "node --test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
