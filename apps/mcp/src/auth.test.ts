@@ -1,4 +1,4 @@
-import { test, expect, mock } from "bun:test";
+import { test, expect, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
@@ -7,13 +7,15 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 // Postgres / Redis / embeddings. We record calls to the mutating functions
 // so we can assert the auth gate is (or isn't) the reason a tool errors.
 // -----------------------------------------------------------------------
-const calls = {
+// vi.mock() is hoisted above the imports, so the call log it closes over must
+// be created with vi.hoisted() or the factory would hit the temporal dead zone.
+const calls = vi.hoisted(() => ({
   enqueueIndexDoc: [] as Array<[string, string]>,
   enqueueFullIndex: [] as Array<[string]>,
   restoreRevision: [] as Array<[string]>,
-};
+}));
 
-mock.module("@mcpedia/queue", () => ({
+vi.mock("@mcpedia/queue", () => ({
   enqueueIndexDoc: (relPath: string, reason: string) => {
     calls.enqueueIndexDoc.push([relPath, reason]);
     return Promise.resolve({ id: `doc__${relPath}` });
@@ -32,7 +34,7 @@ mock.module("@mcpedia/queue", () => ({
   INDEX_QUEUE: "mcpedia-index",
 }));
 
-mock.module("@mcpedia/core", () => ({
+vi.mock("@mcpedia/core", () => ({
   keywordSearch: () => Promise.resolve([]),
   getDocument: () => Promise.resolve(null),
   listDocuments: () => Promise.resolve([]),

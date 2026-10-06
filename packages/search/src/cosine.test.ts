@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test";
+import { test, expect } from "vitest";
 import { cosine, toTsQuery } from "../src/index";
 
 test("cosine: orthogonal vectors are 0", () => {

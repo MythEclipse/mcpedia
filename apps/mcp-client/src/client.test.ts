@@ -1,17 +1,19 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, it, expect, vi } from "vitest";
 
 // Tests for the MCP client wrapper. Uses a fake Client that implements the
 // subset of methods McpediaClient uses, so no network/DB is needed.
 
 // Mock the SDK client to avoid real network connections.
-const mockTools = [
+// vi.mock() is hoisted above the imports, so this fixture list has to be built
+// with vi.hoisted() or the mock factory would reference it before initialization.
+const mockTools = vi.hoisted(() => [
   { name: "search_documents", description: "keyword search" },
   { name: "get_document", description: "get doc body" },
   { name: "create_document", description: "create doc" },
   { name: "delete_document", description: "delete doc" },
-];
+]);
 
-mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
+vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
   Client: class {
     connect() {}
     close() {}
@@ -40,7 +42,7 @@ mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
   },
 }));
 
-mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
+vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: class {
     constructor(url: URL, opts?: any) {}
   },

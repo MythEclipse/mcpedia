@@ -1,4 +1,4 @@
-import { test, expect, afterEach, beforeEach } from "bun:test";
+import { test, expect, afterEach, beforeEach } from "vitest";
 // parseFile uses node:fs, so we test it by writing a temp file. This keeps the
 // parser package dependency-free while still exercising gray-matter.
 import { parseFile } from "../src/index";

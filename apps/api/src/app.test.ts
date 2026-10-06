@@ -1,4 +1,4 @@
-import { test, expect, beforeEach, mock } from "bun:test";
+import { test, expect, beforeEach, vi } from "vitest";
 import { createApp } from "../src/app";
 import type { ApiDeps } from "../src/app";
 import { DASHBOARD_HTML } from "../src/dashboard";
@@ -33,7 +33,7 @@ function makeDeps(secret: string, q: ReturnType<typeof fakeQueue>): ApiDeps {
 // doesn't try to connect to Redis during construction. We never call that path in
 // these tests (we always inject deps), but the import may still be pulled by the
 // module graph — mock it to be safe.
-mock.module("@mcpedia/queue", () => ({
+vi.mock("@mcpedia/queue", () => ({
   getQueue: () => fakeQueue({}),
   enqueueFullIndex: async () => ({ id: "real-full" }),
   enqueueIndexDoc: async () => ({ id: "real-doc" }),
@@ -42,12 +42,15 @@ mock.module("@mcpedia/queue", () => ({
 
 // Mock @mcpedia/core so tRPC CRUD procedures don't hit Postgres.
 // Only the functions used by the router are faked; assertions record calls.
-const coreCalls = {
+// vi.mock() calls are hoisted above every import, so their factories can run
+// before this module's body executes. vi.hoisted() moves the shared call log
+// ahead of the hoisted factories, otherwise it would be in the TDZ.
+const coreCalls = vi.hoisted(() => ({
   createDocument: [] as Array<any[]>,
   updateDocument: [] as Array<any[]>,
   deleteDocument: [] as Array<any[]>,
-};
-mock.module("@mcpedia/core", () => ({
+}));
+vi.mock("@mcpedia/core", () => ({
   keywordSearch: () => Promise.resolve([]),
   getDocument: () => Promise.resolve(null),
   getRelated: () => Promise.resolve([]),

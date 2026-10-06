@@ -12,7 +12,7 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "smoke": "tsx src/smoke.ts",
-    "test": "node --test"
+    "test": "vitest run"
   },
   "dependencies": {
     "@mcpedia/config": "workspace:*",

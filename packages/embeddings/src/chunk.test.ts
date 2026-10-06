@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test";
+import { test, expect } from "vitest";
 import { chunkText } from "../src/chunk";
 
 test("empty / whitespace input returns empty array", () => {
