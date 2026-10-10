@@ -17,3 +17,8 @@ onlyBuiltDependencies:
   - esbuild
   - msgpackr-extract
   - unrs-resolver
+
+# Dependabot installs with its own pnpm (11+), whose minimumReleaseAge default
+# is 1440 minutes and refuses same-day releases outright. Opt out here so a
+# lockfile refresh cannot fail on a package that is only hours old.
+minimumReleaseAge: 0
