@@ -5,6 +5,17 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
+    # Dependabot resolves and installs with its OWN bundled pnpm (11.x/12.x as of
+    # 2026-10), ignoring this repo's `packageManager` pin. Since pnpm 11 that
+    # version defaults `minimumReleaseAge` to 1440 minutes, so any dependency
+    # released within the last day is refused with
+    # ERR_PNPM_NO_MATURE_MATCHING_VERSION and the whole update job dies.
+    # Two independent fixes, both required:
+    #   1. this `cooldown` stops Dependabot proposing versions that are too young;
+    #   2. `minimumReleaseAge: 0` in pnpm-workspace.yaml is read by whatever pnpm
+    #      actually runs, so the install cannot fail even if a version slips past.
+    cooldown:
+      default-days: 3
     groups:
       production:
         dependency-type: "production"
