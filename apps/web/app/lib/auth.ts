@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto"
+import { createHash, createHmac, timingSafeEqual } from "node:crypto"
 import { ADMIN_PASSWORD, WEBHOOK_SECRET } from "@mcpedia/config"
 
 // Single source of truth for web authentication.
@@ -16,29 +16,39 @@ export const COOKIE_MAX_AGE = 60 * 60 * 24 * 7 // 7 days
 /** The only cookie value that authenticates. Bound at login (see api/auth/login). */
 export const COOKIE_VALUE = "admin"
 
-/** HMAC-sign a cookie value as `<value>.<sig>`. */
+/**
+ * HMAC-sign a cookie value as `<value>.<sig>`.
+ *
+ * Throws when ADMIN_PASSWORD is unset. It previously fell back to the literal
+ * string "fallback", which is a hardcoded key committed to the repository:
+ * anyone reading the source could mint a valid admin cookie for an
+ * unconfigured deployment and get full web CRUD. A missing password must
+ * disable authentication, never authenticate everyone.
+ */
 export function signCookie(value: string): string {
-	const secret = ADMIN_PASSWORD || "fallback"
-	const sig = createHmac("sha256", secret).update(value).digest("hex")
+	if (!ADMIN_PASSWORD) {
+		throw new Error("ADMIN_PASSWORD is not configured; cannot sign a cookie")
+	}
+	const sig = createHmac("sha256", ADMIN_PASSWORD).update(value).digest("hex")
 	return `${value}.${sig}`
 }
 
 /**
  * Constant-time string comparison.
  *
- * `timingSafeEqual` throws when buffer lengths differ, which would itself leak
- * length information through the exception — so the length check happens first
- * and the call is wrapped.
+ * Both sides are hashed to a fixed 32 bytes first, so the comparison never
+ * takes a different path based on input length. Comparing the raw strings
+ * requires a length pre-check (timingSafeEqual throws on a mismatch), and that
+ * pre-check is itself a length oracle: a wrong-length guess returns measurably
+ * faster than an equal-length wrong guess, which leaks the secret's length one
+ * bit per character.
+ *
+ * Hashing first also removes the try/catch: `createHash` on a string cannot
+ * throw for well-formed JS strings, and the digests are always equal length.
  */
 export function safeTimingEqual(a: string, b: string): boolean {
-	try {
-		const bufA = Buffer.from(a)
-		const bufB = Buffer.from(b)
-		if (bufA.length !== bufB.length) return false
-		return timingSafeEqual(bufA, bufB)
-	} catch {
-		return false
-	}
+	const digest = (s: string) => createHash("sha256").update(s).digest()
+	return timingSafeEqual(digest(a), digest(b))
 }
 
 /**
@@ -55,7 +65,14 @@ export function verifyCookie(cookieValue: string | undefined): boolean {
 	const [value, sig] = cookieValue.split(".")
 	if (value !== COOKIE_VALUE) return false
 	if (!value || !sig) return false
-	const expected = signCookie(value)
+	// signCookie throws when ADMIN_PASSWORD is unset. That must read as
+	// "not authenticated", never as a 500 that leaks configuration state.
+	let expected: string
+	try {
+		expected = signCookie(value)
+	} catch {
+		return false
+	}
 	return safeTimingEqual(cookieValue, expected)
 }
 

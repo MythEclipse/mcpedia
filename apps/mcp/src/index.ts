@@ -25,7 +25,7 @@ import {
 	INDEX_QUEUE,
 } from "@mcpedia/queue"
 import { CONTENT_ROOT, WEBHOOK_SECRET } from "@mcpedia/config"
-import { timingSafeEqual } from "node:crypto"
+import { createHash, timingSafeEqual } from "node:crypto"
 import { join } from "node:path"
 
 // Write tools require the caller to supply `x-webhook-secret` matching the
@@ -33,8 +33,9 @@ import { join } from "node:path"
 // the HTTP transport (the request header); for stdio it is undefined (local use).
 //
 // This previously only checked that `authSecret` was non-empty, so ANY value —
-// or `?x-webhook-secret=x` on the query string, which Node surfaces as a header
-// — authorized every write tool. WEBHOOK_SECRET was never imported here, so
+// including a plain `x-webhook-secret: x` header, an empty-is-rejected-but-any-
+// other-value-is-accepted mistake, or a duplicate header's first entry —
+// authorized every write tool. WEBHOOK_SECRET was never imported here, so
 // nothing in this file could have caught it. The HTTP transport listens on
 // `*:MCP_PORT` (4021) and is reachable from the public internet.
 function requireMcpAuth(authSecret?: string) {
@@ -48,14 +49,11 @@ function requireMcpAuth(authSecret?: string) {
 			"unauthorized: this tool requires the x-webhook-secret header",
 		)
 	}
-	// timingSafeEqual throws when the buffers differ in length, so check that
-	// first — it also avoids comparing only the shared prefix of a longer string.
-	const provided = Buffer.from(authSecret)
-	const expected = Buffer.from(WEBHOOK_SECRET)
-	if (
-		provided.length !== expected.length ||
-		!timingSafeEqual(provided, expected)
-	) {
+	// Hash both sides so the comparison never branches on length: timingSafeEqual
+	// throws on a length mismatch, so comparing raw strings would need a
+	// pre-check that leaks the secret's length one character at a time.
+	const digest = (s: string) => createHash("sha256").update(s).digest()
+	if (!timingSafeEqual(digest(authSecret), digest(WEBHOOK_SECRET))) {
 		throw new Error("unauthorized: invalid x-webhook-secret")
 	}
 }

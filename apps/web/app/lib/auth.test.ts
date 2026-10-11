@@ -8,14 +8,33 @@ import { COOKIE_VALUE, signCookie, verifyCookie } from "./auth"
 // failing. These cases pin the properties that actually matter.
 
 /** Sign an arbitrary value the way signCookie would, to forge a well-signed cookie. */
-const forge = (value: string) =>
-	`${value}.${createHmac("sha256", ADMIN_PASSWORD || "fallback")
-		.update(value)
-		.digest("hex")}`
+const forge = (value: string) => forgeWith(ADMIN_PASSWORD || "fallback", value)
+
+/** Sign with an explicit key, so tests can exercise the old "fallback" key. */
+const forgeWith = (key: string, value: string) =>
+	`${value}.${createHmac("sha256", key).update(value).digest("hex")}`
 
 describe("verifyCookie", () => {
 	test("accepts a correctly signed admin cookie", () => {
+		if (!ADMIN_PASSWORD) return // covered by the unset-password test below
 		expect(verifyCookie(signCookie(COOKIE_VALUE))).toBe(true)
+	})
+
+	test("refuses to sign or verify when ADMIN_PASSWORD is unset", () => {
+		// signCookie used to fall back to the literal string "fallback" — a
+		// hardcoded key committed to the repo. Anyone could mint a valid admin
+		// cookie for an unconfigured deployment. It must now throw instead,
+		// and verification must read that as "not authenticated", not a 500.
+		if (ADMIN_PASSWORD) {
+			expect(signCookie(COOKIE_VALUE)).toBeTruthy()
+			return
+		}
+		expect(() => signCookie(COOKIE_VALUE)).toThrow(/ADMIN_PASSWORD/)
+		// No crash, and definitely not authenticated:
+		expect(verifyCookie(`${COOKIE_VALUE}.deadbeef`)).toBe(false)
+		// A cookie signed with the old hardcoded fallback must not verify:
+		const forged = forgeWith("", COOKIE_VALUE)
+		expect(verifyCookie(forged)).toBe(false)
 	})
 
 	test("rejects the old prefix bypass", () => {
@@ -33,6 +52,7 @@ describe("verifyCookie", () => {
 	})
 
 	test("rejects a truncated or extended signature", () => {
+		if (!ADMIN_PASSWORD) return // nothing can be signed without a key
 		const good = signCookie(COOKIE_VALUE)
 		expect(verifyCookie(good.slice(0, -1))).toBe(false)
 		expect(verifyCookie(`${good}a`)).toBe(false)

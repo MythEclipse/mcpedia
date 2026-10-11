@@ -5,7 +5,6 @@ import {
 	deleteDocument,
 	listDocuments,
 } from "@mcpedia/core"
-import { WEBHOOK_SECRET } from "@mcpedia/config"
 import { isAuthorized as isAuthorizedRequest } from "@/lib/auth"
 
 // Web CRUD auth: either the x-webhook-secret header (API/MCP style) OR the
