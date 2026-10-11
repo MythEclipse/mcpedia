@@ -198,14 +198,21 @@ Ensure `.env` contains your database connection, Redis configuration, webhook se
 
 ### 2. Database Setup
 
-Apply migrations to initialize tables (`documents`, `document_chunks`, `document_revisions`):
+Apply migrations to initialize the schema (`documents`, `document_chunks`,
+`document_revisions`):
 
 ```bash
-psql $DATABASE_URL -f packages/db/drizzle/0000_grey_toro.sql
-psql $DATABASE_URL -f packages/db/drizzle/0001_document_chunks.sql
-psql $DATABASE_URL -f packages/db/drizzle/0002_document_revisions.sql
-psql $DATABASE_URL -f packages/db/drizzle/0003_document_extra_fields.sql
+pnpm db:migrate
 ```
+
+The migration chain is a single generated baseline, `drizzle/0000_military_wolfpack.sql`,
+produced by `pnpm --filter @mcpedia/db db:generate` from `packages/db/src/schema.ts`.
+
+> **Existing databases:** the previous four hand-written migrations were applied manually
+> via `psql -f` and left no migration-tracking table. This baseline is for **fresh
+> databases only** — running it against a database that already has these tables will fail
+> with a duplicate-relation error. To adopt drizzle's tracking on an existing database, use
+> `drizzle-kit migrate --baseline` rather than replaying the chain.
 
 ### 3. Build & Index
 
