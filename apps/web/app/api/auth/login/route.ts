@@ -3,6 +3,7 @@ import { ADMIN_PASSWORD } from "@mcpedia/config"
 import {
 	COOKIE_MAX_AGE,
 	COOKIE_NAME,
+	COOKIE_VALUE,
 	safeTimingEqual,
 	signCookie,
 	verifyCookie,
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
 		)
 	}
 
-	const cookie = signCookie("admin")
+	const cookie = signCookie(COOKIE_VALUE)
 	const res = NextResponse.json({ ok: true })
 	res.cookies.set(COOKIE_NAME, cookie, {
 		maxAge: COOKIE_MAX_AGE,

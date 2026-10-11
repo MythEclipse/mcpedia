@@ -13,6 +13,9 @@ import { ADMIN_PASSWORD, WEBHOOK_SECRET } from "@mcpedia/config"
 export const COOKIE_NAME = "mcpedia_admin"
 export const COOKIE_MAX_AGE = 60 * 60 * 24 * 7 // 7 days
 
+/** The only cookie value that authenticates. Bound at login (see api/auth/login). */
+export const COOKIE_VALUE = "admin"
+
 /** HMAC-sign a cookie value as `<value>.<sig>`. */
 export function signCookie(value: string): string {
 	const secret = ADMIN_PASSWORD || "fallback"
@@ -41,10 +44,16 @@ export function safeTimingEqual(a: string, b: string): boolean {
 /**
  * Verify an `mcpedia_admin` cookie by re-deriving its signature from the
  * configured `ADMIN_PASSWORD` and comparing in constant time.
+ *
+ * The cookie value must be exactly COOKIE_VALUE. Re-deriving the HMAC over
+ * whatever value the cookie carries would only prove the caller knows
+ * ADMIN_PASSWORD, not that they are the admin — any correctly-signed value
+ * (`signCookie("root")`, say) would otherwise authenticate.
  */
 export function verifyCookie(cookieValue: string | undefined): boolean {
 	if (!cookieValue) return false
 	const [value, sig] = cookieValue.split(".")
+	if (value !== COOKIE_VALUE) return false
 	if (!value || !sig) return false
 	const expected = signCookie(value)
 	return safeTimingEqual(cookieValue, expected)
