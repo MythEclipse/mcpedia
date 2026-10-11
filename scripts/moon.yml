@@ -17,6 +17,4 @@ dependsOn:
   - 'embeddings'
   - 'parser'
   - 'queue'
-  - 'queue'
   - 'search'
-  - 'types'

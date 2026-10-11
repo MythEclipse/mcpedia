@@ -13,9 +13,9 @@
 			"!**/.next",
 			"!**/coverage",
 			"!**/*.json",
-			"!**/drizzle/meta/**",
+			"!**/drizzle/meta",
 			"!**/routeTree.gen.ts",
-			"!**/paraglide/generated/**"
+			"!**/paraglide/generated"
 		]
 	},
 	"formatter": {
