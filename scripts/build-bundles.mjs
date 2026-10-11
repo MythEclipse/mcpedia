@@ -17,37 +17,49 @@
  * /opt/mcpedia-api, /opt/mcpedia-mcp and /opt/mcpedia-worker point at, so
  * changing one without the other breaks a restart. Keep them in sync.
  */
-import { build } from "esbuild";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { build } from "esbuild"
+import { fileURLToPath } from "node:url"
+import { dirname, resolve } from "node:path"
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 
 const CREATE_REQUIRE_BANNER = [
-  'import { createRequire as __createRequire } from "node:module";',
-  "const require = __createRequire(import.meta.url);",
-].join("\n");
+	'import { createRequire as __createRequire } from "node:module";',
+	"const require = __createRequire(import.meta.url);",
+].join("\n")
 
 const BUNDLES = [
-  { name: "api", entry: "apps/api/src/index.ts", outfile: "apps/api/dist/index.js" },
-  { name: "mcp", entry: "apps/mcp/src/http.ts", outfile: "apps/mcp/dist/http.js" },
-  { name: "worker", entry: "apps/worker/src/index.ts", outfile: "apps/worker/dist/index.js" },
-];
+	{
+		name: "api",
+		entry: "apps/api/src/index.ts",
+		outfile: "apps/api/dist/index.js",
+	},
+	{
+		name: "mcp",
+		entry: "apps/mcp/src/http.ts",
+		outfile: "apps/mcp/dist/http.js",
+	},
+	{
+		name: "worker",
+		entry: "apps/worker/src/index.ts",
+		outfile: "apps/worker/dist/index.js",
+	},
+]
 
 for (const { name, entry, outfile } of BUNDLES) {
-  await build({
-    entryPoints: [resolve(root, entry)],
-    outfile: resolve(root, outfile),
-    bundle: true,
-    platform: "node",
-    target: "node22",
-    format: "esm",
-    banner: { js: CREATE_REQUIRE_BANNER },
-    sourcemap: false,
-    // Deps are bundled rather than external: the launcher only ships this one
-    // file into /opt, so a bare `import "hono"` at runtime would not resolve.
-    packages: "bundle",
-    logLevel: "info",
-  });
-  console.log(`built ${name} -> ${outfile}`);
+	await build({
+		entryPoints: [resolve(root, entry)],
+		outfile: resolve(root, outfile),
+		bundle: true,
+		platform: "node",
+		target: "node22",
+		format: "esm",
+		banner: { js: CREATE_REQUIRE_BANNER },
+		sourcemap: false,
+		// Deps are bundled rather than external: the launcher only ships this one
+		// file into /opt, so a bare `import "hono"` at runtime would not resolve.
+		packages: "bundle",
+		logLevel: "info",
+	})
+	console.log(`built ${name} -> ${outfile}`)
 }

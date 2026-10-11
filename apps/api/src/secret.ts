@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto"
 
 /**
  * Constant-time secret comparison.
@@ -15,12 +15,12 @@ import { timingSafeEqual } from "node:crypto";
  * import order would decide whether this is defined at call time.
  */
 export function safeSecretEqual(a: string, b: string): boolean {
-  try {
-    const bufA = Buffer.from(a);
-    const bufB = Buffer.from(b);
-    if (bufA.length !== bufB.length) return false;
-    return timingSafeEqual(bufA, bufB);
-  } catch {
-    return false;
-  }
+	try {
+		const bufA = Buffer.from(a)
+		const bufB = Buffer.from(b)
+		if (bufA.length !== bufB.length) return false
+		return timingSafeEqual(bufA, bufB)
+	} catch {
+		return false
+	}
 }

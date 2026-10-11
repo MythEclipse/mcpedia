@@ -1,5 +1,5 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-import { ADMIN_PASSWORD, WEBHOOK_SECRET } from "@mcpedia/config";
+import { createHmac, timingSafeEqual } from "node:crypto"
+import { ADMIN_PASSWORD, WEBHOOK_SECRET } from "@mcpedia/config"
 
 // Single source of truth for web authentication.
 //
@@ -10,14 +10,14 @@ import { ADMIN_PASSWORD, WEBHOOK_SECRET } from "@mcpedia/config";
 // `verifyCookie` below was already correct but lived, unexported, inside the
 // login route where no other file could reach it.
 
-export const COOKIE_NAME = "mcpedia_admin";
-export const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+export const COOKIE_NAME = "mcpedia_admin"
+export const COOKIE_MAX_AGE = 60 * 60 * 24 * 7 // 7 days
 
 /** HMAC-sign a cookie value as `<value>.<sig>`. */
 export function signCookie(value: string): string {
-  const secret = ADMIN_PASSWORD || "fallback";
-  const sig = createHmac("sha256", secret).update(value).digest("hex");
-  return `${value}.${sig}`;
+	const secret = ADMIN_PASSWORD || "fallback"
+	const sig = createHmac("sha256", secret).update(value).digest("hex")
+	return `${value}.${sig}`
 }
 
 /**
@@ -28,14 +28,14 @@ export function signCookie(value: string): string {
  * and the call is wrapped.
  */
 export function safeTimingEqual(a: string, b: string): boolean {
-  try {
-    const bufA = Buffer.from(a);
-    const bufB = Buffer.from(b);
-    if (bufA.length !== bufB.length) return false;
-    return timingSafeEqual(bufA, bufB);
-  } catch {
-    return false;
-  }
+	try {
+		const bufA = Buffer.from(a)
+		const bufB = Buffer.from(b)
+		if (bufA.length !== bufB.length) return false
+		return timingSafeEqual(bufA, bufB)
+	} catch {
+		return false
+	}
 }
 
 /**
@@ -43,11 +43,11 @@ export function safeTimingEqual(a: string, b: string): boolean {
  * configured `ADMIN_PASSWORD` and comparing in constant time.
  */
 export function verifyCookie(cookieValue: string | undefined): boolean {
-  if (!cookieValue) return false;
-  const [value, sig] = cookieValue.split(".");
-  if (!value || !sig) return false;
-  const expected = signCookie(value);
-  return safeTimingEqual(cookieValue, expected);
+	if (!cookieValue) return false
+	const [value, sig] = cookieValue.split(".")
+	if (!value || !sig) return false
+	const expected = signCookie(value)
+	return safeTimingEqual(cookieValue, expected)
 }
 
 /**
@@ -58,13 +58,16 @@ export function verifyCookie(cookieValue: string | undefined): boolean {
  * Fails closed: with `WEBHOOK_SECRET` unset, the header path is unavailable and
  * cookie auth is denied outright rather than silently allowing access.
  */
-export function isAuthorized(headers: Headers, cookieValue: string | undefined): boolean {
-  if (!WEBHOOK_SECRET) return false;
+export function isAuthorized(
+	headers: Headers,
+	cookieValue: string | undefined,
+): boolean {
+	if (!WEBHOOK_SECRET) return false
 
-  const headerSecret = headers.get("x-webhook-secret") ?? "";
-  if (headerSecret) {
-    if (safeTimingEqual(headerSecret, WEBHOOK_SECRET)) return true;
-  }
+	const headerSecret = headers.get("x-webhook-secret") ?? ""
+	if (headerSecret) {
+		if (safeTimingEqual(headerSecret, WEBHOOK_SECRET)) return true
+	}
 
-  return verifyCookie(cookieValue);
+	return verifyCookie(cookieValue)
 }

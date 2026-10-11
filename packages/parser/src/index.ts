@@ -1,13 +1,12 @@
-import matter from "gray-matter";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import matter from "gray-matter"
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs"
+import { dirname, join } from "node:path"
 import type {
-  DocSection,
-  DocStatus,
-  DocType,
-  DocumentMeta,
-} from "@mcpedia/types";
-
+	DocSection,
+	DocStatus,
+	DocType,
+	DocumentMeta,
+} from "@mcpedia/types"
 
 // Standard frontmatter keys that are rendered explicitly in the UI template.
 // Any other key in frontmatter becomes a dynamic "extra field" badge.
@@ -15,13 +14,22 @@ import type {
 // metadata they need (event, challenge, category, difficulty, points, etc.)
 // without code changes.
 const STANDARD_FRONTMATTER_KEYS = new Set([
-  "id", "slug", "title", "type", "section", "status",
-  "author", "tags", "path", "created_at", "updated_at",
-]);
+	"id",
+	"slug",
+	"title",
+	"type",
+	"section",
+	"status",
+	"author",
+	"tags",
+	"path",
+	"created_at",
+	"updated_at",
+])
 
 export interface ParsedFile {
-  meta: DocumentMeta;
-  body: string;
+	meta: DocumentMeta
+	body: string
 }
 
 /**
@@ -30,54 +38,58 @@ export interface ParsedFile {
  * @param relPath path relative to content root (e.g. "docs/websocket/contract.md")
  */
 export function parseFile(absPath: string, relPath: string): ParsedFile {
-  const raw = readFileSync(absPath, "utf8");
-  const { data, content } = matter(raw);
+	const raw = readFileSync(absPath, "utf8")
+	const { data, content } = matter(raw)
 
-  const parts = relPath.split("/");
-  const derivedSection = parts.length > 1 ? parts[0] : "docs";
-  const section: DocSection =
-    typeof data.section === "string" && data.section.trim() !== ""
-      ? data.section.trim()
-      : derivedSection;
+	const parts = relPath.split("/")
+	const derivedSection = parts.length > 1 ? parts[0] : "docs"
+	const section: DocSection =
+		typeof data.section === "string" && data.section.trim() !== ""
+			? data.section.trim()
+			: derivedSection
 
-  const slug = relPath.replace(/\.mdx?$/, "");
+	const slug = relPath.replace(/\.mdx?$/, "")
 
-  const type = (typeof data.type === "string" && data.type.trim() !== "" ? data.type.trim() : "documentation") as DocType;
-  const status = (data.status === "draft" ? "draft" : "published") as DocStatus;
+	const type = (
+		typeof data.type === "string" && data.type.trim() !== ""
+			? data.type.trim()
+			: "documentation"
+	) as DocType
+	const status = (data.status === "draft" ? "draft" : "published") as DocStatus
 
-  const tags: string[] = Array.isArray(data.tags)
-    ? data.tags.map((t: unknown) => String(t))
-    : [];
+	const tags: string[] = Array.isArray(data.tags)
+		? data.tags.map((t: unknown) => String(t))
+		: []
 
-  const nowIso = new Date().toISOString();
-  const createdAt = data.created_at ?? nowIso;
-  const updatedAt = data.updated_at ?? data.created_at ?? nowIso;
+	const nowIso = new Date().toISOString()
+	const createdAt = data.created_at ?? nowIso
+	const updatedAt = data.updated_at ?? data.created_at ?? nowIso
 
-  // Extract any non-standard frontmatter keys as dynamic extra fields.
-  // These are stored in DB as JSONB + rendered as dynamic badges in the UI.
-  const extraFields: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(data)) {
-    if (!STANDARD_FRONTMATTER_KEYS.has(k) && v !== undefined && v !== null) {
-      extraFields[k] = v;
-    }
-  }
+	// Extract any non-standard frontmatter keys as dynamic extra fields.
+	// These are stored in DB as JSONB + rendered as dynamic badges in the UI.
+	const extraFields: Record<string, unknown> = {}
+	for (const [k, v] of Object.entries(data)) {
+		if (!STANDARD_FRONTMATTER_KEYS.has(k) && v !== undefined && v !== null) {
+			extraFields[k] = v
+		}
+	}
 
-  const meta: DocumentMeta = {
-    id: slug,
-    slug,
-    title: typeof data.title === "string" ? data.title : slug,
-    type,
-    section,
-    status,
-    author: typeof data.author === "string" ? data.author : "",
-    tags,
-    path: relPath,
-    createdAt: String(createdAt),
-    updatedAt: String(updatedAt),
-    extraFields,
-  };
+	const meta: DocumentMeta = {
+		id: slug,
+		slug,
+		title: typeof data.title === "string" ? data.title : slug,
+		type,
+		section,
+		status,
+		author: typeof data.author === "string" ? data.author : "",
+		tags,
+		path: relPath,
+		createdAt: String(createdAt),
+		updatedAt: String(updatedAt),
+		extraFields,
+	}
 
-  return { meta, body: content };
+	return { meta, body: content }
 }
 
 /**
@@ -92,42 +104,43 @@ export function parseFile(absPath: string, relPath: string): ParsedFile {
  * @param body    markdown body (frontmatter stripped — same as parseFile.body)
  */
 export function stringifyFile(
-  absPath: string,
-  relPath: string,
-  meta: DocumentMeta,
-  body: string,
+	absPath: string,
+	relPath: string,
+	meta: DocumentMeta,
+	body: string,
 ): void {
-  const data: Record<string, unknown> = {
-    title: meta.title,
-    type: meta.type,
-    section: meta.section,
-    status: meta.status,
-    author: meta.author,
-    tags: meta.tags,
-    path: relPath,
-    created_at: meta.createdAt,
-    updated_at: meta.updatedAt,
-    // Dynamic custom fields — any key the content creator added.
-    // These are written as-is to YAML frontmatter, and read back via parseFile
-    // into meta.extraFields. Fully content-driven: no code changes needed
-    // to support new metadata fields (e.g. CTF: event, challenge, category,
-    // difficulty, points, or anything else).
-    ...(meta.extraFields ?? {}),
-  };
-  const yaml = "---\n" +
-    Object.entries(data)
-      .map(([k, v]) => {
-        if (Array.isArray(v)) {
-          return `${k}: [${v.map((x) => `"${x}"`).join(", ")}]`;
-        }
-        if (typeof v === "string") {
-          return `${k}: ${JSON.stringify(v)}`;
-        }
-        return `${k}: ${v}`;
-      })
-      .join("\n") +
-    "\n---\n";
-  const content = yaml + body;
-  mkdirSync(dirname(absPath), { recursive: true });
-  writeFileSync(absPath, content, "utf8");
+	const data: Record<string, unknown> = {
+		title: meta.title,
+		type: meta.type,
+		section: meta.section,
+		status: meta.status,
+		author: meta.author,
+		tags: meta.tags,
+		path: relPath,
+		created_at: meta.createdAt,
+		updated_at: meta.updatedAt,
+		// Dynamic custom fields — any key the content creator added.
+		// These are written as-is to YAML frontmatter, and read back via parseFile
+		// into meta.extraFields. Fully content-driven: no code changes needed
+		// to support new metadata fields (e.g. CTF: event, challenge, category,
+		// difficulty, points, or anything else).
+		...(meta.extraFields ?? {}),
+	}
+	const yaml =
+		"---\n" +
+		Object.entries(data)
+			.map(([k, v]) => {
+				if (Array.isArray(v)) {
+					return `${k}: [${v.map((x) => `"${x}"`).join(", ")}]`
+				}
+				if (typeof v === "string") {
+					return `${k}: ${JSON.stringify(v)}`
+				}
+				return `${k}: ${v}`
+			})
+			.join("\n") +
+		"\n---\n"
+	const content = yaml + body
+	mkdirSync(dirname(absPath), { recursive: true })
+	writeFileSync(absPath, content, "utf8")
 }

@@ -1,5 +1,5 @@
-import { REDIS_URL, REDIS_PASSWORD, QUEUE_PREFIX } from "@mcpedia/config";
-import IORedis, { type RedisOptions } from "ioredis";
+import { REDIS_URL, REDIS_PASSWORD, QUEUE_PREFIX } from "@mcpedia/config"
+import IORedis, { type RedisOptions } from "ioredis"
 
 /**
  * Shared ioredis connection for BullMQ. BullMQ requires an ioredis instance and
@@ -8,27 +8,27 @@ import IORedis, { type RedisOptions } from "ioredis";
  * connection — a finite retry count causes "Connection in key mode" errors).
  */
 function buildOptions(): RedisOptions {
-  const opts: RedisOptions = {
-    maxRetriesPerRequest: null,
-    lazyConnect: true,
-    enableOfflineQueue: true,
-  };
-  if (REDIS_PASSWORD) opts.password = REDIS_PASSWORD;
-  return opts;
+	const opts: RedisOptions = {
+		maxRetriesPerRequest: null,
+		lazyConnect: true,
+		enableOfflineQueue: true,
+	}
+	if (REDIS_PASSWORD) opts.password = REDIS_PASSWORD
+	return opts
 }
 
-let _connection: IORedis | null = null;
+let _connection: IORedis | null = null
 
 /** Lazily-created singleton ioredis connection. */
 export function getConnection(): IORedis {
-  if (!_connection) {
-    _connection = new IORedis(REDIS_URL, buildOptions());
-    _connection.on("error", (err) => {
-      // Log but don't crash the process on transient Redis errors.
-      console.error("[queue] redis error:", err.message);
-    });
-  }
-  return _connection;
+	if (!_connection) {
+		_connection = new IORedis(REDIS_URL, buildOptions())
+		_connection.on("error", (err) => {
+			// Log but don't crash the process on transient Redis errors.
+			console.error("[queue] redis error:", err.message)
+		})
+	}
+	return _connection
 }
 
-export const BULLMQ_PREFIX = QUEUE_PREFIX;
+export const BULLMQ_PREFIX = QUEUE_PREFIX

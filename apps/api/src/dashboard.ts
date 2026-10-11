@@ -60,4 +60,4 @@ async function search(q){const el=document.getElementById("results");el.innerHTM
 }catch(e){el.innerHTML='<div class="err">search failed: '+esc(e.message)+'</div>';}}
 document.getElementById("q").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.value.trim())search(e.target.value.trim())});
 loadMetrics();setInterval(loadMetrics,5000);
-</script></body></html>`;
+</script></body></html>`

@@ -1,6 +1,6 @@
-import { McpediaClient } from "./client";
+import { McpediaClient } from "./client"
 
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET ?? "";
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET ?? ""
 
 // Interactive MCP client — connects to the MCPedia MCP server over
 // Streamable HTTP and provides a chat-like REPL.
@@ -38,202 +38,233 @@ const HELP = `Commands:
   /index <slug>             — enqueue reindex for a document
   /status                   — queue status
   /help                     — show this help
-  /quit                     — exit`;
+  /quit                     — exit`
 
 async function main() {
-  const url = process.env.MCP_URL ?? "https://mcp.asepharyana.my.id/mcp";
-  const headers: Record<string, string> = {};
-  if (WEBHOOK_SECRET) {
-    headers["x-webhook-secret"] = WEBHOOK_SECRET;
-  }
+	const url = process.env.MCP_URL ?? "https://mcp.asepharyana.my.id/mcp"
+	const headers: Record<string, string> = {}
+	if (WEBHOOK_SECRET) {
+		headers["x-webhook-secret"] = WEBHOOK_SECRET
+	}
 
-  console.log(`Connecting to MCP server: ${url}`);
-  const client = await McpediaClient.connect(url, { headers });
-  console.log("Connected! Type /help for commands.\n");
+	console.log(`Connecting to MCP server: ${url}`)
+	const client = await McpediaClient.connect(url, { headers })
+	console.log("Connected! Type /help for commands.\n")
 
-  // Show available tools on startup
-  const tools = await client.listTools();
-  console.log(`Available tools (${tools.length}): ${tools.map((t: any) => t.name).join(", ")}`);
-  console.log("");
+	// Show available tools on startup
+	const tools = await client.listTools()
+	console.log(
+		`Available tools (${tools.length}): ${tools.map((t: any) => t.name).join(", ")}`,
+	)
+	console.log("")
 
-  const rl = await import("node:readline");
-  const readline = rl.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: "mcp> ",
-  });
+	const rl = await import("node:readline")
+	const readline = rl.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+		prompt: "mcp> ",
+	})
 
-  readline.prompt();
+	readline.prompt()
 
-  for await (const line of readline) {
-    const cmd = line.trim();
-    if (!cmd) {
-      readline.prompt();
-      continue;
-    }
+	for await (const line of readline) {
+		const cmd = line.trim()
+		if (!cmd) {
+			readline.prompt()
+			continue
+		}
 
-    const [name, ...args] = cmd.split(/\s+/);
-    const arg = args.join(" ");
+		const [name, ...args] = cmd.split(/\s+/)
+		const arg = args.join(" ")
 
-    try {
-      switch (name) {
-        case "/tools": {
-          const t = await client.listTools();
-          console.log(t.map((x: any) => `  ${x.name}: ${x.description || ""}`).join("\n"));
-          break;
-        }
-        case "/resources": {
-          const r = await client.listResources();
-          console.log(r.map((x: any) => `  ${x.uri}`).join("\n"));
-          break;
-        }
-        case "/search": {
-          if (!arg) throw new Error("Usage: /search <query>");
-          const hits = await client.search(arg);
-          printHits(hits);
-          break;
-        }
-        case "/ss": {
-          if (!arg) throw new Error("Usage: /ss <query>");
-          const hits = await client.semanticSearch(arg);
-          printHits(hits);
-          break;
-        }
-        case "/hybrid": {
-          if (!arg) throw new Error("Usage: /hybrid <query>");
-          const hits = await client.hybridSearch(arg);
-          printHits(hits);
-          break;
-        }
-        case "/doc": {
-          if (!arg) throw new Error("Usage: /doc <slug>");
-          const text = await client.getDocument(arg);
-          console.log(text);
-          break;
-        }
-        case "/related": {
-          if (!arg) throw new Error("Usage: /related <slug>");
-          const rel = await client.getRelated(arg);
-          console.log(rel.map((x: any) => `  ${x.title} (${x.slug})`).join("\n"));
-          break;
-        }
-        case "/create": {
-          await interactiveCreate(client);
-          break;
-        }
-        case "/update": {
-          if (!arg) throw new Error("Usage: /update <slug>");
-          await interactiveUpdate(client, arg);
-          break;
-        }
-        case "/delete": {
-          if (!arg) throw new Error("Usage: /delete <slug>");
-          const res = await client.deleteDocument(arg);
-          console.log(JSON.stringify(res, null, 2));
-          break;
-        }
-        case "/index": {
-          if (!arg) throw new Error("Usage: /index <slug>");
-          const res = await client.indexDocument(arg);
-          console.log(JSON.stringify(res, null, 2));
-          break;
-        }
-        case "/status": {
-          const res = await client.queueStatus();
-          console.log(JSON.stringify(res, null, 2));
-          break;
-        }
-        case "/help":
-          console.log(HELP);
-          break;
-        case "/quit":
-          await client.disconnect();
-          process.exit(0);
-        default:
-          console.log(`Unknown command: ${name}. Type /help for commands.`);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("unauthorized")) {
-        console.log("⚠️  Write tools require x-webhook-secret. Set WEBHOOK_SECRET in your .env.");
-      } else {
-        console.log(`Error: ${msg}`);
-      }
-    }
+		try {
+			switch (name) {
+				case "/tools": {
+					const t = await client.listTools()
+					console.log(
+						t.map((x: any) => `  ${x.name}: ${x.description || ""}`).join("\n"),
+					)
+					break
+				}
+				case "/resources": {
+					const r = await client.listResources()
+					console.log(r.map((x: any) => `  ${x.uri}`).join("\n"))
+					break
+				}
+				case "/search": {
+					if (!arg) throw new Error("Usage: /search <query>")
+					const hits = await client.search(arg)
+					printHits(hits)
+					break
+				}
+				case "/ss": {
+					if (!arg) throw new Error("Usage: /ss <query>")
+					const hits = await client.semanticSearch(arg)
+					printHits(hits)
+					break
+				}
+				case "/hybrid": {
+					if (!arg) throw new Error("Usage: /hybrid <query>")
+					const hits = await client.hybridSearch(arg)
+					printHits(hits)
+					break
+				}
+				case "/doc": {
+					if (!arg) throw new Error("Usage: /doc <slug>")
+					const text = await client.getDocument(arg)
+					console.log(text)
+					break
+				}
+				case "/related": {
+					if (!arg) throw new Error("Usage: /related <slug>")
+					const rel = await client.getRelated(arg)
+					console.log(
+						rel.map((x: any) => `  ${x.title} (${x.slug})`).join("\n"),
+					)
+					break
+				}
+				case "/create": {
+					await interactiveCreate(client)
+					break
+				}
+				case "/update": {
+					if (!arg) throw new Error("Usage: /update <slug>")
+					await interactiveUpdate(client, arg)
+					break
+				}
+				case "/delete": {
+					if (!arg) throw new Error("Usage: /delete <slug>")
+					const res = await client.deleteDocument(arg)
+					console.log(JSON.stringify(res, null, 2))
+					break
+				}
+				case "/index": {
+					if (!arg) throw new Error("Usage: /index <slug>")
+					const res = await client.indexDocument(arg)
+					console.log(JSON.stringify(res, null, 2))
+					break
+				}
+				case "/status": {
+					const res = await client.queueStatus()
+					console.log(JSON.stringify(res, null, 2))
+					break
+				}
+				case "/help":
+					console.log(HELP)
+					break
+				case "/quit":
+					await client.disconnect()
+					process.exit(0)
+				default:
+					console.log(`Unknown command: ${name}. Type /help for commands.`)
+			}
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err)
+			if (msg.includes("unauthorized")) {
+				console.log(
+					"⚠️  Write tools require x-webhook-secret. Set WEBHOOK_SECRET in your .env.",
+				)
+			} else {
+				console.log(`Error: ${msg}`)
+			}
+		}
 
-    readline.prompt();
-  }
+		readline.prompt()
+	}
 }
 
 function printHits(hits: any[]) {
-  if (!hits.length) {
-    console.log("No results.");
-    return;
-  }
-  for (const h of hits) {
-    const slug = h.doc?.slug || h.slug || "?";
-    const title = h.doc?.title || h.title || slug;
-    const score = h.rank !== undefined ? `★ ${h.rank.toFixed(3)}` : h.score ? `★ ${h.score.toFixed(3)}` : "";
-    const section = h.doc?.section || h.section || "";
-    console.log(`  ${title} ${score}`);
-    console.log(`    /${slug}  ·  ${section}`);
-    if (h.snippet || h.doc?.excerpt) {
-      const snip = (h.snippet || h.doc?.excerpt).slice(0, 120);
-      console.log(`    ${snip}...`);
-    }
-  }
+	if (!hits.length) {
+		console.log("No results.")
+		return
+	}
+	for (const h of hits) {
+		const slug = h.doc?.slug || h.slug || "?"
+		const title = h.doc?.title || h.title || slug
+		const score =
+			h.rank !== undefined
+				? `★ ${h.rank.toFixed(3)}`
+				: h.score
+					? `★ ${h.score.toFixed(3)}`
+					: ""
+		const section = h.doc?.section || h.section || ""
+		console.log(`  ${title} ${score}`)
+		console.log(`    /${slug}  ·  ${section}`)
+		if (h.snippet || h.doc?.excerpt) {
+			const snip = (h.snippet || h.doc?.excerpt).slice(0, 120)
+			console.log(`    ${snip}...`)
+		}
+	}
 }
 
 async function ask(question: string): Promise<string> {
-  const rl = await import("node:readline");
-  return new Promise((resolve) => {
-    const iface = rl.createInterface({ input: process.stdin, output: process.stdout });
-    iface.question(question, (ans) => {
-      iface.close();
-      resolve(ans.trim());
-    });
-  });
+	const rl = await import("node:readline")
+	return new Promise((resolve) => {
+		const iface = rl.createInterface({
+			input: process.stdin,
+			output: process.stdout,
+		})
+		iface.question(question, (ans) => {
+			iface.close()
+			resolve(ans.trim())
+		})
+	})
 }
 
 async function interactiveCreate(client: McpediaClient) {
-  console.log("\n--- Create Document ---");
-  const section = (await ask("Section (docs/writeups/research/notes) [docs]: ")) || "docs";
-  const title = await ask("Title: ");
-  if (!title) throw new Error("Title is required.");
-  const slug = (await ask(`Slug (will become ${section}/<slug>): `)) || title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  const body = await ask("Body (single line, or /edit for editor): ") || "";
-  const tagsStr = await ask("Tags (comma-separated): ");
-  const tags = tagsStr.split(",").map((t) => t.trim()).filter(Boolean);
-  const author = await ask("Author: ");
+	console.log("\n--- Create Document ---")
+	const section =
+		(await ask("Section (docs/writeups/research/notes) [docs]: ")) || "docs"
+	const title = await ask("Title: ")
+	if (!title) throw new Error("Title is required.")
+	const slug =
+		(await ask(`Slug (will become ${section}/<slug>): `)) ||
+		title
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-+|-+$/g, "")
+	const body = (await ask("Body (single line, or /edit for editor): ")) || ""
+	const tagsStr = await ask("Tags (comma-separated): ")
+	const tags = tagsStr
+		.split(",")
+		.map((t) => t.trim())
+		.filter(Boolean)
+	const author = await ask("Author: ")
 
-  const res = await client.createDocument({
-    slug: `${section}/${slug}`,
-    title,
-    section: section as "docs" | "writeups" | "research" | "notes",
-    body,
-    tags,
-    author: author || undefined,
-  });
-  console.log(JSON.stringify(res, null, 2));
+	const res = await client.createDocument({
+		slug: `${section}/${slug}`,
+		title,
+		section: section as "docs" | "writeups" | "research" | "notes",
+		body,
+		tags,
+		author: author || undefined,
+	})
+	console.log(JSON.stringify(res, null, 2))
 }
 
 async function interactiveUpdate(client: McpediaClient, slug: string) {
-  console.log(`\n--- Update: ${slug} ---`);
-  const doc = await client.getDocument(slug);
-  const body = await ask(`Body (current: ${doc.slice(0, 50)}...): `) || doc;
-  const title = await ask("New title (or leave blank to keep): ") || undefined;
-  const tagsStr = await ask("New tags (comma-separated, or blank to keep): ") || "";
-  const tags = tagsStr ? tagsStr.split(",").map((t) => t.trim()).filter(Boolean) : undefined;
+	console.log(`\n--- Update: ${slug} ---`)
+	const doc = await client.getDocument(slug)
+	const body = (await ask(`Body (current: ${doc.slice(0, 50)}...): `)) || doc
+	const title = (await ask("New title (or leave blank to keep): ")) || undefined
+	const tagsStr =
+		(await ask("New tags (comma-separated, or blank to keep): ")) || ""
+	const tags = tagsStr
+		? tagsStr
+				.split(",")
+				.map((t) => t.trim())
+				.filter(Boolean)
+		: undefined
 
-  const res = await client.updateDocument(slug, {
-    ...(title && { title }),
-    body,
-    ...(tags && { tags }),
-  });
-  console.log(JSON.stringify(res, null, 2));
+	const res = await client.updateDocument(slug, {
+		...(title && { title }),
+		body,
+		...(tags && { tags }),
+	})
+	console.log(JSON.stringify(res, null, 2))
 }
 
 main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+	console.error(err)
+	process.exit(1)
+})

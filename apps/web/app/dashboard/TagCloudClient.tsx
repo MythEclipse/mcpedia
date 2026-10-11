@@ -1,7 +1,7 @@
-"use client";
+"use client"
 
-import TagCloud from "@/components/TagCloud";
+import TagCloud from "@/components/TagCloud"
 
 export default function TagCloudClient() {
-  return <TagCloud limit={30} />;
+	return <TagCloud limit={30} />
 }
