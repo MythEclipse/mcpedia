@@ -41,3 +41,23 @@ test("shouldCreateRevision: empty-string vs non-empty counts as a change", () =>
 	expect(shouldCreateRevision("", "content")).toBe(true)
 	expect(shouldCreateRevision("content", "")).toBe(true)
 })
+
+test("snapshotRevision is wired to the predicate, not a private copy of it", async () => {
+	// `shouldCreateRevision` was exported, documented and covered by four tests
+	// above while NO production code called it — `snapshotRevision` re-implemented
+	// the identical rule inline. This asserts the wiring so the tests above
+	// cannot go stale the same way again: if a future refactor reintroduces a
+	// private copy, the source no longer routes through the predicate.
+	const { readFileSync } = await import("node:fs")
+	const { fileURLToPath } = await import("node:url")
+	const path = fileURLToPath(new URL("./index.service.ts", import.meta.url))
+	const source = readFileSync(path, "utf8")
+
+	const callsPredicate = /if\s*\(\s*!\s*shouldCreateRevision\(/.test(source)
+	expect(callsPredicate).toBe(true)
+
+	// And the old inline duplicate must be gone.
+	expect(source).not.toMatch(
+		/if\s*\(\s*latest\s*&&\s*latest\.body\s*===\s*body\s*\)/,
+	)
+})

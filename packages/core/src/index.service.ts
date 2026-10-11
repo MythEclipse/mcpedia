@@ -133,7 +133,11 @@ export async function snapshotRevision(
 		.orderBy(desc(documentRevisions.revisionNo))
 		.limit(1)
 
-	if (latest && latest.body === body) {
+	// Route through the exported predicate rather than re-implementing the rule
+	// inline. The inline copy was the only code that ever ran, while the four
+	// tests covering `shouldCreateRevision` validated a function no production
+	// path called — so the behaviour that mattered was the untested one.
+	if (!shouldCreateRevision(latest?.body, body)) {
 		return false // unchanged → no new revision
 	}
 
