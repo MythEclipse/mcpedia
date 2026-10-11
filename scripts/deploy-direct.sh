@@ -47,11 +47,32 @@ node scripts/build-bundles.mjs
 
 # ── 4. Back up the running bundles so step 6 can undo a bad swap ────────────
 BACKUP="$(mktemp -d /tmp/mcpedia-deploy.XXXXXX)"
+
+# Each dst may be a single file (today's esbuild bundles) or a directory (the
+# Vite SPA that replaces apps/web's Next build). `test -f` is false for a
+# directory, so a directory destination would be skipped by both the backup and
+# the restore — mcpedia-web would be restarted onto a build nobody can roll
+# back, and the health probe could still pass on a stale one. Handle both.
+backup_path() {
+  local dst="$1"
+  if [ -d "$dst" ]; then
+    mkdir -p "$BACKUP/$(dirname "$dst")"
+    cp -a "$dst" "$BACKUP/$dst"
+  elif [ -f "$dst" ]; then
+    mkdir -p "$BACKUP/$(dirname "$dst")"
+    cp -p "$dst" "$BACKUP/$dst"
+  fi
+}
+
 restore_bundles() {
   local pair dst
   for pair in "${BUNDLES[@]}"; do
     dst="${pair#*:}"
-    if [ -f "$BACKUP/$dst" ]; then
+    if [ -d "$BACKUP/$dst" ]; then
+      rm -rf "$dst"
+      mkdir -p "$(dirname "$dst")"
+      cp -a "$BACKUP/$dst" "$dst"
+    elif [ -f "$BACKUP/$dst" ]; then
       install -D -m 0644 "$BACKUP/$dst" "$dst"
     fi
   done
@@ -59,17 +80,20 @@ restore_bundles() {
 
 for pair in "${BUNDLES[@]}"; do
   dst="${pair#*:}"
-  if [ -f "$dst" ]; then
-    mkdir -p "$BACKUP/$(dirname "$dst")"
-    cp -p "$dst" "$BACKUP/$dst"
-  fi
+  backup_path "$dst"
 done
 
 # ── 5. Swap payloads in ─────────────────────────────────────────────────────
 for pair in "${BUNDLES[@]}"; do
   src="${pair%%:*}"
   dst="${pair#*:}"
-  install -D -m 0644 "$src" "$dst"
+  if [ -d "$src" ]; then
+    rm -rf "$dst"
+    mkdir -p "$(dirname "$dst")"
+    cp -a "$src" "$dst"
+  else
+    install -D -m 0644 "$src" "$dst"
+  fi
   echo "installed $dst"
 done
 
