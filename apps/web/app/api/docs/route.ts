@@ -7,14 +7,13 @@ import {
 } from "@mcpedia/core"
 import { isAuthorized as isAuthorizedRequest } from "@/lib/auth"
 
-// Web CRUD auth: either the x-webhook-secret header (API/MCP style) OR the
-// mcpedia_admin cookie (web login). One of the two must be valid.
-// The real check lives in @/lib/auth — this only adapts the NextRequest.
-function isAuthorized(req: NextRequest): boolean {
-	return isAuthorizedRequest(
-		req.headers,
-		req.cookies.get("mcpedia_admin")?.value,
-	)
+// Web CRUD auth: either the x-webhook-secret header (API/MCP style) OR an
+// active better-auth session for an admin user. One of the two must be valid.
+// The real check lives in @/lib/auth — this only adapts the NextRequest, and
+// it is async because the session now lives in the database rather than in a
+// cookie value that was the literal "admin" for every login.
+function isAuthorized(req: NextRequest): Promise<boolean> {
+	return isAuthorizedRequest(req.headers)
 }
 
 function unauthorized() {

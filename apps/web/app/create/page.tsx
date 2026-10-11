@@ -5,7 +5,7 @@ import {
 	listSections,
 } from "@mcpedia/core"
 import { WEBHOOK_SECRET } from "@mcpedia/config"
-import { cookies } from "next/headers"
+import { isAdmin } from "@/lib/auth-server"
 import { redirect } from "next/navigation"
 import DocForm from "@/components/DocForm"
 import { Edit3, ArrowLeft, Plus } from "lucide-react"
@@ -13,9 +13,10 @@ import { Edit3, ArrowLeft, Plus } from "lucide-react"
 export const dynamic = "force-dynamic"
 
 export default async function CreatePage() {
-	const cookieStore = await cookies()
-	const isAdmin = cookieStore.get("mcpedia_admin")?.value != null
-	if (!isAdmin) redirect("/login")
+	// A real session with the admin role, read from the database. This used to
+	// be `cookieStore.get("mcpedia_admin") != null` — presence-only, so any
+	// cookie with that name (including a stale or hand-set one) granted access.
+	if (!(await isAdmin())) redirect("/login")
 
 	const [all, sections] = await Promise.all([listDocuments(), listSections()])
 

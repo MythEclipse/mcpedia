@@ -10,7 +10,7 @@
     "@mcpedia/db": "workspace:*",
     "@mcpedia/embeddings": "workspace:*",
     "@mcpedia/types": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.4"
   },
   "scripts": {
     "test": "vitest run"

@@ -158,17 +158,53 @@ The API application (`apps/api`) runs on **:4020** with Hono and tRPC v11:
 
 ## Authentication & Security
 
-MCPedia utilizes dual-tier security:
+MCPedia utilizes dual-tier security. The two tiers are deliberately separate:
+stdio MCP has no user session, so the write gate cannot be a cookie check.
 
-1. **Web UI Authentication**:
-   - Gated via `ADMIN_PASSWORD` in `.env`.
-   - Generates an HMAC-signed `mcpedia_admin` HttpOnly cookie upon login at `/login`.
-   - Protects document creation (`/create`), inline editing (`?edit=1`), and deletion.
+1. **Web UI Authentication** (better-auth sessions):
+   - Requires `BETTER_AUTH_SECRET` in `.env`. There is **no fallback value** — an
+     unset secret disables web auth with a named error rather than falling back to
+     a key committed to the repository. (An earlier version of this repo shipped
+     such a fallback; do not reintroduce one.) `BETTER_AUTH_URL` is optional and
+     only affects absolute callback URLs.
+   - Email + password, stored in `user` / `account` / `session` / `verification`.
+     Passwords are hashed by better-auth; sessions are random tokens in the
+     `session` table with a server-side expiry, so they are revocable and each
+     login is distinct. The old `mcpedia_admin` HMAC cookie — whose value was the
+     literal string `admin` for every login — has been removed.
+   - The first account to sign up is granted the `admin` role; every later one is
+     a plain `user` and cannot reach `/create` or the CRUD routes.
+   - Protects document creation (`/create`), inline editing (`?edit=1`), and
+     deletion.
+   - **Promoting a user to admin later** (there is no promotion endpoint, by
+     design):
+
+     ```sql
+     update "user" set role = 'admin' where email = 'you@example.com';
+     ```
 
 2. **API & MCP Write Authentication**:
    - Gated via `WEBHOOK_SECRET` in `.env`.
    - Requires the `x-webhook-secret` HTTP header on mutating endpoints and tools.
    - The API will refuse to start if `WEBHOOK_SECRET` is unset, preventing unsecured deployments.
+   - **Do not migrate this to sessions.** The web UI also accepts this header
+     (the inline editor receives the secret), but the MCP write gate requires it.
+
+### Migrations
+
+The chain is one squashed baseline (`0000`) plus additive migrations after it.
+`pnpm db:migrate` refuses to replay a batch that would collide with an existing
+schema, and allows purely additive batches — so the normal path for a database
+created before `0001` is:
+
+```bash
+pnpm --filter @mcpedia/db db:migrate:adopt   # records only the entries whose tables exist
+pnpm db:migrate                             # applies the rest
+```
+
+`db:migrate:adopt` records migrations individually: an entry is only marked
+applied when the tables it creates are actually present, so a database adopted
+before `0001` still gets `0001` applied rather than silently skipping it.
 
 ---
 

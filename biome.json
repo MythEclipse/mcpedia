@@ -16,7 +16,8 @@
 			"!**/drizzle/meta",
 			"!**/next-env.d.ts",
 			"!**/routeTree.gen.ts",
-			"!**/paraglide/generated"
+			"!**/paraglide/generated",
+			"!.claude"
 		]
 	},
 	"formatter": {

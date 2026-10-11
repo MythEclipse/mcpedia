@@ -10,11 +10,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@better-auth/drizzle-adapter": "1.7.7",
     "@mcpedia/config": "workspace:*",
     "@mcpedia/core": "workspace:*",
+    "@mcpedia/db": "workspace:*",
     "@mcpedia/queue": "workspace:*",
     "@mcpedia/types": "workspace:*",
     "@tailwindcss/typography": "^0.5.20",
+    "better-auth": "1.7.7",
+    "drizzle-orm": "^0.45.4",
     "github-slugger": "^2.0.0",
     "lucide-react": "^1.33.0",
     "next": "16.4.0",

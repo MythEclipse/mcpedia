@@ -1,8 +1,8 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { cookies } from "next/headers"
 import { getDocument, listDocuments, getExportDocuments } from "@mcpedia/core"
 import { WEBHOOK_SECRET } from "@mcpedia/config"
+import { isAdmin } from "@/lib/auth-server"
 import Markdown from "@/components/Markdown"
 import DocForm from "@/components/DocForm"
 import TOC from "@/components/TOC"
@@ -401,8 +401,10 @@ export default async function DocPage({ params, searchParams }: DocPageProps) {
 	const doc = await getDocument(fullSlug)
 	if (!doc) notFound()
 
-	const cookieStore = await cookies()
-	const canEdit = cookieStore.get("mcpedia_admin")?.value != null
+	// Presence of an admin SESSION, not presence of a cookie. The old check was
+	// `cookieStore.get("mcpedia_admin") != null`, which granted the edit UI to
+	// anyone holding a cookie with that name.
+	const canEdit = await isAdmin()
 
 	const STANDARD_KEYS = new Set([
 		"id",

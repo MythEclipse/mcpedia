@@ -8,6 +8,7 @@
     "./sections": "./src/sections.ts"
   },
   "dependencies": {
-    "@mcpedia/types": "workspace:*"
+    "@mcpedia/types": "workspace:*",
+    "zod": "^4.6.5"
   }
 }

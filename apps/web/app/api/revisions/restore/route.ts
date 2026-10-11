@@ -3,11 +3,8 @@ import { restoreRevision, getRevision } from "@mcpedia/core"
 import { isAuthorized as isAuthorizedRequest } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 
-function isAuthorized(req: NextRequest): boolean {
-	return isAuthorizedRequest(
-		req.headers,
-		req.cookies.get("mcpedia_admin")?.value,
-	)
+function isAuthorized(req: NextRequest): Promise<boolean> {
+	return isAuthorizedRequest(req.headers)
 }
 
 // POST /api/revisions/restore  — restore a document to a past revision.

@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { updateDocument, deleteDocument } from "@mcpedia/core"
 import { isAuthorized as isAuthorizedRequest } from "@/lib/auth"
 
-function isAuthorized(req: NextRequest): boolean {
-	return isAuthorizedRequest(
-		req.headers,
-		req.cookies.get("mcpedia_admin")?.value,
-	)
+// Web CRUD auth: either the x-webhook-secret header (API/MCP style) OR an
+// active better-auth session for an admin user. The check is async because it
+// reads the session from the database now — the old HMAC cookie check was a
+// synchronous string compare against a cookie value that was the literal
+// "admin" for every login.
+function isAuthorized(req: NextRequest): Promise<boolean> {
+	return isAuthorizedRequest(req.headers)
 }
 
 function unauthorized() {

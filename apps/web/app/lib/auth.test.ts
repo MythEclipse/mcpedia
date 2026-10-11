@@ -1,68 +1,98 @@
 import { describe, expect, test } from "vitest"
 import { createHmac } from "node:crypto"
-import { ADMIN_PASSWORD } from "@mcpedia/config"
-import { COOKIE_VALUE, signCookie, verifyCookie } from "./auth"
+import { WEBHOOK_SECRET } from "@mcpedia/config"
+import { hasValidSecretHeader, safeTimingEqual, COOKIE_NAME } from "./auth"
 
-// The web auth path had no tests at all: three copies of `isAuthorized` shipped a
-// prefix-only cookie check (`startsWith("admin.")`) for months without anything
-// failing. These cases pin the properties that actually matter.
+/**
+ * The web auth path had no tests at all: three copies of `isAuthorized` shipped
+ * a prefix-only cookie check (`startsWith("admin.")`) for months without
+ * anything failing. The follow-up added signature verification and these cases;
+ * the HMAC cookie has since been replaced by a better-auth session, and the
+ * cases that matter now are the ones about what is still accepted.
+ *
+ * The session path itself is not unit-tested here: it needs a live Postgres and
+ * a configured BETTER_AUTH_SECRET, and `next build` exercises the wiring. What
+ * IS tested is the header path that remains load-bearing for the web editor, and
+ * the constant-time comparison it depends on.
+ */
 
-/** Sign an arbitrary value the way signCookie would, to forge a well-signed cookie. */
-const forge = (value: string) => forgeWith(ADMIN_PASSWORD || "fallback", value)
-
-/** Sign with an explicit key, so tests can exercise the old "fallback" key. */
+/** Sign an arbitrary value the way the retired signCookie did. */
 const forgeWith = (key: string, value: string) =>
 	`${value}.${createHmac("sha256", key).update(value).digest("hex")}`
 
-describe("verifyCookie", () => {
-	test("accepts a correctly signed admin cookie", () => {
-		if (!ADMIN_PASSWORD) return // covered by the unset-password test below
-		expect(verifyCookie(signCookie(COOKIE_VALUE))).toBe(true)
+describe("safeTimingEqual", () => {
+	test("compares equal and unequal values", () => {
+		expect(safeTimingEqual("abc", "abc")).toBe(true)
+		expect(safeTimingEqual("abc", "abd")).toBe(false)
 	})
 
-	test("refuses to sign or verify when ADMIN_PASSWORD is unset", () => {
-		// signCookie used to fall back to the literal string "fallback" — a
-		// hardcoded key committed to the repo. Anyone could mint a valid admin
-		// cookie for an unconfigured deployment. It must now throw instead,
-		// and verification must read that as "not authenticated", not a 500.
-		if (ADMIN_PASSWORD) {
-			expect(signCookie(COOKIE_VALUE)).toBeTruthy()
+	test("does not leak length through a length pre-check", () => {
+		// timingSafeEqual THROWS on a length mismatch, so comparing raw strings
+		// forces an `a.length === b.length` guard first — and that guard returns
+		// faster for a wrong-length guess, which is a length oracle. Hashing both
+		// sides to a fixed 32 bytes first removes the branch entirely, so
+		// differing lengths must simply be false, never a throw.
+		expect(() => safeTimingEqual("", "much longer secret")).not.toThrow()
+		expect(safeTimingEqual("", "much longer secret")).toBe(false)
+		expect(safeTimingEqual("a", "")).toBe(false)
+	})
+})
+
+describe("hasValidSecretHeader", () => {
+	test("refuses everything when WEBHOOK_SECRET is unset", () => {
+		// Fails closed. An unconfigured secret must disable the header path
+		// entirely, never authenticate everyone.
+		if (WEBHOOK_SECRET) {
+			expect(
+				hasValidSecretHeader(new Headers({ "x-webhook-secret": "x" })),
+			).toBe(false)
 			return
 		}
-		expect(() => signCookie(COOKIE_VALUE)).toThrow(/ADMIN_PASSWORD/)
-		// No crash, and definitely not authenticated:
-		expect(verifyCookie(`${COOKIE_VALUE}.deadbeef`)).toBe(false)
-		// A cookie signed with the old hardcoded fallback must not verify:
-		const forged = forgeWith("", COOKIE_VALUE)
-		expect(verifyCookie(forged)).toBe(false)
+		expect(
+			hasValidSecretHeader(new Headers({ "x-webhook-secret": "anything" })),
+		).toBe(false)
+		expect(
+			hasValidSecretHeader(
+				new Headers({ "x-webhook-secret": forgeWith("", "x") }),
+			),
+		).toBe(false)
 	})
 
-	test("rejects the old prefix bypass", () => {
-		expect(verifyCookie("admin.deadbeef")).toBe(false)
-		expect(verifyCookie("admin.")).toBe(false)
-		expect(verifyCookie("admin.whatever")).toBe(false)
-	})
+	test("accepts only the exact configured secret", () => {
+		if (!WEBHOOK_SECRET) return
+		const good = new Headers({ "x-webhook-secret": WEBHOOK_SECRET })
+		expect(hasValidSecretHeader(good)).toBe(true)
 
-	test("rejects a validly signed cookie for a different value", () => {
-		// The signature only proves the caller knows ADMIN_PASSWORD. Without
-		// binding the value, forge("root") would authenticate as the admin.
-		expect(verifyCookie(forge("root"))).toBe(false)
-		expect(verifyCookie(forge(""))).toBe(false)
-		expect(verifyCookie(forge(`${COOKIE_VALUE}2`))).toBe(false)
+		expect(hasValidSecretHeader(new Headers({ "x-webhook-secret": "" }))).toBe(
+			false,
+		)
+		expect(hasValidSecretHeader(new Headers({ "x-webhook-secret": "x" }))).toBe(
+			false,
+		)
+		expect(
+			hasValidSecretHeader(
+				new Headers({ "x-webhook-secret": WEBHOOK_SECRET.slice(0, -1) }),
+			),
+		).toBe(false)
+		expect(
+			hasValidSecretHeader(
+				new Headers({ "x-webhook-secret": `${WEBHOOK_SECRET}a` }),
+			),
+		).toBe(false)
+		expect(hasValidSecretHeader(new Headers())).toBe(false)
 	})
+})
 
-	test("rejects a truncated or extended signature", () => {
-		if (!ADMIN_PASSWORD) return // nothing can be signed without a key
-		const good = signCookie(COOKIE_VALUE)
-		expect(verifyCookie(good.slice(0, -1))).toBe(false)
-		expect(verifyCookie(`${good}a`)).toBe(false)
-		expect(verifyCookie(`${good}.extra`)).toBe(false)
-	})
+describe("the retired HMAC cookie", () => {
+	test("is no longer a credential", async () => {
+		// The cookie NAME is kept only so logout can delete a stale one. Nothing
+		// authorizes against it any more — that was the whole point: the value
+		// was the literal "admin" for every login, so it proved only that a login
+		// had happened once, not who was signed in.
+		expect(COOKIE_NAME).toBe("mcpedia_admin")
 
-	test("rejects structurally invalid cookies", () => {
-		expect(verifyCookie(undefined)).toBe(false)
-		expect(verifyCookie("")).toBe(false)
-		expect(verifyCookie(COOKIE_VALUE)).toBe(false) // no signature
-		expect(verifyCookie(`.${forge("").split(".")[1]}`)).toBe(false) // no value
+		const exports = await import("./auth")
+		expect(Object.keys(exports)).not.toContain("verifyCookie")
+		expect(Object.keys(exports)).not.toContain("signCookie")
 	})
 })
