@@ -18,7 +18,8 @@
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "tsx src/migrate.ts",
+    "db:migrate:baseline": "drizzle-kit migrate --baseline",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   }
