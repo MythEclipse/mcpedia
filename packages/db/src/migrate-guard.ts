@@ -44,8 +44,25 @@ type QueryableDb = Pick<PostgresJsDatabase, "execute">
 
 const TABLE = "public.documents"
 
-/** postgres-js returns a RowList, which is array-like but not an Array. */
+/**
+ * Read the first row out of a drizzle `db.execute()` result.
+ *
+ * drizzle's postgres-js driver returns a BARE ARRAY of row objects, not an
+ * object with a `.rows` property. Reading `.rows` yields undefined, so an
+ * earlier version of this guard silently reported every database as clean —
+ * verified against production: `db.execute(sql\`select ...\`)` is
+ * `Array.isArray === true`, `".rows" in result === false`.
+ *
+ * The `.rows` shape is what node-postgres and `pg` return. Handling both keeps
+ * the guard correct if the driver is ever swapped, but the array case is the
+ * one that is actually exercised.
+ */
 function firstRow(result: unknown): Record<string, unknown> | undefined {
+	if (Array.isArray(result)) {
+		return result.length > 0
+			? (result[0] as Record<string, unknown>)
+			: undefined
+	}
 	const rows = (result as { rows?: unknown }).rows
 	if (!Array.isArray(rows) || rows.length === 0) return undefined
 	return rows[0] as Record<string, unknown>
@@ -86,7 +103,7 @@ export async function assertMigrationTargetIsClean(
 				`baseline whose timestamp is newer, so drizzle would attempt to re-create the ` +
 				`tables and fail.\n\n` +
 				`This database already has the current schema. Reconcile it explicitly:\n` +
-				`  pnpm --filter @mcpedia/db db:migrate:baseline\n` +
+				`  pnpm --filter @mcpedia/db db:migrate:adopt\n` +
 				`or leave it as is — nothing else in the deploy path runs migrations.`,
 		}
 	}
@@ -99,7 +116,7 @@ export async function assertMigrationTargetIsClean(
 			`documented \`psql -f\` procedure). Replaying the baseline would fail with a ` +
 			`duplicate-relation error.\n\n` +
 			`This database already has the current schema. To start tracking it:\n` +
-			`  pnpm --filter @mcpedia/db db:migrate:baseline\n` +
+			`  pnpm --filter @mcpedia/db db:migrate:adopt\n` +
 			`or leave it as is — nothing in CI or the deploy path runs migrations.`,
 	}
 }

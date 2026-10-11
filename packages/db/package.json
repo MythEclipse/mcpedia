@@ -19,7 +19,7 @@
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
-    "db:migrate:baseline": "drizzle-kit migrate --baseline",
+    "db:migrate:adopt": "tsx src/migrate-adopt.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   }
