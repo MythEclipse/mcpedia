@@ -156,17 +156,23 @@ export async function indexChunks(slug: string, body: string): Promise<number> {
 		)
 	}
 
-	// Replace existing chunks for this doc in one transaction.
-	await db.delete(documentChunks).where(eq(documentChunks.slug, slug))
-	await db.insert(documentChunks).values(
-		chunks.map((content: string, i: number) => ({
-			documentId: doc.id,
-			slug,
-			chunkIndex: i,
-			content,
-			embedding: vectors[i],
-		})),
-	)
+	// Replace existing chunks for this doc. These two statements must be
+	// atomic: a delete that commits followed by an insert that fails leaves the
+	// document with zero chunks, and since every caller logs-and-continues on
+	// indexing errors, that failure is invisible — the document simply stops
+	// appearing in semantic and hybrid search.
+	await db.transaction(async (tx) => {
+		await tx.delete(documentChunks).where(eq(documentChunks.slug, slug))
+		await tx.insert(documentChunks).values(
+			chunks.map((content: string, i: number) => ({
+				documentId: doc.id,
+				slug,
+				chunkIndex: i,
+				content,
+				embedding: vectors[i],
+			})),
+		)
+	})
 	return chunks.length
 }
 
