@@ -1,0 +1,17 @@
+# Moon workspace configuration.
+#
+# Schema validated against moon 2.6.1 (the binary installed at ~/.moon/bin/moon).
+# moon ships no bundled docs of its own, so each key here was proven empirically
+# in a scratch repo and against a real clone of this repository — not recalled.
+#
+# NOTE: `moon init` generates only this file. Everything else under .moon/ is
+# hand-authored.
+
+projects:
+  - "apps/*"
+  - "packages/*"
+  - "scripts"
+
+vcs:
+  defaultBranch: "main"
+  provider: "github"

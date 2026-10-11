@@ -1,0 +1,17 @@
+# moon project configuration.
+#
+# moon does NOT infer these edges from package.json `workspace:*` dependencies
+# or from the installed node_modules symlinks — verified against a full clone of
+# this repo with pnpm install completed, `moon project <id>` still reported
+# "Depends on: —". They must be declared here.
+#
+# Transcribed from the @mcpedia/* dependencies in this package's package.json.
+# Keep in sync when adding a workspace dependency.
+
+$schema: 'https://moonrepo.dev/schemas/moon-project.json'
+
+dependsOn:
+  - 'config'
+  - 'core'
+  - 'queue'
+  - 'search'

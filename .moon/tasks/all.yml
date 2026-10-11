@@ -1,0 +1,68 @@
+# Workspace-inherited tasks.
+#
+# IMPORTANT: this file must live at `.moon/tasks/all.yml` — a DIRECTORY named
+# `tasks` containing yaml files. A flat `.moon/tasks.yml` is the v1-era path and
+# moon 2.6.1 silently ignores it: `moon run <proj>:typecheck` fails with
+# "Unknown task" and `moon project <id> --json` reports `inheritedTasks: {}`,
+# with no error or warning to suggest the file was wrong.
+#
+# The same directory is where `fileGroups`, `env`, `implicitDeps`,
+# `implicitInputs`, `inheritedBy` and `taskOptions` belong.
+# Docs: https://moonrepo.dev/docs/config/tasks
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+    - 'app/**/*'
+  configs:
+    - '*.json'
+    - 'tsconfig.json'
+
+# A manifest change must re-trigger every task that reads it. Without this, most
+# packages here have no `build` step at all, so nothing else would notice.
+implicitInputs:
+  - 'package.json'
+
+tasks:
+  typecheck:
+    command: 'tsc --noEmit'
+    # Only the 5 apps/ projects ship a tsconfig.json. The 8 packages/ projects
+    # publish raw TypeScript through `exports: { ".": "./src/index.ts" }` and are
+    # typechecked TRANSITIVELY by whichever app imports them — verified by
+    # injecting a type error into packages/core and watching apps/api report it.
+    #
+    # A `condition` check SKIPS the task when its script exits 0, hence the `!`:
+    # "skip when there is no tsconfig here". Without this gate, `tsc --noEmit`
+    # prints its help text and exits 1 in the 8 tsconfig-less packages, so
+    # `moon run :typecheck` fails.
+    checks:
+      - check: 'condition'
+        script: 'test ! -f tsconfig.json'
+    inputs:
+      - '@globs(sources)'
+      # 'tsconfig.json' as a literal input makes moon emit a hasher warning in the
+      # 9 projects that have none ("Attempted to hash ... but it does not exist,
+      # skipping"). The glob form below is satisfied by tsconfig.json when it
+      # exists and by nothing when it does not, with no warning.
+      - '@globs(configs)'
+      # moon rejects `..` traversal in input paths, so the shared
+      # tsconfig.base.json cannot be referenced from an inherited task.
+
+  build:
+    # Only apps/web and apps/mcp-client define a real build (next build / esbuild);
+    # the other 11 packages publish raw TypeScript via exports "./src/index.ts"
+    # and have no build step. Do NOT set implicitDeps: ['^:build'] here — it would
+    # depend on tasks that do not exist for 11 of the 14 projects.
+    inputs:
+      - '@globs(sources)'
+    outputs:
+      - 'dist/**'
+
+# NOTE: `dev`, `test`, `lint` and `format` are intentionally NOT defined here yet.
+#   - `test` and `build:bundles` run from the repo root (single vitest.config.mts,
+#     single esbuild script) and are not meaningfully project-scoped.
+#   - `dev` differs per app (next dev / tsx src/index.ts) and would be overridden
+#     in each apps/*/moon.yml anyway.
+# Defining them as placeholder tasks that echo would make `moon run :test` look
+# like it did something. They get real per-project definitions as each app is
+# migrated.
