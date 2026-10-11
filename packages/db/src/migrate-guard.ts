@@ -1,5 +1,5 @@
-import { sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { sql } from "drizzle-orm"
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js"
 
 /**
  * Preflight guard for `db:migrate`.
@@ -56,7 +56,9 @@ export async function assertMigrationTargetIsClean(
 ): Promise<MigrationGuardResult> {
 	// Does the target table already exist? If not, this is a fresh database and
 	// the baseline is exactly right.
-	const table = await db.execute(sql`select to_regclass(${TABLE})::text as regclass`)
+	const table = await db.execute(
+		sql`select to_regclass(${TABLE})::text as regclass`,
+	)
 	const existing = firstRow(table)?.regclass
 
 	if (!existing) {

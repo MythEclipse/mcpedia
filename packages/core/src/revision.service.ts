@@ -61,9 +61,7 @@ export async function listRevisions(
 }
 
 /** Fetch a single revision's full body. */
-export async function getRevision(
-	id: string,
-): Promise<{
+export async function getRevision(id: string): Promise<{
 	id: string
 	revisionNo: number
 	body: string

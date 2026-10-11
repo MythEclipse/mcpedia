@@ -9,7 +9,9 @@ import { COOKIE_VALUE, signCookie, verifyCookie } from "./auth"
 
 /** Sign an arbitrary value the way signCookie would, to forge a well-signed cookie. */
 const forge = (value: string) =>
-	`${value}.${createHmac("sha256", ADMIN_PASSWORD || "fallback").update(value).digest("hex")}`
+	`${value}.${createHmac("sha256", ADMIN_PASSWORD || "fallback")
+		.update(value)
+		.digest("hex")}`
 
 describe("verifyCookie", () => {
 	test("accepts a correctly signed admin cookie", () => {
