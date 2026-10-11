@@ -52,3 +52,6 @@ dist/
 # To edit content: use the MCP create_document/update_document tools (requires x-webhook-secret)
 content/**/*.md
 !content/**/.gitkeep
+
+# moon task runner cache (generated; contains build outputs)
+.moon/cache/
