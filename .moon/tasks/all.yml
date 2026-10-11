@@ -56,6 +56,17 @@ tasks:
       - '@globs(configs)'
       # moon rejects `..` traversal in input paths, so the shared
       # tsconfig.base.json cannot be referenced from an inherited task.
+      #
+      # KNOWN GAP: tsconfig.base.json is therefore outside the task hash. Editing
+      # it (e.g. tightening strictness) will NOT invalidate a cached typecheck —
+      # the task reports "cached" and the change goes unnoticed until something
+      # else touches a project source. Confirmed: typecheck is cacheable
+      # (prime -> completed, second run -> cached).
+      #
+      # Mitigations in place: CI runs `pnpm typecheck` through turbo, which has no
+      # cache backend configured, so every CI run is cold and always typechecks.
+      # This only bites a developer running moon locally. If it matters, delete
+      # .moon/cache after touching tsconfig.base.json.
 
   build:
     # Only apps/web and apps/mcp-client define a real build (next build / esbuild);

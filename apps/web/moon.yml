@@ -18,4 +18,13 @@ dependsOn:
 
 tasks:
   build:
-    command: 'next build'
+    # Not a bare `next`. moon does not put node_modules/.bin on the task PATH,
+    # and under pnpm's isolated linker `next` lives in apps/web/node_modules/.bin,
+    # not the workspace root — so even a root-relative guess would be wrong here.
+    command: './node_modules/.bin/next build'
+    inputs:
+      - '@globs(sources)'
+      - 'next.config.ts'
+      - 'package.json'
+    outputs:
+      - '.next/**'

@@ -15,4 +15,12 @@ dependsOn: []
 
 tasks:
   build:
-    command: 'esbuild src/index.ts --outdir=dist --platform=node --format=esm'
+    # Explicit path: moon does not put node_modules/.bin on the task PATH, so a
+    # bare `esbuild` fails with 127 exactly as a bare `next` did. esbuild is a
+    # ROOT devDependency, so it resolves from ../../node_modules/.bin, not from
+    # this package's own .bin (which holds only tsc/tsserver).
+    command: '../../node_modules/.bin/esbuild src/index.ts --outdir=dist --platform=node --format=esm'
+    inputs:
+      - '@globs(sources)'
+    outputs:
+      - 'dist/**'
