@@ -1,0 +1,20 @@
+# Toolchain configuration for moon 2.6.1.
+#
+# THE FILENAME IS PLURAL. moon loads `.moon/toolchains.{yml,yaml,...}`; a
+# singular `.moon/toolchain.yml` is never read, and every project silently
+# reports `toolchain: system` with no warning. That is why the earlier version
+# of this file had no observable effect.
+#
+# Do NOT add a top-level `packageManager: 'pnpm@10.33.2'` string beside the
+# `node` block: moon then reads the file as pnpm-toolchain-only, ignores the
+# node block, and every project flips BACK to `system`. The nested `pnpm:` block
+# below is the correct spelling.
+#
+# Declaring the toolchains does NOT put node_modules/.bin on the task PATH —
+# see the note on the typecheck command in tasks/all.yml.
+node:
+  version: '24.21.0'
+  addVersionFile: false
+
+pnpm:
+  version: '10.33.2'

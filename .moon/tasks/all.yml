@@ -25,11 +25,20 @@ implicitInputs:
 
 tasks:
   typecheck:
-    command: 'tsc --noEmit'
+    # NOT a bare `tsc`. moon does not put node_modules/.bin on the task PATH —
+    # verified: a bare `tsc` inside a moon task resolves to the GLOBAL
+    # /home/code/.local/bin/tsc, which is TypeScript 7.0.2, not the 5.9.3 this
+    # repo pins. That mismatch was live here until it was caught: the task was
+    # typechecking the whole workspace with the wrong compiler and still
+    # reporting success. An explicit relative path is the only way to be sure
+    # which compiler ran.
+    command: '../../node_modules/typescript/bin/tsc'
+    args: ['--noEmit']
     # Only the 5 apps/ projects ship a tsconfig.json. The 8 packages/ projects
     # publish raw TypeScript through `exports: { ".": "./src/index.ts" }` and are
     # typechecked TRANSITIVELY by whichever app imports them — verified by
     # injecting a type error into packages/core and watching apps/api report it.
+    # (`scripts` is a 9th tsconfig-less project: in neither apps/ nor packages/.)
     #
     # A `condition` check SKIPS the task when its script exits 0, hence the `!`:
     # "skip when there is no tsconfig here". Without this gate, `tsc --noEmit`
@@ -53,10 +62,15 @@ tasks:
     # the other 11 packages publish raw TypeScript via exports "./src/index.ts"
     # and have no build step. Do NOT set implicitDeps: ['^:build'] here — it would
     # depend on tasks that do not exist for 11 of the 14 projects.
+    #
+    # `outputs` is deliberately omitted. Declaring `dist/**` on an INHERITED
+    # build makes `moon run :build` fail outright with task_runner::missing_outputs
+    # for the 11 projects that write nothing there ("defines outputs but after
+    # being ran, either none or not all of them exist"). Those projects override
+    # or drop the task in their own moon.yml; only the two that actually emit
+    # dist/ declare outputs, and they do so locally.
     inputs:
       - '@globs(sources)'
-    outputs:
-      - 'dist/**'
 
 # NOTE: `dev`, `test`, `lint` and `format` are intentionally NOT defined here yet.
 #   - `test` and `build:bundles` run from the repo root (single vitest.config.mts,
