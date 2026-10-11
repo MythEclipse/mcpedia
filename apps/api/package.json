@@ -16,7 +16,9 @@
     "@mcpedia/core": "workspace:*",
     "@mcpedia/db": "workspace:*",
     "@mcpedia/queue": "workspace:*",
-    "@trpc/server": "^11.0.0",
+    "@orpc/client": "1.15.5",
+    "@orpc/contract": "1.15.5",
+    "@orpc/server": "1.15.5",
     "hono": "^4.6.0",
     "zod": "^4.5.4"
   },

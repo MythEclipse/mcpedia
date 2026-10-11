@@ -77,6 +77,16 @@ vi.mock("@mcpedia/core", () => ({
 let SECRET: string
 beforeEach(() => {
 	SECRET = "test-secret-" + Math.random().toString(36).slice(2)
+	// `coreCalls` is module-scoped (it must be — vi.mock factories are hoisted
+	// above the imports and would otherwise capture it in the TDZ), so it
+	// accumulates across every test in this file. The CRUD assertions below use
+	// ABSOLUTE counts (`toHaveLength(0)`, `toHaveLength(1)`), which were only
+	// ever correct because those tests happened to run first. Clearing the log
+	// here makes each test's count mean "calls made by this test", so the file
+	// stops being order-dependent.
+	coreCalls.createDocument.length = 0
+	coreCalls.updateDocument.length = 0
+	coreCalls.deleteDocument.length = 0
 })
 
 test("GET /health returns { ok: true }", async () => {
@@ -167,9 +177,9 @@ test("GET /dashboard returns the self-contained HTML", async () => {
 	expect(html).toContain(DASHBOARD_HTML.slice(0, 100))
 })
 
-// --- Phase 11: CRUD tRPC procedures (auth-gated) ---
+// --- CRUD procedures over oRPC (auth-gated) ---
 
-function trpcRequest(
+function rpcRequest(
 	app: Hono,
 	procedure: string,
 	input: unknown,
@@ -179,33 +189,103 @@ function trpcRequest(
 		"content-type": "application/json",
 	}
 	if (secret) headers["x-webhook-secret"] = secret
-	// tRPC fetch adapter expects the procedure input directly as the JSON body
-	// (not wrapped in a JSON-RPC envelope). The procedure name comes from the URL.
-	return app.request("/trpc/" + procedure, {
+	// The oRPC RPC wire format wraps the input in a `{ json, meta }` envelope —
+	// `meta` carries type information for non-JSON types (Date, BigInt, ...) and
+	// is omitted when empty. This is what @orpc/client's RPC link sends, and the
+	// handler rejects a bare object as "expected object, received undefined".
+	// The procedure is addressed by the path after the /rpc mount point.
+	return app.request("/rpc/" + procedure, {
 		method: "POST",
 		headers,
-		body: JSON.stringify(input),
+		body: JSON.stringify({ json: input }),
 	})
 }
 
-test("tRPC createDocument without secret -> rejects (tRPC error)", async () => {
+/**
+ * The origin serves oRPC at /trpc as well as /rpc.
+ *
+ * This is not a compatibility shim for old clients — there are none. It exists
+ * because /etc/caddy/Caddyfile proxies /trpc/* to :4020 and has not been updated
+ * yet. Mounting only /rpc would make every edge-proxied RPC call 404 while the
+ * origin itself stayed healthy, which is the worst possible failure shape: the
+ * health probe passes and the feature is simply gone.
+ *
+ * Both mounts must reach the SAME procedure and apply the SAME auth gate, so
+ * this asserts behaviour through /trpc rather than just a non-404 — a route that
+ * merely exists but bypasses the write gate would be worse than the 404.
+ */
+test("the /trpc mount reaches the same procedures under the same write gate", async () => {
 	const app = await createApp(makeDeps(SECRET, fakeQueue({})))
-	const res = await trpcRequest(app, "createDocument", {
+
+	const body = JSON.stringify({
+		json: { slug: "docs/t", title: "T", section: "docs", body: "# x" },
+	})
+
+	const denied = await app.request("/trpc/documents/create", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body,
+	})
+	expect(denied.status).toBe(401)
+	expect(coreCalls.createDocument).toHaveLength(0)
+
+	const allowed = await app.request("/trpc/documents/create", {
+		method: "POST",
+		headers: { "content-type": "application/json", "x-webhook-secret": SECRET },
+		body,
+	})
+	expect(allowed.status).toBe(200)
+	expect(coreCalls.createDocument).toHaveLength(1)
+})
+
+test("the /trpc mount does not leak state into the /rpc mount", async () => {
+	// Both mounts share ONE RPCHandler instance. If a handler mutated the router's
+	// context or a module-level buffer, a call through one path would change what
+	// the other path returns.
+	const app = await createApp(makeDeps(SECRET, fakeQueue({})))
+	const body = JSON.stringify({
+		json: { slug: "docs/t", title: "T", section: "docs", body: "# x" },
+	})
+	const post = (path: string) =>
+		app.request(path, {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				"x-webhook-secret": SECRET,
+			},
+			body,
+		})
+
+	const viaTrpc = await post("/trpc/documents/create")
+	expect(viaTrpc.status).toBe(200)
+
+	const viaRpc = await post("/rpc/documents/create")
+	expect(viaRpc.status).toBe(200)
+	// Two requests in, exactly two calls out — the shared handler neither dropped
+	// nor duplicated one.
+	expect(coreCalls.createDocument).toHaveLength(2)
+})
+
+test("oRPC documents.create without secret -> 401 + does not reach core", async () => {
+	const app = await createApp(makeDeps(SECRET, fakeQueue({})))
+	const res = await rpcRequest(app, "documents/create", {
 		slug: "docs/test",
 		title: "Test",
 		section: "docs",
 		body: "# Hi",
 	})
-	// tRPC middleware throws Error -> JSON-RPC error (httpStatus 500, not 401)
-	expect(res.status).toBe(500)
+	// oRPC's ORPCError carries a real status, so the gate now answers 401 where
+	// tRPC's bare middleware Error surfaced as 500. Only the status changed: the
+	// request is still refused and core is still never reached.
+	expect(res.status).toBe(401)
 	expect(coreCalls.createDocument).toHaveLength(0)
 })
 
-test("tRPC createDocument with secret -> 200 + calls core", async () => {
+test("oRPC documents.create with secret -> 200 + calls core", async () => {
 	const app = await createApp(makeDeps(SECRET, fakeQueue({})))
-	const res = await trpcRequest(
+	const res = await rpcRequest(
 		app,
-		"createDocument",
+		"documents/create",
 		{
 			slug: "docs/test",
 			title: "Test",
@@ -218,11 +298,11 @@ test("tRPC createDocument with secret -> 200 + calls core", async () => {
 	expect(coreCalls.createDocument).toHaveLength(1)
 })
 
-test("tRPC updateDocument with secret -> 200 + calls core", async () => {
+test("oRPC documents.update with secret -> 200 + calls core", async () => {
 	const app = await createApp(makeDeps(SECRET, fakeQueue({})))
-	const res = await trpcRequest(
+	const res = await rpcRequest(
 		app,
-		"updateDocument",
+		"documents/update",
 		{
 			slug: "docs/test",
 			body: "# Updated",
@@ -233,21 +313,22 @@ test("tRPC updateDocument with secret -> 200 + calls core", async () => {
 	expect(coreCalls.updateDocument).toHaveLength(1)
 })
 
-test("tRPC deleteDocument without secret -> rejects (tRPC error)", async () => {
+test("oRPC documents.remove without secret -> 401 + does not reach core", async () => {
 	const app = await createApp(makeDeps(SECRET, fakeQueue({})))
-	const res = await trpcRequest(app, "deleteDocument", {
+	const res = await rpcRequest(app, "documents/remove", {
 		slug: "docs/test",
 	})
-	// tRPC middleware throws Error -> JSON-RPC error (httpStatus 500, not 401)
-	expect(res.status).toBe(500)
+	// Same status-code correction as documents.create above; the fail-closed
+	// behaviour itself is unchanged.
+	expect(res.status).toBe(401)
 	expect(coreCalls.deleteDocument).toHaveLength(0)
 })
 
-test("tRPC deleteDocument with secret -> 200 + calls core", async () => {
+test("oRPC documents.remove with secret -> 200 + calls core", async () => {
 	const app = await createApp(makeDeps(SECRET, fakeQueue({})))
-	const res = await trpcRequest(
+	const res = await rpcRequest(
 		app,
-		"deleteDocument",
+		"documents/remove",
 		{
 			slug: "docs/test",
 		},
