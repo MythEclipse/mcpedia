@@ -15,7 +15,7 @@
     "mcp": "tsx apps/mcp/src/index.ts",
     "mcp:http": "tsx apps/mcp/src/http.ts",
     "api": "tsx apps/api/src/index.ts",
-    "db:migrate": "tsx packages/db/src/migrate.ts",
+    "db:migrate": "pnpm --filter @mcpedia/db db:migrate",
     "test": "vitest run"
   },
   "devDependencies": {

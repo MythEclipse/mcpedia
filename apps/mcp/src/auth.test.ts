@@ -54,6 +54,18 @@ vi.mock("@mcpedia/core", () => ({
   deleteDocument: (_slug: string) => Promise.resolve({ deleted: true }),
 }));
 
+// The write gate compares the caller's header against the CONFIGURED secret, so
+// the test has to pin one. These tests previously passed arbitrary strings
+// ("real-secret", "secret") and passed anyway — because the old check only
+// tested for a non-empty value. Any test secret that is not TEST_SECRET must be
+// rejected; that is the regression this whole mock exists to catch.
+const TEST_SECRET = "test-webhook-secret";
+
+vi.mock("@mcpedia/config", () => ({
+  WEBHOOK_SECRET: "test-webhook-secret",
+  CONTENT_ROOT: "/tmp/mcpedia-test-content",
+}));
+
 // Import AFTER mocking so the modules resolve to our fakes.
 const { createMcpServer } = await import("../src/index");
 
@@ -89,7 +101,7 @@ test("index_document without auth secret -> tool returns isError", async () => {
 
 test("index_document WITH auth secret -> enqueues job", async () => {
   reset();
-  const { client, server } = await connect("real-secret");
+  const { client, server } = await connect(TEST_SECRET);
   const res = await client.callTool({
     name: "index_document",
     arguments: { slug: "docs/foo" },
@@ -114,7 +126,7 @@ test("reindex_all without auth -> isError; with auth -> enqueues", async () => {
   await client.close();
   await server.close();
 
-  const { client: c2, server: s2 } = await connect("real-secret");
+  const { client: c2, server: s2 } = await connect(TEST_SECRET);
   res = await c2.callTool({ name: "reindex_all", arguments: {} });
   expect(res.isError).toBeFalsy();
   expect(calls.enqueueFullIndex).toHaveLength(1);
@@ -134,7 +146,7 @@ test("restore_revision without auth -> isError; with auth -> calls core.restoreR
   await client.close();
   await server.close();
 
-  const { client: c2, server: s2 } = await connect("real-secret");
+  const { client: c2, server: s2 } = await connect(TEST_SECRET);
   res = await c2.callTool({
     name: "restore_revision",
     arguments: { id: "rev-123" },
@@ -170,7 +182,7 @@ test("create_document without auth secret -> tool returns isError", async () => 
 });
 
 test("create_document with auth secret -> success", async () => {
-  const { client, server } = await connect("secret");
+  const { client, server } = await connect(TEST_SECRET);
   const res = await client.callTool({
     name: "create_document",
     arguments: { slug: "docs/test", title: "Test", section: "docs", body: "# Hi" },
@@ -184,7 +196,7 @@ test("create_document with auth secret -> success", async () => {
 });
 
 test("update_document with auth secret -> success", async () => {
-  const { client, server } = await connect("secret");
+  const { client, server } = await connect(TEST_SECRET);
   const res = await client.callTool({
     name: "update_document",
     arguments: { slug: "docs/test", body: "# Updated" },
@@ -201,6 +213,79 @@ test("delete_document without auth secret -> tool returns isError", async () => 
     arguments: { slug: "docs/test" },
   });
   expect(res.isError).toBe(true);
+  await client.close();
+  await server.close();
+});
+
+// --- Regression: the gate must VERIFY the secret, not merely observe one ---
+
+test("write tool with a WRONG secret is rejected (not just any non-empty value)", async () => {
+  reset();
+  // This is the case the old `if (!authSecret)` check waved through: a caller
+  // with no relationship to this deployment presenting any string at all.
+  const { client, server } = await connect("not-the-configured-secret");
+  const res = await client.callTool({
+    name: "delete_document",
+    arguments: { slug: "docs/test" },
+  });
+  expect(res.isError).toBe(true);
+  await client.close();
+  await server.close();
+});
+
+test("write tool with a PREFIX of the real secret is rejected", async () => {
+  reset();
+  const { client, server } = await connect(TEST_SECRET.slice(0, -1));
+  const res = await client.callTool({
+    name: "delete_document",
+    arguments: { slug: "docs/test" },
+  });
+  expect(res.isError).toBe(true);
+  await client.close();
+  await server.close();
+});
+
+test("write tool with the real secret PLUS a suffix is rejected", async () => {
+  reset();
+  const { client, server } = await connect(`${TEST_SECRET}x`);
+  const res = await client.callTool({
+    name: "delete_document",
+    arguments: { slug: "docs/test" },
+  });
+  expect(res.isError).toBe(true);
+  await client.close();
+  await server.close();
+});
+
+test("an empty-string secret is rejected on write tools", async () => {
+  reset();
+  const { client, server } = await connect("");
+  const res = await client.callTool({
+    name: "delete_document",
+    arguments: { slug: "docs/test" },
+  });
+  expect(res.isError).toBe(true);
+  await client.close();
+  await server.close();
+});
+
+test("a wrong secret is rejected on every write tool, not just delete", async () => {
+  reset();
+  const { client, server } = await connect("wrong");
+  for (const [name, args] of [
+    ["create_document", { slug: "docs/t", title: "T", section: "docs", body: "# b" }],
+    ["update_document", { slug: "docs/t", body: "# b" }],
+    ["index_document", { slug: "docs/t" }],
+    ["reindex_all", {}],
+    ["restore_revision", { id: "rev-1" }],
+  ] as const) {
+    const res = await client.callTool({ name, arguments: args as Record<string, unknown> });
+    expect(res.isError, `${name} must reject a wrong secret`).toBe(true);
+  }
+  // Nothing reached the write layer.
+  expect(calls.enqueueIndexDoc).toHaveLength(0);
+  expect(calls.enqueueFullIndex).toHaveLength(0);
+  expect(calls.restoreRevision).toHaveLength(0);
   await client.close();
   await server.close();
 });

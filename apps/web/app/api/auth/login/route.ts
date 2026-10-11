@@ -1,36 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ADMIN_PASSWORD } from "@mcpedia/config";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import {
+  COOKIE_MAX_AGE,
+  COOKIE_NAME,
+  safeTimingEqual,
+  signCookie,
+  verifyCookie,
+} from "@/lib/auth";
 
 // POST /api/auth/login — verify admin password, set a signed cookie.
 // Uses a simple HMAC cookie (no JWT library) — sufficient for a single-admin KB.
-const COOKIE_NAME = "mcpedia_admin";
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
-
-function signCookie(value: string): string {
-  const secret = ADMIN_PASSWORD || "fallback";
-  const sig = createHmac("sha256", secret).update(value).digest("hex");
-  return `${value}.${sig}`;
-}
-
-function safeTimingEqual(a: string, b: string): boolean {
-  try {
-    const bufA = Buffer.from(a);
-    const bufB = Buffer.from(b);
-    if (bufA.length !== bufB.length) return false;
-    return timingSafeEqual(bufA, bufB);
-  } catch {
-    return false;
-  }
-}
-
-function verifyCookie(cookieValue: string | undefined): boolean {
-  if (!cookieValue) return false;
-  const [value, sig] = cookieValue.split(".");
-  if (!value || !sig) return false;
-  const expected = signCookie(value);
-  return safeTimingEqual(cookieValue, expected);
-}
+//
+// The signing helpers now live in @/lib/auth so the CRUD routes verify the
+// same way this route mints; they used to hold private copies that never
+// actually checked the signature.
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));

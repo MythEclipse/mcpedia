@@ -19,15 +19,32 @@ import {
   deleteDocument,
 } from "@mcpedia/core";
 import { enqueueIndexDoc, enqueueFullIndex, getQueue, INDEX_QUEUE } from "@mcpedia/queue";
-import { CONTENT_ROOT } from "@mcpedia/config";
+import { CONTENT_ROOT, WEBHOOK_SECRET } from "@mcpedia/config";
+import { timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 
 // Write tools require the caller to supply `x-webhook-secret` matching the
 // configured WEBHOOK_SECRET. Read tools are open. `authSecret` is threaded from
 // the HTTP transport (the request header); for stdio it is undefined (local use).
+//
+// This previously only checked that `authSecret` was non-empty, so ANY value —
+// or `?x-webhook-secret=x` on the query string, which Node surfaces as a header
+// — authorized every write tool. WEBHOOK_SECRET was never imported here, so
+// nothing in this file could have caught it. The HTTP transport listens on
+// `*:MCP_PORT` (4021) and is reachable from the public internet.
 function requireMcpAuth(authSecret?: string) {
+  if (!WEBHOOK_SECRET) {
+    throw new Error("unauthorized: WEBHOOK_SECRET is not configured; writes are disabled");
+  }
   if (!authSecret) {
     throw new Error("unauthorized: this tool requires the x-webhook-secret header");
+  }
+  // timingSafeEqual throws when the buffers differ in length, so check that
+  // first — it also avoids comparing only the shared prefix of a longer string.
+  const provided = Buffer.from(authSecret);
+  const expected = Buffer.from(WEBHOOK_SECRET);
+  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
+    throw new Error("unauthorized: invalid x-webhook-secret");
   }
 }
 

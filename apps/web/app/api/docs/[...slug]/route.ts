@@ -1,20 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateDocument, deleteDocument } from "@mcpedia/core";
-import { WEBHOOK_SECRET } from "@mcpedia/config";
-import { timingSafeEqual } from "node:crypto";
+import { isAuthorized as isAuthorizedRequest } from "@/lib/auth";
 
 function isAuthorized(req: NextRequest): boolean {
-  if (!WEBHOOK_SECRET) return false;
-  const headerSecret = req.headers.get("x-webhook-secret") ?? "";
-  if (headerSecret) {
-    const bufA = Buffer.from(headerSecret);
-    const bufB = Buffer.from(WEBHOOK_SECRET);
-    if (bufA.length === bufB.length && timingSafeEqual(bufA, bufB)) {
-      return true;
-    }
-  }
-  const cookie = req.cookies.get("mcpedia_admin")?.value ?? "";
-  return cookie.startsWith("admin.");
+  return isAuthorizedRequest(req.headers, req.cookies.get("mcpedia_admin")?.value);
 }
 
 function unauthorized() {

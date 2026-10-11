@@ -8,6 +8,7 @@ import type { Context } from "./trpc";
 import { WEBHOOK_SECRET } from "@mcpedia/config";
 import { db } from "@mcpedia/db";
 import { DASHBOARD_HTML } from "./dashboard";
+import { safeSecretEqual } from "./secret";
 
 // ---------------------------------------------------------------------------
 // Injectable queue handle. By default we use the real shared BullMQ queue from
@@ -82,7 +83,8 @@ export async function createApp(deps?: ApiDeps): Promise<Hono> {
       }
     }
     const provided = raw.headers.get("x-webhook-secret");
-    return provided != null && provided === d.webhookSecret;
+    if (provided == null) return false;
+    return safeSecretEqual(provided, d.webhookSecret);
   }
 
   // --- Phase 3: Git synchronization hook ---

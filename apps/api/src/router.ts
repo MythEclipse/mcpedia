@@ -17,6 +17,7 @@ import {
 } from "@mcpedia/core";
 import { getQueue, INDEX_QUEUE } from "@mcpedia/queue";
 import { getConnection, BULLMQ_PREFIX } from "@mcpedia/queue/client";
+import { safeSecretEqual } from "./secret";
 
 // restoreRevision and CRUD operations are state-changing actions.
 // They must NOT be callable anonymously over the network —
@@ -25,7 +26,7 @@ const requireWriteAuth = t.middleware(({ ctx, next }) => {
   if (!ctx.expectedSecret) {
     throw new Error("WEBHOOK_SECRET is not configured; writes are disabled");
   }
-  if (ctx.webhookSecret !== ctx.expectedSecret) {
+  if (!ctx.webhookSecret || !safeSecretEqual(ctx.webhookSecret, ctx.expectedSecret)) {
     throw new Error("unauthorized: missing or invalid x-webhook-secret");
   }
   return next();

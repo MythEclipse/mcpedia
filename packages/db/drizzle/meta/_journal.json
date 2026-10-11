@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1787133375079,
-      "tag": "0000_grey_toro",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1787137149735,
-      "tag": "0001_document_chunks",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1787139150000,
-      "tag": "0002_document_revisions",
+      "when": 1791729051403,
+      "tag": "0000_military_wolfpack",
       "breakpoints": true
     }
   ]
