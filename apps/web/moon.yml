@@ -17,7 +17,9 @@ dependsOn:
   - 'types'
 
 tasks:
-  build:
+  # Kept under its own name so the Next build stays runnable on its own:
+  # rollback is `moon run web:build-next`. `build` depends on it below.
+  build-next:
     # Not a bare `next`. moon does not put node_modules/.bin on the task PATH,
     # and under pnpm's isolated linker `next` lives in apps/web/node_modules/.bin,
     # not the workspace root — so even a root-relative guess would be wrong here.
@@ -28,3 +30,22 @@ tasks:
       - 'package.json'
     outputs:
       - '.next/**'
+
+  build:
+    # `vite build`, NOT the Next build: apps/web is mid-migration and the SPA
+    # is the forward target. Same reasoning as mcp-client above — a bare
+    # `vite` resolves to a global install, or to nothing at all.
+    command: './node_modules/.bin/vite build'
+    inputs:
+      - '@globs(sources)'
+      - 'index.html'
+      - 'vite.config.ts'
+      - 'package.json'
+    outputs:
+      - 'dist/**'
+    # `build-next` is declared as a DEPENDENCY, not a dep on the shared inherited
+    # `^:build`. Two builds write two directories (.next/ and dist/) and neither
+    # clobbers the other, so `moon run :build` leaves the rollback path intact:
+    # if the SPA is later reverted, deleting this dep is the only change needed.
+    deps:
+      - 'build-next'

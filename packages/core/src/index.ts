@@ -1,10 +1,160 @@
-export * from "./content.service"
-export * from "./document.service"
-export * from "./search.service"
-export * from "./index.service"
-export * from "./revision.service"
-export * from "./export.service"
+/**
+ * @mcpedia/core — the hexagonal core.
+ *
+ * ## LAYERS
+ *
+ *   domain/          pure logic + the ports the outside world implements
+ *   application/     use cases, built by `make*` factories
+ *   infrastructure/  Drizzle repositories, embeddings, the disk mirror, wiring
+ *   presentation/    transport-shaped helpers
+ *
+ * Dependencies point INWARD. domain/ imports nothing from this package;
+ * application/ imports only domain/; infrastructure/ implements domain/'s
+ * interfaces and is the only layer that touches Postgres, Redis or the disk.
+ *
+ * ## WHY THE BARREL STILL LOOKS FLAT
+ *
+ * Every function the old flat barrel exported is still exported here, under the
+ * same name and with the same signature. apps/mcp, packages/queue's worker and
+ * scripts/indexer.ts import these symbols directly and are explicitly out of
+ * scope for the hexagonal move — they are not part of the kana stack and need no
+ * HTTP hop. Rewriting their imports would be churn against a stated constraint,
+ * so the reorg stops at the internal structure and the public surface is
+ * unchanged.
+ *
+ * That means the layer boundary is a real constraint (enforced by what each
+ * layer imports) rather than a naming convention, while callers keep importing
+ * `@mcpedia/core` exactly as before.
+ *
+ * ## WHAT WAS MOVED VERBATIM
+ *
+ * `validateSlug`, `slugToRelPath`, `extractFoldersForSection` and `classifyPath`
+ * are byte-for-byte the implementations from the former document.service.ts —
+ * they are domain logic, already covered, and a rewrite there would be a silent
+ * behaviour change. `shouldCreateRevision` is likewise the same expression, now
+ * in domain/pure.ts. Search lives in @mcpedia/search and is re-exported
+ * untouched; `export.docx.ts` and `export.helpers.ts` are reused as-is in
+ * application/.
+ */
+
+// --- domain: pure logic and ports ---
+export {
+	validateSlug,
+	slugToRelPath,
+	extractFoldersForSection,
+	classifyPath,
+	shouldCreateRevision,
+} from "./domain"
+
+// --- the flat, dependency-bound surface apps/mcp, the worker and scripts/ use ---
+export {
+	listSections,
+	listDocuments,
+	getDocument,
+	getRelated,
+	getExportDocuments,
+	createDocument,
+	updateDocument,
+	deleteDocument,
+	listRevisions,
+	getRevision,
+	restoreRevision,
+	indexContentFile,
+	runFullIndex,
+} from "./legacy"
+
+// --- export helpers: reused as-is, and browser-safe via ./export-helpers ---
+export {
+	extractDocCategory,
+	extractDocPoints,
+	extractDocDifficulty,
+	extractDocSolved,
+	getCategoryPriority,
+	sortExportDocuments,
+	formatScopeTitle,
+	buildExportSummary,
+	compileExportMarkdown,
+	CTF_CATEGORY_PRIORITY,
+} from "./application/export.helpers"
+
+export {
+	parseInlineMarkdown,
+	convertMarkdownToDocx,
+	generateExportDocx,
+} from "./application/export.docx"
+export type { DocxExportOptions } from "./application/export.docx"
+
+// --- application: use cases ---
+export {
+	makeCreateDocument,
+	makeUpdateDocument,
+	makeDeleteDocument,
+	makeGetDocument,
+	makeListDocuments,
+	makeGetRelated,
+	makeListSections,
+	makeFolderInfo,
+	makeGetExportDocuments,
+	makeIndexContentFile,
+	makeRunFullIndex,
+	makeSnapshotRevision,
+	makeListRevisions,
+	makeGetRevision,
+	makeRestoreRevision,
+} from "./application"
+
+// --- infrastructure: wiring, repositories, adapters ---
+export {
+	getDocumentRepository,
+	getRevisionRepository,
+	documentUseCases,
+	revisionUseCases,
+	indexingUseCases,
+	contentMirror,
+	contentParser,
+	embeddingIndex,
+	createDocumentRepository,
+	createRevisionRepository,
+} from "./infrastructure"
+
+// --- search: reused as-is from @mcpedia/search ---
+export {
+	keywordSearch,
+	semanticSearch,
+	hybridSearch,
+	toTsQuery,
+	cosine,
+} from "./infrastructure/search.service"
+export type { ChunkHit } from "./infrastructure/search.service"
+
+// --- content files on disk ---
+export {
+	listContentFiles,
+	readContentFile,
+} from "./infrastructure/content.service"
+
 export { toMeta } from "./row-map"
+
+export type {
+	DocumentRepository,
+	RevisionRepository,
+	IndexingPort,
+	ContentMirror,
+	ContentParser,
+} from "./domain"
+
+export type {
+	RevisionSummary,
+	RevisionDetail,
+	RestoreResult,
+	IndexResult,
+	IndexFileResult,
+	FolderInfo,
+	CreateDocInput,
+	UpdateDocInput,
+	ExportOptions,
+	ContentFile,
+} from "./domain"
 
 export type {
 	DocSection,

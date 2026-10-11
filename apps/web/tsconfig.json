@@ -2,9 +2,29 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "plugins": [{ "name": "next" }],
+    // vite.config.ts imports ./src/build/no-server-imports.ts with an explicit
+    // extension: Vite's upcoming default `configLoader: "native"` loads the
+    // config through Node's own ESM resolver, which does NOT do extensionless
+    // resolution and warns on every build without it. This flag is what lets
+    // that import typecheck. Safe here because tsconfig.base.json sets
+    // `noEmit`, which is a precondition for this flag — and apps/web never
+    // emits from tsc (Next and Vite each run their own compiler).
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": ["./app/*"],
-      "@mcpedia/*": ["../../packages/*"]
+      "#/*": ["./src/*"],
+      // NOTE: there is deliberately NO "@mcpedia/*" -> "../../packages/*" alias.
+      //
+      // It used to exist for the Next app. It matched every @mcpedia/* specifier
+      // against packages/*, which silently resolves to a NON-EXISTENT directory
+      // for @mcpedia/api — that is an APP, not a package. TypeScript then fell
+      // back to node_modules, and importing the router type from there yielded
+      // `unknown` for every procedure instead of the real type. Nothing errored;
+      // every call site just lost its type.
+      //
+      // pnpm already links every workspace package into apps/web/node_modules
+      // under its real package name, so the alias buys nothing and only shadows
+      // the correct resolution.
     },
     "allowJs": true
   },

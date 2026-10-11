@@ -18,8 +18,6 @@ fileGroups:
     - '*.json'
     - 'tsconfig.json'
 
-# A manifest change must re-trigger every task that reads it. Without this, most
-# packages here have no `build` step at all, so nothing else would notice.
 implicitInputs:
   - 'package.json'
 
@@ -63,10 +61,28 @@ tasks:
       # else touches a project source. Confirmed: typecheck is cacheable
       # (prime -> completed, second run -> cached).
       #
-      # Mitigations in place: CI runs `pnpm typecheck` through turbo, which has no
-      # cache backend configured, so every CI run is cold and always typechecks.
-      # This only bites a developer running moon locally. If it matters, delete
-      # .moon/cache after touching tsconfig.base.json.
+      # Mitigations in place: CI runs `moon run :typecheck` with a fresh
+      # .moon/cache on every run (see the cache action in ci.yml), so every CI
+      # run is cold and always typechecks. This only bites a developer running
+      # moon locally. If it matters, delete .moon/cache after touching
+      # tsconfig.base.json.
+    #
+    # DEPENDENCY GRAPH: `deps: ['^:typecheck']`, NOT `^:build`.
+    #
+    # `^:build` was wrong for this repo. Most packages have no build at all
+    # (they publish raw TS), and the two that do — web and mcp-client — build
+    # the same sources typecheck already read, so depending on their build made
+    # typecheck pay for a Next/Vite/esbuild run it does not consume. Worse, it
+    # inverted the meaning: a typecheck could be cached as "up to date" because
+    # the build it waited on was cached, which is a dependency-ordering claim,
+    # not a correctness one.
+    #
+    # `^:typecheck` states what is actually needed: this project's types are
+    # checked after every project it depends on. It also means a type error
+    # introduced in packages/core surfaces in packages/queue before apps/api is
+    # reached, rather than only at the app that happens to import it.
+    deps:
+      - '^:typecheck'
 
   build:
     # Only apps/web and apps/mcp-client define a real build (next build / esbuild);

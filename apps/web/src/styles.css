@@ -1,0 +1,13 @@
+/*
+ * Tailwind v4 entry point for the SPA.
+ *
+ * `@import "tailwindcss"` is the whole wiring under @tailwindcss/vite — the
+ * plugin compiles it, there is no tailwind.config.js and nothing to register.
+ *
+ * The design tokens live in app/globals.css (shared with the Next build while
+ * both apps run). They are CSS custom properties on :root/.dark, so they apply
+ * to any stylesheet that is loaded on the page — this file only needs the
+ * import above for Tailwind's own layer.
+ */
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";

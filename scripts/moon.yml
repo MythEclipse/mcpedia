@@ -18,3 +18,66 @@ dependsOn:
   - 'parser'
   - 'queue'
   - 'search'
+
+tasks:
+  check:
+    # THE PRE-MERGE GATE, defined here and in no other project.
+    #
+    # It lives in `scripts` because that is the one project whose work is
+    # workspace-wide. All four steps — the five-app typecheck, the whole vitest
+    # suite, the three service bundles and the migration-drift check — are
+    # root-scoped: one vitest.config.mts, one esbuild script, one drizzle folder.
+    #
+    # Defining `check` in .moon/tasks/all.yml instead would make it INHERITED,
+    # and moon runs an inherited task once per project. That would typecheck the
+    # workspace five times over and run all 413 tests fourteen times, once per
+    # project, in parallel. `moon run :check` would still report success and
+    # would take minutes doing it.
+    #
+    # `dependsOn: [':typecheck']` runs moon's own typecheck graph FIRST, so the
+    # graph the task depends on is moon's, not a duplicate loop inside the
+    # script. The script's own tsc pass is still there: it makes `check` mean the
+    # same thing whether it is reached through moon or run directly.
+    #
+    # No `outputs`: this task verifies, it writes nothing. Declaring outputs
+    # makes moon fail with task_runner::missing_outputs.
+    command: 'node'
+    args: ['./moon-check.mjs']
+    # NOT CACHED, DELIBERATELY — `cache: false`.
+    #
+    # `check` is a workspace-wide verification gate: it reads every project's
+    # sources, the db schema, the drizzle migrations and the test files. Its
+    # inputs list below covers only what is reachable from THIS project, and
+    # moon resolves an input glob relative to the project that declares it and
+    # rejects `..` traversal outright — verified: adding
+    # `!../packages/db/src/schema.ts` fails with "parent directory traversal
+    # (..) is not supported". So a project's own inputs provably cannot span the
+    # workspace.
+    #
+    # Leaving it cached was not merely theoretical. With `*.mjs`/`*.sh` as the
+    # only inputs, `moon run :check` reported "cached" and passed while
+    # packages/db/src/schema.ts held a table with no migration — the drift check
+    # never re-ran and the gate was green over a schema that would have failed
+    # on deploy. A fileGroup referencing workspace paths does not fix it: moon
+    # stores `@globs(name)` unexpanded and still resolves it per-project, so the
+    # hash never covered packages/db either.
+    #
+    # So the gate opts out of caching instead. The cost is that `check` always
+    # runs (~16s); the benefit is that it is never green without having actually
+    # looked. A verification gate that can report "cached" without reading the
+    # tree is worse than no gate, because it looks like one. The expensive,
+    # safely-cacheable work it depends on is still cached: `deps: [typecheck]`
+    # runs through moon's own cache.
+    # `options.cache` — verified against moon 2.6.1's own bundled schema
+    # (.moon/cache/schemas/tasks.json, TaskOptionsConfig.cache: "Cache the
+    # outputs of the task for incremental builds. Defaults to true if outputs
+    # are configured, otherwise false"). There is no top-level `cache` key on a
+    # task: adding one fails validation with "unknown field `cache`, expected
+    # one of `extends`, `description`, `command`, `args`, `checks`, ...".
+    options:
+      cache: false
+    inputs:
+      - '*.mjs'
+      - '*.sh'
+    deps:
+      - 'typecheck'

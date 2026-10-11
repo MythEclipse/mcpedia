@@ -1,10 +1,11 @@
 name: CI
 
-# Two jobs, both pnpm + Node:
+# Two jobs. The gate is `moon`; pnpm is still used to install, because that is
+# what the lockfile is for.
 #
-#   test    — the gate. typecheck, the test suite, the three production
-#             bundles and the Next.js build must all succeed on the runner
-#             before anything reaches the host.
+#   check   — the gate. `moon run :check` runs the five-app typecheck, the whole
+#             vitest suite, the three service bundles and the migration-drift
+#             check. Nothing reaches the host unless all four pass.
 #   deploy  — copies scripts/deploy-direct.sh to the host and runs it there
 #             with this SHA. Building happens ON the host (see the comments in
 #             that script), so CI and production share one node_modules and a
@@ -34,8 +35,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: typecheck + tests + build
+  check:
+    name: moon check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -50,28 +51,66 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # Installed BEFORE moon, not after: moon hashes task inputs from the
+      # installed tree, and a project whose node_modules is missing hashes
+      # differently from one that has it. Installing second would make the
+      # gate's own result depend on step order.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        run: pnpm typecheck
+      # moon 2.6.1, pinned to exactly the version this workspace is written
+      # against — .moon/tasks/all.yml documents several 2.6.1-specific
+      # behaviours (the `.moon/tasks/` DIRECTORY requirement, `..` being
+      # rejected in input paths, no top-level `cache` key on a task), so a
+      # floating "latest" would silently change the task graph's meaning.
+      #
+      # This is moon's OWN installer, verified by reading it rather than
+      # recalled: https://moonrepo.dev/install/moon.sh takes the version as $1
+      # and, for any 2.x, delegates to the pinned release installer at
+      # `releases/download/v${version}/moon_cli-installer.sh`. The older
+      # `moonrepo/setup-moon-action` is NOT used — GitHub archived it in Oct
+      # 2023 and it is read-only.
+      - name: Install moon
+        env:
+          MOON_VERSION: "2.6.1"
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://moonrepo.dev/install/moon.sh | sh -s -- "$MOON_VERSION"
+          # The installer writes to ~/.moon/bin, which is not on PATH by
+          # default in a clean runner.
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+          moon --version
 
-      - name: Test
-        run: pnpm test
+      # The `check` task sets `options.cache: false` — it cannot be cached,
+      # because its inputs are workspace-wide and moon resolves an input glob
+      # only within the declaring project (verified: `..` traversal is rejected
+      # outright). Deleting the cache directory as well is belt-and-braces for
+      # the `deps: [typecheck]` tasks, which ARE cached and would otherwise let
+      # a run report "cached" for a source change.
+      #
+      # Cost: ~20s of typecheck re-run per CI job. Worth it — a gate that can
+      # report green without having looked is worse than no gate.
+      - name: Clear moon cache
+        run: rm -rf .moon/cache
 
-      # Build the three service bundles on the runner too: a source change that
-      # esbuild refuses to bundle should fail here, not halfway through a
-      # deploy on the host.
-      - name: Build service bundles
-        run: pnpm build:bundles
-
-      - name: Build Next.js
-        run: pnpm --filter @mcpedia/web build
+      # `moon run :check` is the whole gate: typecheck, tests, bundles, and the
+      # migration-drift check. It is defined once, in scripts/moon.yml, so this
+      # workflow and a developer running the same command locally execute an
+      # identical definition of "green" rather than two lists that can drift.
+      - name: moon run :check
+        run: moon run :check
 
   deploy:
     name: deploy to host
-    needs: test
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: check
+    # NOT YET ARMED, AND DELIBERATELY SO.
+    #
+    # This machine is the production host, and pushes to main deploy straight
+    # into it. The branch carrying the kana-stack work (phase0-hotfixes) has not
+    # been merged, so the safest state for this workflow is "cannot deploy".
+    #
+    # To arm it, delete the line below. Re-enabling it means main deploys on
+    # every push again.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -94,6 +133,10 @@ jobs:
         # The script is scp'd from THIS checkout, never run from
         # /home/code/mcpedia: a fix to the deploy script could never take
         # effect if the copy that applies it is the stale one.
+        #
+        # It applies pending migrations (step 3b, added in this change) before
+        # swapping any payload, so a schema that cannot be migrated aborts the
+        # deploy with the previous bundles still live.
         run: |
           echo "=== Deploying ${{ github.sha }} to $VPS_HOST ==="
           scp -q scripts/deploy-direct.sh "$VPS_USER@$VPS_HOST:/tmp/mcpedia-deploy.sh"
@@ -108,7 +151,7 @@ jobs:
                printf '  %-16s -> %s\n' \"\$u\" \"\$(systemctl is-active \$u)\"; \
              done; \
              echo '--- HTTP ---'; \
-             for url in http://127.0.0.1:4020/health http://127.0.0.1:4016/ https://wiki.asepharyana.my.id/; do \
+             for url in http://127.0.0.1:4020/health http://127.0.0.1:4021/mcp http://127.0.0.1:4016/ https://wiki.asepharyana.my.id/; do \
                code=\$(curl -sk -o /dev/null -w '%{http_code}' --max-time 8 \$url); \
                printf '  %s -> %s\n' \"\$url\" \"\$code\"; \
              done"

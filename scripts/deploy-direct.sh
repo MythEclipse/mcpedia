@@ -45,6 +45,29 @@ echo "checked out $(git rev-parse --short HEAD)"
 node scripts/build-bundles.mjs
 (cd apps/web && ./node_modules/.bin/next build)
 
+# ── 3b. Apply pending migrations ────────────────────────────────────────────
+# The deploy path never ran migrations, so a schema change shipped the code
+# that reads a column the database does not have. The failure lands on the
+# first request that touches the new column, which is after the restart, which
+# is after the health probe that still passes — so the deploy reports success
+# and the site is broken until someone notices.
+#
+# Running it HERE, between the build and the swap, means a migration that cannot
+# be applied aborts the deploy while the running services are still on the
+# previous payload. `set -e` does the aborting: a genuine failure exits non-zero
+# and the script stops before the swap in step 5.
+#
+# `--filter` runs the package's own script, which is `tsx src/migrate.ts`:
+# the wrapper that calls drizzle's migrator behind assertMigrationTargetIsClean.
+# That wrapper exits 0 when its preflight guard REFUSES (the guard is advisory
+# by design — see packages/db/src/migrate.ts), so a refusal prints its reason
+# and the deploy continues. That is the guard's intended behaviour for an
+# already-adopted database and is left as-is here; changing it would change what
+# the guard means.
+"$PNPM" --filter @mcpedia/db db:migrate
+
+echo "migrations applied"
+
 # ── 4. Back up the running bundles so step 6 can undo a bad swap ────────────
 BACKUP="$(mktemp -d /tmp/mcpedia-deploy.XXXXXX)"
 

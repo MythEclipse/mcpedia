@@ -7,7 +7,7 @@ import {
 	buildExportSummary,
 	compileExportMarkdown,
 	formatScopeTitle,
-} from "./export.service"
+} from "./export.helpers"
 import type { Document } from "@mcpedia/types"
 
 describe("Export Service", () => {

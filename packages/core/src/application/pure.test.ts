@@ -1,5 +1,5 @@
 import { test, expect } from "vitest"
-import { shouldCreateRevision } from "../src/index.service"
+import { shouldCreateRevision } from "../domain"
 
 /**
  * Unit tests for the revision-dedup decision rule.
@@ -10,9 +10,12 @@ import { shouldCreateRevision } from "../src/index.service"
  * system ("metadata-only edits don't bloat history"), and it must hold without
  * a database.
  *
- * The DB-backed paths (`snapshotRevision`, `restoreRevision`) are exercised
- * end-to-end via the indexer and the web revision restore route. Here we
- * lock the decision invariant in CI.
+ * The predicate moved to domain/pure.ts during the hexagonal reorg; the rule is
+ * byte-for-byte the expression it always was.
+ *
+ * The DB-backed paths (`snapshotRevision`, `restoreRevision`) are exercised by
+ * the use-case tests in this directory with faked repositories, and
+ * end-to-end via the indexer. Here we lock the decision invariant in CI.
  */
 
 test("shouldCreateRevision: first snapshot when no prior revision exists", () => {
@@ -48,9 +51,14 @@ test("snapshotRevision is wired to the predicate, not a private copy of it", asy
 	// the identical rule inline. This asserts the wiring so the tests above
 	// cannot go stale the same way again: if a future refactor reintroduces a
 	// private copy, the source no longer routes through the predicate.
+	//
+	// The caller moved with the hexagonal reorg: `snapshotRevision` is now built
+	// by makeSnapshotRevision in application/revision.use-cases.ts.
 	const { readFileSync } = await import("node:fs")
 	const { fileURLToPath } = await import("node:url")
-	const path = fileURLToPath(new URL("./index.service.ts", import.meta.url))
+	const path = fileURLToPath(
+		new URL("./revision.use-cases.ts", import.meta.url),
+	)
 	const source = readFileSync(path, "utf8")
 
 	const callsPredicate = /if\s*\(\s*!\s*shouldCreateRevision\(/.test(source)
