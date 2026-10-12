@@ -1,21 +1,32 @@
 import { os } from "@orpc/server"
 import { resolveSession } from "../context"
+import { mapAppErrors } from "../middleware"
 
 /**
  * Who is calling, if anyone.
  *
- * Public and non-throwing on purpose: a server component asks this to decide
- * whether to render the editor, so "not authenticated" is a normal answer, not
- * an error. It answers 200 with `authenticated: false` rather than 401, which
- * is what lets a page render read-only content without an error boundary.
+ * Public and non-throwing on purpose: a page asks this to decide whether to
+ * render the editor, so "not authenticated" is a normal answer, not an error. It
+ * answers 200 with `authenticated: false` rather than 401, which is what lets a
+ * page render read-only content without an error boundary.
  *
- * This reports on the SECRET path only. It deliberately knows nothing about the
- * web admin cookie: that cookie's HMAC key lives in the web app
- * (apps/web/app/lib/auth.ts), which is the only place it is available.
+ * ## THE RESPONSE SHAPE IS UNCHANGED
+ *
+ * `{ authenticated, role, via }` is what the SPA already consumes, and it is
+ * unchanged — `via` merely gained a second possible value. The SPA's client type
+ * declares `via: string | null` for exactly this reason, so adding "session" did
+ * not break its build.
+ *
+ * ## WHY IT IS NOW ASYNC
+ *
+ * Resolving a session cookie reads the `session` table. That cost is paid only
+ * when a caller needs it: `resolveSession` checks the webhook secret first — a
+ * constant-time comparison, no I/O — and returns immediately on the MCP path, so
+ * the stdio client never triggers a query.
  */
 export const authRouter = os.router({
-	me: os.handler(({ context }) => {
-		const session = resolveSession(context)
+	me: os.use(mapAppErrors).handler(async ({ context }) => {
+		const session = await resolveSession(context)
 		return {
 			authenticated: session !== null,
 			role: session?.role ?? null,

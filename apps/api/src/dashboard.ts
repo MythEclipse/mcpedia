@@ -38,7 +38,7 @@ main{padding:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220p
 </main>
 <script>
 const MCP="/mcp";
-const esc=s=>String(s).replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",""":"&quot;"}[c]));
 function getMetric(t,name){const m=t.match(new RegExp(name+"\\\\s+([0-9.]+)"));return m?m[1]:'?';}
 async function loadMetrics(){try{const t=await(await fetch("/metrics")).text();
   document.getElementById("uptime").textContent="up "+getMetric(t,"mcpedia_uptime_seconds")+"s";
