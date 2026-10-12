@@ -8,13 +8,9 @@
  * on every indexed file.
  */
 import { db } from "@mcpedia/db"
-import { documents, documentRevisions } from "@mcpedia/db/schema"
-import { eq, desc, sql } from "drizzle-orm"
-import type {
-	RevisionDetail,
-	RevisionRepository,
-	RevisionSummary,
-} from "../domain"
+import { documentRevisions, documents } from "@mcpedia/db/schema"
+import { desc, eq, sql } from "drizzle-orm"
+import type { RevisionRepository } from "../domain"
 
 export function createRevisionRepository(
 	client: typeof db = db,

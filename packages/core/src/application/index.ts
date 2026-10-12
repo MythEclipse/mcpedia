@@ -10,6 +10,7 @@
  * which concrete implementation satisfies each port. Everything else receives
  * its dependencies already bound.
  */
+export * from "./audit"
 export * from "./document.use-cases"
 export * from "./read.use-cases"
 export * from "./index.use-cases"

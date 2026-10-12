@@ -33,6 +33,7 @@ import {
 	revisionUseCases,
 } from "./infrastructure/compose"
 import type {
+	AuditActor,
 	CreateDocInput,
 	Document,
 	DocumentMeta,
@@ -65,17 +66,37 @@ export const getExportDocuments = (
 	opts: ExportQueryOptions = {},
 ): Promise<ExportData> => documentUseCases().export(opts)
 
-/** Document writes. */
-export const createDocument = (input: CreateDocInput): Promise<DocumentMeta> =>
-	documentUseCases().create(input)
+/**
+ * Document writes.
+ *
+ * ## WHY THESE TAKE AN OPTIONAL ACTOR
+ *
+ * These wrappers are the pre-router surface — the one the MCP server and the
+ * worker call. They still record to the audit trail, but as SYSTEM writes, because
+ * an MCP call over stdio genuinely has no better-auth user behind it: the only
+ * credential is the shared secret, and a shared secret identifies a credential
+ * rather than a person.
+ *
+ * The actor parameter exists for the callers that DO have one. Anything that
+ * introduces a third caller should pass it rather than letting the default
+ * mislabel a human action as a system one — which is the failure mode this
+ * parameter's existence is meant to prevent.
+ */
+export const createDocument = (
+	input: CreateDocInput,
+	actor?: AuditActor,
+): Promise<DocumentMeta> => documentUseCases(actor).create(input)
 
 export const updateDocument = (
 	slug: string,
 	input: UpdateDocInput,
-): Promise<DocumentMeta> => documentUseCases().update(slug, input)
+	actor?: AuditActor,
+): Promise<DocumentMeta> => documentUseCases(actor).update(slug, input)
 
-export const deleteDocument = (slug: string): Promise<{ deleted: boolean }> =>
-	documentUseCases().remove(slug)
+export const deleteDocument = (
+	slug: string,
+	actor?: AuditActor,
+): Promise<{ deleted: boolean }> => documentUseCases(actor).remove(slug)
 
 /** Revisions. */
 export const listRevisions = (
@@ -87,8 +108,10 @@ export const listRevisions = (
 export const getRevision = (id: string): Promise<RevisionDetail | null> =>
 	revisionUseCases().get(id)
 
-export const restoreRevision = (id: string): Promise<RestoreResult | null> =>
-	revisionUseCases().restore(id)
+export const restoreRevision = (
+	id: string,
+	actor?: AuditActor,
+): Promise<RestoreResult | null> => revisionUseCases(actor).restore(id)
 
 /** Indexing. */
 export const indexContentFile = (

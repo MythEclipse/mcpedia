@@ -17,21 +17,21 @@
  * agreed on ISO strings. The entity is the contract; the row is an
  * implementation detail of this file.
  */
-import { and, desc, eq, sql, like, or } from "drizzle-orm"
+
+import { readdirSync, statSync } from "node:fs"
+import { join, relative } from "node:path"
+import { CONTENT_ROOT } from "@mcpedia/config"
 import { db } from "@mcpedia/db"
 import {
+	type DocumentRow,
 	documentChunks,
 	documentRevisions,
 	documents,
-	type DocumentRow,
 } from "@mcpedia/db/schema"
 import { toMeta } from "@mcpedia/search"
-import { CONTENT_ROOT } from "@mcpedia/config"
-import { readdirSync, statSync } from "node:fs"
-import { join, relative } from "node:path"
+import { and, desc, eq, like, or, sql } from "drizzle-orm"
 import type {
 	CreateDocInput,
-	Document,
 	DocumentMeta,
 	DocumentRepository,
 } from "../domain"

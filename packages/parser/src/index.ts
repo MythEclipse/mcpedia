@@ -1,12 +1,12 @@
-import matter from "gray-matter"
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { dirname } from "node:path"
 import type {
 	DocSection,
 	DocStatus,
 	DocType,
 	DocumentMeta,
 } from "@mcpedia/types"
+import matter from "gray-matter"
 
 // Standard frontmatter keys that are rendered explicitly in the UI template.
 // Any other key in frontmatter becomes a dynamic "extra field" badge.
@@ -42,7 +42,7 @@ export function parseFile(absPath: string, relPath: string): ParsedFile {
 	const { data, content } = matter(raw)
 
 	const parts = relPath.split("/")
-	const derivedSection = parts.length > 1 ? parts[0] : "docs"
+	const derivedSection = parts.length > 1 ? (parts[0] ?? "docs") : "docs"
 	const section: DocSection =
 		typeof data.section === "string" && data.section.trim() !== ""
 			? data.section.trim()

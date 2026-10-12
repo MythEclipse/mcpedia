@@ -26,6 +26,7 @@
  * with no runtime effect, made so the domain layer can stand alone without
  * importing a package that will later be re-exported through this layer.
  */
+import { badRequest } from "./errors"
 
 /**
  * Validate that a slug is safe (no path traversal, only [a-z0-9/_-]).
@@ -34,13 +35,18 @@
  * what stops `../../etc/passwd` from reaching `slugToRelPath`. Keep it strict,
  * and keep it in the domain layer where a reviewer can see it without following
  * a database import to find it.
+ *
+ * A rejection throws `badRequest` rather than a bare Error, so the transport
+ * reports a caller mistake as 400 instead of as a server fault. The message text
+ * is unchanged from the original bare throw, which is what keeps every existing
+ * assertion on `invalid slug` valid.
  */
 export function validateSlug(slug: string): string {
 	if (!/^[a-z0-9][a-z0-9/_-]*$/.test(slug)) {
-		throw new Error(`invalid slug: ${slug}`)
+		throw badRequest(`invalid slug: ${slug}`)
 	}
 	if (slug.includes("//"))
-		throw new Error(`invalid slug (double slash): ${slug}`)
+		throw badRequest(`invalid slug (double slash): ${slug}`)
 	return slug
 }
 
@@ -71,7 +77,8 @@ export function extractFoldersForSection(
 
 		let acc = ""
 		for (let i = 0; i < parts.length - 1; i++) {
-			acc = acc ? `${acc}/${parts[i]}` : parts[i]
+			const part = parts[i] ?? ""
+			acc = acc ? `${acc}/${part}` : part
 			folders.add(acc)
 		}
 	}

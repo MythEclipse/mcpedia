@@ -95,7 +95,11 @@ export function extractDocCategory(doc: DocumentMeta): string {
 	// Check slug parts (e.g. ctf/gemastik-2026-warmup/web/chall-1)
 	const parts = doc.slug.split("/")
 	if (parts.length >= 3) {
-		const candidate = parts[parts.length - 2].toLowerCase()
+		// `?? ""` is unreachable: a length>=3 array always has a penultimate
+		// element. It keeps the type a string without a non-null assertion, and
+		// "" is not in `categoryKeywords`, so a hypothetical miss is a no-op
+		// rather than a throw.
+		const candidate = (parts[parts.length - 2] ?? "").toLowerCase()
 		if (categoryKeywords.includes(candidate)) {
 			return candidate.charAt(0).toUpperCase() + candidate.slice(1)
 		}
@@ -113,7 +117,7 @@ export function extractDocPoints(doc: DocumentMeta): number {
 	if (typeof val === "number") return val
 	if (typeof val === "string") {
 		const parsed = parseInt(val.replace(/[^0-9]/g, ""), 10)
-		if (!isNaN(parsed)) return parsed
+		if (!Number.isNaN(parsed)) return parsed
 	}
 	return 0
 }
@@ -232,8 +236,6 @@ export function sortExportDocuments(
 				(a, b) =>
 					new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
 			)
-
-		case "path":
 		default:
 			return copy.sort((a, b) => a.slug.localeCompare(b.slug))
 	}
@@ -285,7 +287,11 @@ export function formatScopeTitle(pathOrSection: string): string {
 
 	const clean = pathOrSection.replace(/^\/+|\/+$/g, "")
 	const parts = clean.split("/")
-	const last = parts[parts.length - 1]
+	// `clean` is "" only when the input was all slashes, and "".split("/") is
+	// [""] — never empty. The default keeps that invariant in the type system
+	// instead of relying on the reader to re-derive it.
+	const [, ...rest] = parts
+	const last = rest.length > 0 ? (rest[rest.length - 1] ?? clean) : clean
 
 	// Capitalize words nicely
 	const words = last.split(/[-_]/).map((w) => {
@@ -299,7 +305,8 @@ export function formatScopeTitle(pathOrSection: string): string {
 
 	if (
 		parts.length > 1 &&
-		(parts[0].toLowerCase() === "ctf" || parts[0].toLowerCase() === "writeups")
+		((parts[0] ?? "").toLowerCase() === "ctf" ||
+			(parts[0] ?? "").toLowerCase() === "writeups")
 	) {
 		if (!/ctf|writeup/i.test(formatted)) {
 			return `${formatted} — CTF Writeups Report`
@@ -337,7 +344,7 @@ export function buildExportSummary(
 		existing.points += pts
 		categoryMap.set(cat, existing)
 
-		if (doc.author && doc.author.trim()) {
+		if (doc.author?.trim()) {
 			authorsSet.add(doc.author.trim())
 		}
 	}

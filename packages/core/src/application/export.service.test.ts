@@ -1,14 +1,13 @@
-import { test, expect, describe } from "vitest"
+import type { Document } from "@mcpedia/types"
+import { describe, expect, test } from "vitest"
 import {
-	extractDocCategory,
-	extractDocPoints,
-	extractDocDifficulty,
-	sortExportDocuments,
 	buildExportSummary,
 	compileExportMarkdown,
+	extractDocCategory,
+	extractDocPoints,
 	formatScopeTitle,
+	sortExportDocuments,
 } from "./export.helpers"
-import type { Document } from "@mcpedia/types"
 
 describe("Export Service", () => {
 	const sampleDocs: Document[] = [

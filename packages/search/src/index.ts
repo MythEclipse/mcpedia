@@ -1,14 +1,8 @@
 import { db } from "@mcpedia/db"
-import { documents, documentChunks, type DocumentRow } from "@mcpedia/db/schema"
-import { and, eq, sql } from "drizzle-orm"
+import { type DocumentRow, documentChunks, documents } from "@mcpedia/db/schema"
 import { createEmbeddingProvider } from "@mcpedia/embeddings"
-import type {
-	DocSection,
-	DocStatus,
-	DocType,
-	DocumentMeta,
-	SearchHit,
-} from "@mcpedia/types"
+import type { DocStatus, DocumentMeta, SearchHit } from "@mcpedia/types"
+import { and, eq, sql } from "drizzle-orm"
 
 const embedder = createEmbeddingProvider()
 
@@ -19,9 +13,16 @@ export function cosine(a: number[], b: number[]): number {
 	let na = 0
 	let nb = 0
 	for (let i = 0; i < a.length; i++) {
-		dot += a[i] * b[i]
-		na += a[i] * a[i]
-		nb += b[i] * b[i]
+		// The equal-length guard above makes these in-bounds, but TypeScript
+		// cannot see that across two independent arrays. Binding once keeps the
+		// arithmetic total: an `undefined` slipping into `dot` would make the
+		// whole score NaN, and NaN silently drops the row out of every ranking
+		// instead of failing loudly.
+		const av = a[i] ?? 0
+		const bv = b[i] ?? 0
+		dot += av * bv
+		na += av * av
+		nb += bv * bv
 	}
 	const denom = Math.sqrt(na) * Math.sqrt(nb)
 	return denom === 0 ? 0 : dot / denom
@@ -161,7 +162,7 @@ export async function hybridSearch(
 
 	const bySlug = new Map(rows.map((r) => [r.slug, r]))
 	return slugs
-		.map((slug, i) => {
+		.map((slug, _i) => {
 			const row = bySlug.get(slug)
 			if (!row) return null
 			const m = fused.get(slug)!

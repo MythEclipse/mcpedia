@@ -1,31 +1,27 @@
+import type { ExportData } from "@mcpedia/types"
 import {
-	Document as DocxDocument,
-	Paragraph,
-	TextRun,
-	Table,
-	TableRow,
-	TableCell,
-	HeadingLevel,
 	AlignmentType,
 	BorderStyle,
-	WidthType,
-	ShadingType,
-	PageBreak,
-	Header,
-	Footer,
-	PageNumber,
-	Packer,
+	Document as DocxDocument,
 	ExternalHyperlink,
+	Footer,
+	Header,
+	HeadingLevel,
+	Packer,
+	PageBreak,
+	PageNumber,
+	Paragraph,
+	ShadingType,
+	Table,
+	TableCell,
+	TableRow,
+	TextRun,
+	WidthType,
 } from "docx"
-import type {
-	Document as CoreDocument,
-	ExportData,
-	ExportSummary,
-} from "@mcpedia/types"
 import {
 	extractDocCategory,
-	extractDocPoints,
 	extractDocDifficulty,
+	extractDocPoints,
 } from "./export.helpers"
 
 // ---------------------------------------------------------------------------
@@ -52,9 +48,9 @@ export function parseInlineMarkdown(text: string): InlineElement[] {
 		/(\[([^\]]+)\]\(([^)]+)\)|`([^`]+)`|\*\*\*([^*]+)\*\*\*|___([^_]+)___|\*\*([^*]+)\*\*|__([^_]+)__|(?<!\*)\*([^*]+)\*(?!\*)|(?<!_)_([^_]+)_(?!_))/g
 
 	let lastIndex = 0
-	let match: RegExpExecArray | null
+	let match = inlineRegex.exec(text)
 
-	while ((match = inlineRegex.exec(text)) !== null) {
+	while (match !== null) {
 		// Add any preceding plain text
 		if (match.index > lastIndex) {
 			elements.push(
@@ -135,6 +131,9 @@ export function parseInlineMarkdown(text: string): InlineElement[] {
 		}
 
 		lastIndex = inlineRegex.lastIndex
+		// Advance the scan outside the `while` condition, so the loop test is a
+		// plain null check rather than an assignment-in-expression.
+		match = inlineRegex.exec(text)
 	}
 
 	// Trailing plain text
@@ -241,9 +240,22 @@ export function convertMarkdownToDocx(markdown: string): (Paragraph | Table)[] {
 	const elements: (Paragraph | Table)[] = []
 	const lines = markdown.split(/\r?\n/)
 
+	// `noUncheckedIndexedAccess` types `lines[i]` as `string | undefined`, but
+	// every read below is already guarded by `i < lines.length` — and `lines`
+	// never grows inside this loop, so the cursor cannot run past the end. The
+	// bounds check is repeated in four separate `while` conditions, which is
+	// exactly the shape a reviewer cannot verify by reading one line.
+	//
+	// Binding it once, at the point the invariant is established, keeps the
+	// markdown parser readable without either a non-null assertion or a
+	// silent `?? ""` that would turn an out-of-range read into a phantom blank
+	// line and corrupt the document structure downstream.
+	const at = (index: number): string => lines[index] ?? ""
+	const more = (): boolean => i < lines.length
+
 	let i = 0
-	while (i < lines.length) {
-		const line = lines[i]
+	while (more()) {
+		const line = at(i)
 		const trimmed = line.trim()
 
 		// 1. Blank lines
@@ -257,8 +269,8 @@ export function convertMarkdownToDocx(markdown: string): (Paragraph | Table)[] {
 			const lang = trimmed.slice(3).trim()
 			const codeLines: string[] = []
 			i++
-			while (i < lines.length && !lines[i].trim().startsWith("```")) {
-				codeLines.push(lines[i])
+			while (more() && !at(i).trim().startsWith("```")) {
+				codeLines.push(at(i))
 				i++
 			}
 			i++ // skip closing ```
@@ -342,8 +354,8 @@ export function convertMarkdownToDocx(markdown: string): (Paragraph | Table)[] {
 		// 3. Markdown Tables (| col1 | col2 |)
 		if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
 			const tableLines: string[] = []
-			while (i < lines.length && lines[i].trim().startsWith("|")) {
-				tableLines.push(lines[i])
+			while (more() && at(i).trim().startsWith("|")) {
+				tableLines.push(at(i))
 				i++
 			}
 			const table = parseMarkdownTable(tableLines)
@@ -357,8 +369,8 @@ export function convertMarkdownToDocx(markdown: string): (Paragraph | Table)[] {
 		// 4. Blockquotes & GitHub Alert Callouts (> [!NOTE], > [!TIP], etc.)
 		if (trimmed.startsWith(">")) {
 			const quoteLines: string[] = []
-			while (i < lines.length && lines[i].trim().startsWith(">")) {
-				quoteLines.push(lines[i].trim().replace(/^>\s?/, ""))
+			while (more() && at(i).trim().startsWith(">")) {
+				quoteLines.push(at(i).trim().replace(/^>\s?/, ""))
 				i++
 			}
 
@@ -372,7 +384,7 @@ export function convertMarkdownToDocx(markdown: string): (Paragraph | Table)[] {
 			let title = "NOTE"
 
 			if (alertMatch) {
-				const alertType = alertMatch[1].toUpperCase()
+				const alertType = (alertMatch[1] ?? "").toUpperCase()
 				if (alertType === "TIP") {
 					borderColor = "10B981"
 					fillColor = "ECFDF5"
@@ -544,7 +556,7 @@ export function convertMarkdownToDocx(markdown: string): (Paragraph | Table)[] {
 		}
 
 		// 6. Horizontal Rule (--- or ***)
-		if (/^(\-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+		if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
 			elements.push(
 				new Paragraph({
 					spacing: { before: 120, after: 120 },
@@ -574,8 +586,8 @@ export function convertMarkdownToDocx(markdown: string): (Paragraph | Table)[] {
 		// 8. Numbered Lists (1. item)
 		if (/^\d+\.\s+/.test(trimmed)) {
 			const numMatch = trimmed.match(/^(\d+)\.\s+(.*)$/)
-			const num = numMatch ? numMatch[1] : "1"
-			const itemText = numMatch ? numMatch[2] : trimmed
+			const num = numMatch?.[1] ?? "1"
+			const itemText = numMatch?.[2] ?? trimmed
 			elements.push(
 				new Paragraph({
 					spacing: { before: 20, after: 40 },
