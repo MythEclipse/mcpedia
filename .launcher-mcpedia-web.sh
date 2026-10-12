@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
-# Native launcher for the MCPedia web front end (Next.js).
+# Native launcher for the MCPedia web front end (Vite SPA).
 #
-# The previous launcher was doubly broken after the Nix removal: it exec'd a bun
-# from /nix/store, and it copied the .next build out of a /nix/store path that no
-# longer exists. Both are gone, so this service could not restart either.
+# This used to exec `next start` against apps/web/.next. The front end was ported
+# to a Vite SPA and the Next tree was deleted, so both the build output (.next)
+# and the binary that served it were gone — the launcher could not outlive the
+# port.
 #
-# apps/web/.next is now built by `next build` under Node, so there is nothing to
-# copy — the launcher only has to start the server. `next start` must run from
-# apps/web because Next resolves its build manifest relative to the project root.
+# What serves the SPA now is apps/web/serve.mjs, a stdlib-only static file
+# server committed alongside the app. `vite preview` is deliberately NOT used:
+# it lives in node_modules, which this deploy does not stage, and Vite documents
+# it as a local convenience rather than a production server.
+#
+# The deploy stages apps/web/dist and apps/web/serve.mjs into the share
+# directory, so a restart needs only a bare `node` — no installed package, no
+# build toolchain.
 set -euo pipefail
 
-cd /home/code/mcpedia/apps/web
-exec ./node_modules/.bin/next start --port 4016
+cd /opt/mcpedia-web/share/mcpedia-web
+exec /usr/bin/node serve.mjs

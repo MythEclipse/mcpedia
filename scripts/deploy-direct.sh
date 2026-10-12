@@ -18,12 +18,16 @@ PNPM=/home/code/.local/bin/pnpm
 # tip.
 REMOTE_URL="${MCPEDIA_REMOTE:-https://github.com/asepharyana/mcpedia.git}"
 
-# src:dst pairs. The dst paths are exactly what the launchers in
-# /opt/mcpedia-api/bin, /opt/mcpedia-mcp/bin and /opt/mcpedia-worker/bin exec.
+# src:dst pairs. The dst paths are exactly what the launchers under
+# /opt/mcpedia-{api,mcp,worker,web}/bin exec. Each entry may be a single file
+# (the esbuild service bundles) or a directory (the SPA dist), and both shapes
+# are handled by the backup and restore steps below.
 BUNDLES=(
   "apps/api/dist/index.js:/opt/mcpedia-api/share/mcpedia-api/dist/index.js"
   "apps/mcp/dist/http.js:/opt/mcpedia-mcp/share/mcpedia-mcp/dist/http.js"
   "apps/worker/dist/index.js:/opt/mcpedia-worker/share/mcpedia-worker/dist/index.js"
+  "apps/web/dist:/opt/mcpedia-web/share/mcpedia-web/dist"
+  "apps/web/serve.mjs:/opt/mcpedia-web/share/mcpedia-web/serve.mjs"
 )
 UNITS=(mcpedia-api mcpedia-mcp mcpedia-worker mcpedia-web)
 
@@ -43,7 +47,7 @@ echo "checked out $(git rev-parse --short HEAD)"
 # ── 3. Build everything BEFORE anything live is touched ─────────────────────
 # A failed build must leave the running services on their current payload.
 node scripts/build-bundles.mjs
-(cd apps/web && ./node_modules/.bin/next build)
+(cd apps/web && ./node_modules/.bin/vite build)
 
 # ── 3b. Apply pending migrations ────────────────────────────────────────────
 # The deploy path never ran migrations, so a schema change shipped the code
