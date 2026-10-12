@@ -72,7 +72,7 @@ tasks:
     # `^:build` was wrong for this repo. Most packages have no build at all
     # (they publish raw TS), and the two that do — web and mcp-client — build
     # the same sources typecheck already read, so depending on their build made
-    # typecheck pay for a Next/Vite/esbuild run it does not consume. Worse, it
+    # typecheck pay for a Vite/esbuild run it does not consume. Worse, it
     # inverted the meaning: a typecheck could be cached as "up to date" because
     # the build it waited on was cached, which is a dependency-ordering claim,
     # not a correctness one.
@@ -85,7 +85,7 @@ tasks:
       - '^:typecheck'
 
   build:
-    # Only apps/web and apps/mcp-client define a real build (next build / esbuild);
+    # Only apps/web and apps/mcp-client define a real build (vite build / esbuild);
     # the other 11 packages publish raw TypeScript via exports "./src/index.ts"
     # and have no build step. Do NOT set implicitDeps: ['^:build'] here — it would
     # depend on tasks that do not exist for 11 of the 14 projects.
@@ -102,7 +102,7 @@ tasks:
 # NOTE: `dev`, `test`, `lint` and `format` are intentionally NOT defined here yet.
 #   - `test` and `build:bundles` run from the repo root (single vitest.config.mts,
 #     single esbuild script) and are not meaningfully project-scoped.
-#   - `dev` differs per app (next dev / tsx src/index.ts) and would be overridden
+#   - `dev` differs per app (vite / tsx src/index.ts) and would be overridden
 #     in each apps/*/moon.yml anyway.
 # Defining them as placeholder tasks that echo would make `moon run :test` look
 # like it did something. They get real per-project definitions as each app is

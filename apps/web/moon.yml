@@ -17,24 +17,11 @@ dependsOn:
   - 'types'
 
 tasks:
-  # Kept under its own name so the Next build stays runnable on its own:
-  # rollback is `moon run web:build-next`. `build` depends on it below.
-  build-next:
-    # Not a bare `next`. moon does not put node_modules/.bin on the task PATH,
-    # and under pnpm's isolated linker `next` lives in apps/web/node_modules/.bin,
-    # not the workspace root — so even a root-relative guess would be wrong here.
-    command: './node_modules/.bin/next build'
-    inputs:
-      - '@globs(sources)'
-      - 'next.config.ts'
-      - 'package.json'
-    outputs:
-      - '.next/**'
-
   build:
-    # `vite build`, NOT the Next build: apps/web is mid-migration and the SPA
-    # is the forward target. Same reasoning as mcp-client above — a bare
-    # `vite` resolves to a global install, or to nothing at all.
+    # `vite build`. Not a bare `vite`: moon does not put node_modules/.bin on the
+    # task PATH, and under pnpm's isolated linker the binary lives in
+    # apps/web/node_modules/.bin, not the workspace root — so even a
+    # root-relative guess would be wrong here.
     command: './node_modules/.bin/vite build'
     inputs:
       - '@globs(sources)'
@@ -43,9 +30,18 @@ tasks:
       - 'package.json'
     outputs:
       - 'dist/**'
-    # `build-next` is declared as a DEPENDENCY, not a dep on the shared inherited
-    # `^:build`. Two builds write two directories (.next/ and dist/) and neither
-    # clobbers the other, so `moon run :build` leaves the rollback path intact:
-    # if the SPA is later reverted, deleting this dep is the only change needed.
-    deps:
-      - 'build-next'
+
+# NOTE: there is no longer a `build-next` task, and `build` no longer depends on
+# one. Next.js has been removed from this package — the `app/` tree, `next.config.ts`
+# and the `next` dependency are all gone, and apps/web is served as static files
+# from `dist/` by the API process (see apps/api/src/app.ts).
+#
+# That task existed to keep a rollback path runnable while the SPA was being
+# built out. It was the last thing still referencing `next`, and it failed the
+# build outright once the app/ tree was deleted: `moon run :build` could not
+# succeed while depending on a build whose inputs no longer existed.
+#
+# If Next ever comes back, it comes back as its own package with its own task —
+# not as a second build inside this one. Two builds in one project meant two
+# output directories and a dependency edge whose only purpose was to preserve an
+# escape hatch that was never used.
