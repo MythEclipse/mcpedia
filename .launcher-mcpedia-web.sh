@@ -11,10 +11,10 @@
 # it lives in node_modules, which this deploy does not stage, and Vite documents
 # it as a local convenience rather than a production server.
 #
-# The deploy stages apps/web/dist and apps/web/serve.mjs into the share
+# The deploy stages apps/web/dist and apps/web/serve.mjs into the release
 # directory, so a restart needs only a bare `node` — no installed package, no
 # build toolchain.
 set -euo pipefail
 
-cd /opt/mcpedia-web/share/mcpedia-web
+cd /opt/mcpedia-web/current
 exec /usr/bin/node serve.mjs

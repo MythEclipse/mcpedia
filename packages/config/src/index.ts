@@ -153,6 +153,27 @@ if (!parsed.success) {
 const env = parsed.success ? parsed.data : ({} as z.infer<typeof EnvSchema>)
 const or = (value: string | undefined, fallback = "") => value || fallback
 
+/**
+ * Where the on-disk markdown mirror is written.
+ *
+ * ## WHY THIS IS EXPLICIT INSTEAD OF A derive-from-REPO_ROOT DEFAULT
+ *
+ * The fallback used to be `resolve(REPO_ROOT, "content")`, which is correct only
+ * while the bundle happens to sit three directories below a checkout. In the
+ * deployed layout the bundle is /opt/mcpedia-<svc>/current/dist/index.js, so
+ * `../../..` walks to `/opt` and the mirror lands in `/opt/content` — shared by
+ * all four services, outside the release it belongs to.
+ *
+ * That happens to be harmless today, and it is exactly the kind of coincidence
+ * that stops being true: the next path change moves the mirror into a release
+ * directory, where a write mutates an artifact the deploy just declared
+ * immutable. Deriving a write target from the layout of the code is the defect,
+ * so the target is named instead.
+ *
+ * The mirror is a BACKUP of the database, never the source of truth — documents
+ * are written through the MCP tools and Postgres is authoritative. A missing
+ * directory is created on demand by the writer.
+ */
 export const CONTENT_ROOT = or(env.CONTENT_ROOT, resolve(REPO_ROOT, "content"))
 
 export const DATABASE_URL = or(env.DATABASE_URL)

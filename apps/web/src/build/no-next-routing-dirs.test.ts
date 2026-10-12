@@ -123,12 +123,30 @@ describe("the deploy path invokes no Next tooling", () => {
 	})
 
 	it("stages the SPA payload the web launcher actually execs", () => {
-		// The launcher runs `node serve.mjs` from the share directory, so both
+		// The launcher runs `node serve.mjs` from the release directory, so both
 		// that script and the dist it serves have to be in the deploy payload.
 		// Without this, the restart lands on a launcher with nothing to run.
+		//
+		// The deploy script stopped declaring a src:dst BUNDLES table when it
+		// moved to releases/<sha> + a `current` symlink, so the assertion follows
+		// the paths as they are actually referenced now: each is named on its own
+		// rather than as one side of a `src:dst` pair.
 		const deploy = readFileSync(join(REPO, "scripts/deploy-direct.sh"), "utf8")
-		expect(deploy).toContain("apps/web/dist:")
-		expect(deploy).toContain("apps/web/serve.mjs:")
+		expect(deploy).toContain("apps/web/dist")
+		expect(deploy).toContain("apps/web/serve.mjs")
 		expect(existsSync(join(WEB, "serve.mjs"))).toBe(true)
+	})
+
+	it("launches the web payload through the current symlink, not a fixed release", () => {
+		// A launcher naming a concrete release pins the service to that release
+		// until someone edits the file, so a deploy would restart the old build
+		// and report success. Resolving `current` at exec time is what makes a
+		// rollback a symlink flip.
+		const launcher = readFileSync(
+			join(REPO, ".launcher-mcpedia-web.sh"),
+			"utf8",
+		)
+		expect(launcher).toContain("cd /opt/mcpedia-web/current")
+		expect(launcher).not.toMatch(/releases\/[0-9a-f]{7,40}/)
 	})
 })

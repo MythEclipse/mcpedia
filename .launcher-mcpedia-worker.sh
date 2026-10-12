@@ -6,5 +6,5 @@
 # See .launcher-mcpedia-api.sh for the shared rationale.
 set -euo pipefail
 
-cd /opt/mcpedia-worker/share/mcpedia-worker
+cd /opt/mcpedia-worker/current
 exec /usr/bin/node dist/index.js

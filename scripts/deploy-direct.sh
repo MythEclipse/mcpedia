@@ -4,8 +4,8 @@
 # Runs ON the host as the deploy user (passwordless sudo), invoked by CI as:
 #     bash deploy-direct.sh <git-sha>
 #
-# CI copies this file out of the checkout it just built instead of running the
-# copy inside /home/code/mcpedia. Running it from the active release is a
+# CI copies this file out of the checkout it just built rather than running the
+# copy that is already on disk. Running it from the active release is a
 # chicken-and-egg trap: a fix to the deploy script could never take effect,
 # because the copy that would apply it is the stale one.
 set -euo pipefail
@@ -18,34 +18,39 @@ PNPM=/home/code/.local/bin/pnpm
 # tip.
 REMOTE_URL="${MCPEDIA_REMOTE:-https://github.com/asepharyana/mcpedia.git}"
 
-# src:dst pairs. The dst paths are exactly what the launchers under
-# /opt/mcpedia-{api,mcp,worker,web}/bin exec. Each entry may be a single file
-# (the esbuild service bundles) or a directory (the SPA dist), and both shapes
-# are handled by the backup and restore steps below.
-BUNDLES=(
-  "apps/api/dist/index.js:/opt/mcpedia-api/share/mcpedia-api/dist/index.js"
-  "apps/mcp/dist/http.js:/opt/mcpedia-mcp/share/mcpedia-mcp/dist/http.js"
-  "apps/worker/dist/index.js:/opt/mcpedia-worker/share/mcpedia-worker/dist/index.js"
-  "apps/web/dist:/opt/mcpedia-web/share/mcpedia-web/dist"
-  "apps/web/serve.mjs:/opt/mcpedia-web/share/mcpedia-web/serve.mjs"
-)
+# ── Release layout ──────────────────────────────────────────────────────────
+# /opt/mcpedia-<svc>/releases/<sha>/ holds the payload for one SHA and `current`
+# is a symlink to it. Every other service on this host works this way (hub, GMW,
+# scraper, zeavis) and it is the only layout where a rollback is one `ln -sfn`.
+#
+# The previous layout overwrote files in place under share/<svc>/dist, and that
+# has two consequences worth naming:
+#
+#   1. Rollback was not a rollback. With exactly one live copy there is no
+#      previous one to return to, so undoing a bad deploy meant hand-copying a
+#      file out of a timestamped backup directory that only existed if someone
+#      had happened to run a deploy while it worked.
+#   2. A half-written payload is a live payload. `cp` is not atomic, so a deploy
+#      interrupted between the copy and the restart left the services running a
+#      MIX of old and new files. With releases/, the new payload is assembled
+#      somewhere nothing points at yet and only becomes reachable by flipping one
+#      symlink, which is atomic.
+#
+# It also makes a release immutable: nothing writes inside releases/<sha>/ after
+# `current` points at it. That guarantee is load-bearing for CONTENT_ROOT — the
+# content mirror resolved to <payload>/content and would mkdirSync() new
+# directories inside the running release.
+ROOT=/opt
+# KEEP_RELEASES counts the LIVE release too, so 2 means "what is running plus one
+# rollback target". Every repo on this host is capped at 2 for the same reason:
+# the disk is shared, and a third release is a rollback nobody reaches for.
+KEEP_RELEASES="${MCPEDIA_KEEP_RELEASES:-2}"
+
+SERVICES=(api mcp worker web)
 UNITS=(mcpedia-api mcpedia-mcp mcpedia-worker mcpedia-web)
 
-# Launchers: the executable each unit's ExecStart actually invokes, kept outside
-# BUNDLES because they need mode 0755 rather than 0644 and must land outside the
-# payload tree.
-#
-# They were shipped in the repo and installed on the host by hand, but this
-# script never touched them — so a checkout that changed a launcher would deploy
-# successfully and run the OLD one, indefinitely, with nothing in the output to
-# suggest otherwise. The unit says "run this binary"; the binary is half the
-# contract, and a deploy that ships one half is not a deploy.
-LAUNCHERS=(
-  ".launcher-mcpedia-api.sh:/opt/mcpedia-api/bin/mcpedia-api"
-  ".launcher-mcpedia-mcp.sh:/opt/mcpedia-mcp/bin/mcpedia-mcp"
-  ".launcher-mcpedia-worker.sh:/opt/mcpedia-worker/bin/mcpedia-worker"
-  ".launcher-mcpedia-web.sh:/opt/mcpedia-web/bin/mcpedia-web"
-)
+release_dir()  { printf '%s/mcpedia-%s/releases/%s' "$ROOT" "$1" "$SHA"; }
+current_link() { printf '%s/mcpedia-%s/current' "$ROOT" "$1"; }
 
 cd "$REPO"
 
@@ -75,102 +80,41 @@ node scripts/build-bundles.mjs
 # Running it HERE, between the build and the swap, means a migration that cannot
 # be applied aborts the deploy while the running services are still on the
 # previous payload. `set -e` does the aborting: a genuine failure exits non-zero
-# and the script stops before the swap in step 5.
-#
-# `--filter` runs the package's own script, which is `tsx src/migrate.ts`:
-# the wrapper that calls drizzle's migrator behind assertMigrationTargetIsClean.
-# That wrapper exits 0 when its preflight guard REFUSES (the guard is advisory
-# by design — see packages/db/src/migrate.ts), so a refusal prints its reason
-# and the deploy continues. That is the guard's intended behaviour for an
-# already-adopted database and is left as-is here; changing it would change what
-# the guard means.
+# and the script stops before the swap in step 6.
 "$PNPM" --filter @mcpedia/db db:migrate
 
 echo "migrations applied"
 
-# ── 4. Back up the running bundles so step 6 can undo a bad swap ────────────
-BACKUP="$(mktemp -d /tmp/mcpedia-deploy.XXXXXX)"
+# ── 4. Assemble the release ────────────────────────────────────────────────
+# Staged into releases/<sha>/ with nothing live touched, so any failure here
+# leaves production on the previous release and the half-built directory is not
+# reachable from `current`.
+for svc in "${SERVICES[@]}"; do
+  rel="$(release_dir "$svc")"
+  rm -rf "$rel"
+  mkdir -p "$rel/dist"
 
-# Each dst may be a single file (today's esbuild bundles) or a directory (the
-# Vite SPA that replaces apps/web's Next build). `test -f` is false for a
-# directory, so a directory destination would be skipped by both the backup and
-# the restore — mcpedia-web would be restarted onto a build nobody can roll
-# back, and the health probe could still pass on a stale one. Handle both.
-backup_path() {
-  local dst="$1"
-  if [ -d "$dst" ]; then
-    mkdir -p "$BACKUP/$(dirname "$dst")"
-    cp -a "$dst" "$BACKUP/$dst"
-  elif [ -f "$dst" ]; then
-    mkdir -p "$BACKUP/$(dirname "$dst")"
-    cp -p "$dst" "$BACKUP/$dst"
-  fi
-}
+  case "$svc" in
+    api)    src="$REPO/apps/api/dist/index.js" ;;
+    mcp)    src="$REPO/apps/mcp/dist/http.js" ;;
+    worker) src="$REPO/apps/worker/dist/index.js" ;;
+    web)    src="$REPO/apps/web/dist" ;;
+  esac
 
-restore_bundles() {
-  local pair dst
-  for pair in "${BUNDLES[@]}"; do
-    dst="${pair#*:}"
-    if [ -d "$BACKUP/$dst" ]; then
-      rm -rf "$dst"
-      mkdir -p "$(dirname "$dst")"
-      cp -a "$BACKUP/$dst" "$dst"
-    elif [ -f "$BACKUP/$dst" ]; then
-      sudo install -D -m 0644 "$BACKUP/$dst" "$dst"
-    fi
-  done
-}
-
-# Units and launchers are restored by the same failure path as payloads.
-#
-# They have to be. A health probe that fails after the units were replaced has
-# already left the services running the NEW unit definitions; restoring only the
-# payloads and then restarting would reboot the broken units into the broken
-# units. The rollback has to undo everything the deploy changed, or it is not a
-# rollback.
-restore_units_and_launchers() {
-  local pair dst
-  for pair in "${LAUNCHERS[@]}"; do
-    dst="${pair#*:}"
-    [ -f "$BACKUP/$dst" ] && sudo install -D -m 0755 "$BACKUP/$dst" "$dst"
-  done
-  local unit
-  for unit in "${UNITS[@]}"; do
-    dst="/etc/systemd/system/$unit.service"
-    [ -f "$BACKUP/$dst" ] && sudo install -D -m 0644 "$BACKUP/$dst" "$dst"
-  done
-  sudo systemctl daemon-reload
-}
-
-for pair in "${BUNDLES[@]}"; do
-  dst="${pair#*:}"
-  backup_path "$dst"
-done
-
-for pair in "${LAUNCHERS[@]}"; do
-  dst="${pair#*:}"
-  backup_path "$dst"
-done
-
-for unit in "${UNITS[@]}"; do
-  backup_path "/etc/systemd/system/$unit.service"
-done
-
-# ── 5. Swap payloads in ─────────────────────────────────────────────────────
-for pair in "${BUNDLES[@]}"; do
-  src="${pair%%:*}"
-  dst="${pair#*:}"
   if [ -d "$src" ]; then
-    rm -rf "$dst"
-    mkdir -p "$(dirname "$dst")"
-    cp -a "$src" "$dst"
+    cp -a "$src/." "$rel/dist/"
   else
-    install -D -m 0644 "$src" "$dst"
+    install -m 0644 "$src" "$rel/dist/$(basename "$src")"
   fi
-  echo "installed $dst"
+  echo "assembled $rel"
 done
 
-# ── 5b. Install the unit definitions ────────────────────────────────────────
+# The web service serves its dist through a stdlib static server that does not
+# live in node_modules, so it ships with the release. Kept out of the launcher so
+# the launcher stays a bare exec with no file to keep in sync.
+install -m 0644 "$REPO/apps/web/serve.mjs" "$(release_dir web)/serve.mjs"
+
+# ── 5. Install the unit definitions ─────────────────────────────────────────
 # The units used to live only on the host, and they pointed WorkingDirectory at
 # /home/code/mcpedia — a checkout that has since been deleted. Nothing about the
 # running process revealed it: nothing restarts a running process, so
@@ -180,34 +124,62 @@ done
 #
 # Shipping the units in deploy/systemd/ and installing them here means the
 # definition a service runs under is reviewable, diffable and rolled back with
-# the code, instead of being host state that survives every deploy unchanged.
-# A unit fix that lives only in /etc cannot be reviewed and will be lost.
+# the code, instead of being host state that survives every deploy unchanged. A
+# unit fix that lives only in /etc cannot be reviewed and will be lost.
 for unit in "${UNITS[@]}"; do
   src="$REPO/deploy/systemd/$unit.service"
   if [ ! -f "$src" ]; then
     echo "missing $src — refusing to deploy against unknown unit definitions" >&2
     exit 1
   fi
-  backup_path "/etc/systemd/system/$unit.service"
   sudo install -m 0644 "$src" "/etc/systemd/system/$unit.service"
 done
-
-for pair in "${LAUNCHERS[@]}"; do
-  src="$REPO/${pair%%:*}"
-  dst="${pair#*:}"
+# The launcher is the executable ExecStart actually invokes. It was shipped in
+# the repo and installed on the host by hand while the script only ever restarted
+# it, so a checkout that changed a launcher deployed "successfully" and ran the
+# old one indefinitely with nothing in the output to suggest otherwise. The unit
+# says "run this binary"; the binary is half the contract.
+for svc in "${SERVICES[@]}"; do
+  src="$REPO/.launcher-mcpedia-$svc.sh"
   if [ ! -f "$src" ]; then
     echo "missing $src — refusing to deploy without its launcher" >&2
     exit 1
   fi
-  backup_path "$dst"
-  sudo install -m 0755 "$src" "$dst"
+  sudo install -m 0755 "$src" "/opt/mcpedia-$svc/bin/mcpedia-$svc"
 done
 
 sudo systemctl daemon-reload
 
+# ── 6. Preflight, then flip ────────────────────────────────────────────────
+# Every unit must exec through current/. A unit still naming a concrete share/
+# directory would keep running the OLD payload while this script reported
+# success — the same failure mode as a unit left over from the previous release,
+# which is why it is checked rather than assumed.
+for svc in "${SERVICES[@]}"; do
+  exec_path="$(sudo systemctl show "mcpedia-$svc" -p ExecStart --value)"
+  case "$exec_path" in
+    */mcpedia-$svc/current*) ;;
+    *)
+      echo "unit mcpedia-$svc does not exec through current/: ${exec_path:-<unknown>}" >&2
+      exit 1
+      ;;
+  esac
+done
+
+for svc in "${SERVICES[@]}"; do
+  link="$(current_link "$svc")"
+  mkdir -p "$(dirname "$link")"
+  # Create beside the old link and rename over it. `ln -sfn` alone is not atomic
+  # because it unlinks first, which leaves a window where the link does not exist
+  # and a restart landing in that window resolves nothing.
+  sudo ln -sfn "$(release_dir "$svc")" "${link}.new"
+  sudo mv -T "${link}.new" "$link"
+  echo "flipped $link -> $SHA"
+done
+
 sudo systemctl restart "${UNITS[@]}"
 
-# ── 6. Health ───────────────────────────────────────────────────────────────
+# ── 7. Health ───────────────────────────────────────────────────────────────
 # `systemctl restart` already waited for the units to be up; the HTTP probes
 # pace themselves (curl --retry) rather than sleeping on a guessed delay.
 fail=0
@@ -227,26 +199,75 @@ probe() {
 probe http://127.0.0.1:4020/health "200"
 # The MCP endpoint answers 406 to a bare GET: it is alive and demanding the
 # Streamable-HTTP Accept header. 000 (no connection) is the failure we care about.
-probe http://127.0.0.1:4021/mcp "406 400 401 405"
+probe http://127.0.0.1:4021/mcp "200 400 401 405 406"
 probe http://127.0.0.1:4016/ "200"
+probe https://wiki.asepharyana.my.id/ "200"
 
 for unit in "${UNITS[@]}"; do
   state="$(systemctl is-active "$unit" || true)"
   echo "unit $unit -> $state"
-  if [ "$state" != "active" ]; then
-    fail=1
-  fi
+  [ "$state" = "active" ] || fail=1
 done
 
+# ── 8. Roll back on a failed probe ─────────────────────────────────────────
+# Only the symlinks go back. With releases/ the previous payload is still
+# sitting there untouched, so "roll back" is pointing `current` at it — there is
+# nothing to copy and no state to reconstruct, which is the entire reason for
+# moving to this layout.
 if [ "$fail" -ne 0 ]; then
-  echo "health check failed — restoring previous bundles and restarting"
-  restore_bundles
-  # Restore the unit definitions too. They are part of what this deploy changed,
-  # and restarting into a unit the health probe just rejected is not a rollback.
-  restore_units_and_launchers
+  echo "health check failed — restoring the previous release"
+  for svc in "${SERVICES[@]}"; do
+    link="$(current_link "$svc")"
+    rel_root="$(dirname "$link")"
+      previous="$(find "$rel_root/releases" -maxdepth 1 -mindepth 1 -type d \
+        ! -name "$SHA" -printf '%f\n' | sort -r | head -1)"
+      if [ -n "$previous" ]; then
+        # Searched inside releases/, so the target is built the same way.
+        # Joining against rel_root would name /opt/mcpedia-<svc>/<sha>, which
+        # does not exist — and ln -sfn would create a DANGLING link, which is a
+        # rollback that reports success and starts nothing.
+        sudo ln -sfn "$rel_root/releases/$previous" "${link}.rollback"
+        sudo mv -T "${link}.rollback" "$link"
+        echo "rolled back $svc -> $previous"
+    else
+      echo "no previous release for $svc to fall back to" >&2
+    fi
+  done
   sudo systemctl restart "${UNITS[@]}" || true
   exit 1
 fi
 
-rm -rf "$BACKUP"
+# ── 9. Prune ────────────────────────────────────────────────────────────────
+# The live release is resolved THROUGH `current` rather than compared by name.
+# A name comparison misses the trailing slash that readlink prints, so it would
+# happily prune the release that is currently running — the bug that shipped
+# alongside this layout in the other repos on this host.
+for svc in "${SERVICES[@]}"; do
+  link="$(current_link "$svc")"
+  rel_root="$(dirname "$link")"
+  live="$(readlink -f "$link")"
+    # Scoped to releases/ for the same reason as the rollback search: the
+    # service root also holds share/ and bin/, and pruning a maxdepth-1
+    # directory there would delete a launcher or the old layout's leftovers
+    # rather than a release.
+    mapfile -t releases < <(
+      find "$rel_root/releases" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | sort -r
+    )
+    for name in "${releases[@]:$KEEP_RELEASES}"; do
+      [ -n "$name" ] || continue
+      target="$rel_root/releases/$name"
+      if [ "$(readlink -f "$target")" = "$live" ]; then
+        echo "SKIP $target (live)"
+        continue
+      fi
+      # sudo: /opt is root-owned, and a prune that silently failed would
+      # leave the disk growing while the log claims otherwise.
+      sudo rm -rf "$target"
+      echo "pruned $target"
+  done
+done
+
 echo "deploy OK $SHA"
+for svc in "${SERVICES[@]}"; do
+  echo "  mcpedia-$svc -> $(readlink -f "$(current_link "$svc")")"
+done

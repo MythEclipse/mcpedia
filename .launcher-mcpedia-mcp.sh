@@ -6,5 +6,5 @@
 # Node runs it directly. See .launcher-mcpedia-api.sh for the shared rationale.
 set -euo pipefail
 
-cd /opt/mcpedia-mcp/share/mcpedia-mcp
+cd /opt/mcpedia-mcp/current
 exec /usr/bin/node dist/http.js
