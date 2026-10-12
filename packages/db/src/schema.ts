@@ -55,10 +55,24 @@ export const documents = pgTable(
 )
 
 // Phase 2: semantic search chunks. Each row is an embedded slice of a document
-// body. `embedding` is a plain float array (real[]). We compute cosine
-// similarity in the application layer — pgvector isn't available on the shared
-// imrnes Postgres, and brute-force cosine is instant for a KB-sized corpus.
-// (pgvector/HNSW is the Phase-4 scale-out path.)
+// LEGACY. Nothing writes to this table any more.
+//
+// It stored the local chunker's output plus its embeddings, which is exactly
+// what hindsight now produces on its own side. The declaration is KEPT on
+// purpose, for two reasons:
+//
+//   1. Removing it from the schema would make the next `drizzle-kit generate`
+//      emit a DROP TABLE, silently deleting every stored chunk on migrate.
+//      That is a destructive, irreversible change to a live database and it
+//      must be a deliberate migration, never a side effect of a search
+//      refactor.
+//   2. `onDelete: "cascade"` plus the explicit delete in
+//      drizzle.document.repository.ts keeps a deleted document from leaving
+//      orphaned chunk rows behind, which is still the right behaviour while
+//      the table exists.
+//
+// Nothing reads from it. The drop belongs in its own reviewed migration, once
+// someone confirms no rollback to the old search path is needed.
 export const documentChunks = pgTable(
 	"document_chunks",
 	{
@@ -69,6 +83,8 @@ export const documentChunks = pgTable(
 		slug: text("slug").notNull(),
 		chunkIndex: integer("chunk_index").notNull(),
 		content: text("content").notNull(),
+		// `embedding` is a plain float array (real[]) rather than a pgvector
+		// column because the shared imrnes Postgres has no pgvector extension.
 		embedding: real("embedding").array(),
 		createdAt: timestamp("created_at", { withTimezone: true })
 			.notNull()
