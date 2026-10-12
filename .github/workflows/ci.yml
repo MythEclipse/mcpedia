@@ -148,7 +148,6 @@ jobs:
   deploy:
     name: deploy to host
     needs: check
-    environment: production
     # Serialised against itself. Two deploys racing on the same host would both
     # assemble releases/ and flip `current`, and the loser's symlink flip would
     # land after the winner's — leaving the older release running under a log
