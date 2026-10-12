@@ -45,7 +45,8 @@ import {
 import { createActivityRepository } from "./drizzle.activity.repository"
 import { createDocumentRepository } from "./drizzle.document.repository"
 import { createRevisionRepository } from "./drizzle.revision.repository"
-import { contentMirror, contentParser, embeddingIndex } from "./adapters"
+import { contentMirror, contentParser } from "./adapters"
+import { hindsightIndex } from "./hindsight.ts"
 import type {
 	ActivityRepository,
 	AuditActor,
@@ -105,7 +106,7 @@ export function documentUseCases(actor?: AuditActor) {
 		{
 			documents: getDocumentRepository(),
 			revisions: getRevisionRepository(),
-			index: embeddingIndex,
+			index: hindsightIndex,
 			mirror: contentMirror,
 		},
 		actor,
@@ -136,7 +137,7 @@ export function revisionUseCases(actor?: AuditActor) {
 				{
 					revisions: getRevisionRepository(),
 					documents: getDocumentRepository(),
-					index: embeddingIndex,
+					index: hindsightIndex,
 					mirror: contentMirror,
 				},
 				actor,
@@ -154,7 +155,7 @@ export function indexingUseCases(actor?: AuditActor) {
 		{
 			documents: getDocumentRepository(),
 			revisions: getRevisionRepository(),
-			index: embeddingIndex,
+			index: hindsightIndex,
 			parser: contentParser,
 		},
 		actor,
@@ -173,4 +174,4 @@ export function activityUseCases() {
 }
 
 /** The markdown mirror, for callers that read a backup directly. */
-export { contentMirror, contentParser, embeddingIndex }
+export { contentMirror, contentParser }

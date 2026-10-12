@@ -1,29 +1,27 @@
 {
-  "name": "@mcpedia/core",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts",
-    "./row-map": "./src/row-map.ts",
-    "./export-helpers": "./src/application/export.helpers.ts",
-    "./domain": "./src/domain/index.ts",
-    "./application": "./src/application/index.ts",
-    "./infrastructure": "./src/infrastructure/index.ts",
-    "./presentation": "./src/presentation/index.ts"
-  },
-  "dependencies": {
-    "@mcpedia/config": "workspace:*",
-    "@mcpedia/db": "workspace:*",
-    "@mcpedia/embeddings": "workspace:*",
-    "@mcpedia/parser": "workspace:*",
-    "@mcpedia/search": "workspace:*",
-    "@mcpedia/types": "workspace:*",
-    "docx": "^9.9.0",
-    "drizzle-orm": "^0.45.4",
-    "ts-pattern": "^5.9.0"
-  },
-  "scripts": {
-    "test": "vitest run"
-  }
+	"name": "@mcpedia/core",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./row-map": "./src/row-map.ts",
+		"./export-helpers": "./src/application/export.helpers.ts",
+		"./domain": "./src/domain/index.ts",
+		"./application": "./src/application/index.ts",
+		"./infrastructure": "./src/infrastructure/index.ts",
+		"./presentation": "./src/presentation/index.ts"
+	},
+	"dependencies": {
+		"@mcpedia/config": "workspace:*",
+		"@mcpedia/db": "workspace:*",
+		"@mcpedia/parser": "workspace:*",
+		"@mcpedia/types": "workspace:*",
+		"docx": "^9.9.0",
+		"drizzle-orm": "^0.45.4",
+		"ts-pattern": "^5.9.0"
+	},
+	"scripts": {
+		"test": "vitest run"
+	}
 }

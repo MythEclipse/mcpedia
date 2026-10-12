@@ -13,7 +13,5 @@ $schema: 'https://moonrepo.dev/schemas/moon-project.json'
 dependsOn:
   - 'config'
   - 'db'
-  - 'embeddings'
   - 'parser'
-  - 'search'
   - 'types'

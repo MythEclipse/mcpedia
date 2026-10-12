@@ -23,12 +23,12 @@
  *
  * ## WHAT IS *NOT* HERE, AND WHY
  *
- * Search is absent. The search implementation already lives in @mcpedia/search
+ * Search is absent. The search implementation lives in infrastructure/hindsight.ts
  * with its FTS generated column and its pgvector queries, and the brief is
  * explicit that it is reused as-is rather than rewritten behind a port. A port
  * that nothing routes through would be decoration. The same applies to
  * `searchForQuery`: search is a read the presentation layer delegates straight
- * to @mcpedia/search, exactly as it did before.
+ * to infrastructure/hindsight.ts, exactly as it did before.
  *
  * Likewise nothing here knows about HTTP, oRPC, zod or Hono. Those belong to
  * presentation/ and are one-directional dependencies that point at this layer.

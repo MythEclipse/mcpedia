@@ -32,7 +32,7 @@
  * are byte-for-byte the implementations from the former document.service.ts —
  * they are domain logic, already covered, and a rewrite there would be a silent
  * behaviour change. `shouldCreateRevision` is likewise the same expression, now
- * in domain/pure.ts. Search lives in @mcpedia/search and is re-exported
+ * in domain/pure.ts. Search is hindsight-backed and re-exported
  * untouched; `export.docx.ts` and `export.helpers.ts` are reused as-is in
  * application/.
  */
@@ -131,21 +131,27 @@ export {
 	withAudit,
 	contentMirror,
 	contentParser,
-	embeddingIndex,
 	createDocumentRepository,
 	createRevisionRepository,
 	createActivityRepository,
 } from "./infrastructure"
 
-// --- search: reused as-is from @mcpedia/search ---
+// --- search: hindsight-backed ---
+// `toTsQuery` and `cosine` are GONE with the stack they belonged to: the first
+// built a Postgres tsquery, the second compared two float arrays by hand.
+// Neither has a meaning now that ranking is hindsight's, and re-exporting a
+// stub for either would be a lie about what the caller is getting.
+// `ChunkHit` went with them — hindsight returns facts, not chunks, and every
+// mode now yields document-level hits.
 export {
 	keywordSearch,
 	semanticSearch,
 	hybridSearch,
-	toTsQuery,
-	cosine,
+	consolidate,
+	forgetDocument,
+	recallDocumentFacts,
+	reflect,
 } from "./infrastructure/search.service"
-export type { ChunkHit } from "./infrastructure/search.service"
 
 // --- content files on disk ---
 export {

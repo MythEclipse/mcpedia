@@ -28,7 +28,7 @@ import {
 	documentRevisions,
 	documents,
 } from "@mcpedia/db/schema"
-import { toMeta } from "@mcpedia/search"
+import { toMeta } from "../row-map.ts"
 import { and, desc, eq, like, or, sql } from "drizzle-orm"
 import type {
 	CreateDocInput,
