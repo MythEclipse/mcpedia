@@ -67,3 +67,8 @@ content/**/*.md
 # gitignored silently: the reason is recorded here so the next person does not
 # re-add the path.
 .db-backups/
+
+# CI's release staging area: a copy of the bundles and SPA dist that the deploy
+# job uploads. Build output, derived from files already ignored above, so it is
+# never committed — and biome must not reformat the artifact CI is about to ship.
+payload/

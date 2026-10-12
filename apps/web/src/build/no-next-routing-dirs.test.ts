@@ -166,6 +166,40 @@ describe("the deploy path invokes no Next tooling", () => {
 		expect(existsSync(join(WEB, "serve.mjs"))).toBe(true)
 	})
 
+	it("builds every artifact the payload needs, not just the SPA", () => {
+		// `moon run :build` only produces apps/web/dist: only apps/web and
+		// apps/mcp-client declare a `build` task, and the three service bundles
+		// plus the migration worker come from scripts/build-bundles.mjs, which has
+		// never been in moon's task graph.
+		//
+		// That was invisible while the host compiled them during deploy. Once the
+		// build moved to CI, a payload assembled from `moon run :build` alone
+		// shipped an empty service directory and the deploy aborted on
+		// "cp: cannot stat 'apps/api/dist/index.js'" — after the gate had gone
+		// green, which is the worst place for a missing input to surface.
+		const workflow = readFileSync(
+			join(REPO, ".github/workflows/ci.yml"),
+			"utf8",
+		)
+		const assemble = executableLines(workflow)
+		expect(assemble).toContain("build:bundles")
+		expect(assemble).toContain("run build")
+
+		// And the bundler must name all four service bundles plus the journal.
+		const builder = readFileSync(
+			join(REPO, "scripts/build-bundles.mjs"),
+			"utf8",
+		)
+		for (const out of [
+			"apps/api/dist/index.js",
+			"apps/api/dist/migrate.js",
+			"apps/mcp/dist/http.js",
+			"apps/worker/dist/index.js",
+		]) {
+			expect(builder).toContain(out)
+		}
+	})
+
 	it("keeps the production host out of the build", () => {
 		// The host used to clone the repo, install dependencies and run vite +
 		// esbuild on the VPS, which meant the bundle serving production was

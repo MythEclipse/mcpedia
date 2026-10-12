@@ -124,6 +124,19 @@ jobs:
       - name: Assemble release payload
         run: |
           set -euo pipefail
+
+          # Both builds run HERE, not on the host.
+          #
+          # `moon run :build` is NOT enough, and finding that out cost a red run:
+          # only apps/web and apps/mcp-client declare a `build` task, so :build
+          # produces the SPA dist and nothing else. The three service bundles —
+          # and now the migration worker — come from scripts/build-bundles.mjs,
+          # which has never been part of moon's task graph. The old deploy called
+          # it explicitly on the host, so the gap only surfaced once the build
+          # moved to CI.
+          pnpm run build:bundles
+          pnpm run build
+
           rm -rf payload && mkdir -p payload/api payload/mcp payload/worker payload/web
 
           cp apps/api/dist/index.js    payload/api/index.js
