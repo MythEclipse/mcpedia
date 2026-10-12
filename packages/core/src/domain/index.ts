@@ -12,6 +12,7 @@
  * it has no values to import.
  */
 export * from "./entities"
+export * from "./errors"
 export * from "./path"
 export * from "./pure"
 export * from "./repositories"

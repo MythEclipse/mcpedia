@@ -34,8 +34,6 @@
  * presentation/ and are one-directional dependencies that point at this layer.
  */
 import type {
-	ContentFile,
-	RevisionMeta,
 	CreateDocInput,
 	Document,
 	DocumentMeta,
@@ -44,8 +42,8 @@ import type {
 	IndexResult,
 	RestoreResult,
 	RevisionDetail,
+	RevisionMeta,
 	RevisionSummary,
-	UpdateDocInput,
 } from "./entities"
 
 /**
@@ -54,12 +52,12 @@ import type {
  * not dead.
  */
 export type {
+	ExportOptions,
 	IndexFileResult,
 	IndexResult,
 	RestoreResult,
 	RevisionDetail,
 	RevisionSummary,
-	ExportOptions,
 }
 
 /**
@@ -204,3 +202,80 @@ export interface ContentMirror {
 
 /** The filesystem walk used by a full-corpus index run. */
 export type ContentLister = DocumentRepository["listContentFiles"]
+
+/**
+ * Who performed a write.
+ *
+ * ## WHY THIS IS A VALUE AND NOT A SESSION
+ *
+ * The audit entry has to survive the request. A session cookie is gone by the
+ * time anyone reads the trail, and it does not exist at all for the indexer. So
+ * the domain names its own tiny shape and the presentation layer is responsible
+ * for translating whatever it holds into it — which means a use case can be
+ * tested without a session, a user table, or a request object.
+ *
+ * Every field is optional except `via`, because the honest default for "I do not
+ * know who did this" is to say so. An actor that claims a user id it cannot
+ * substantiate is worse than an actor that admits it has none.
+ */
+export interface AuditActor {
+	/** The better-auth user id, absent for a machine-initiated write. */
+	readonly userId?: string
+	/** "admin" | "user" as of the write. Recorded, not re-derived on read. */
+	readonly role?: string
+	/** Which credential performed it. Required: the one fact that always exists. */
+	readonly via: "webhook-secret" | "session" | "system"
+}
+
+/** What a write did. Kept as a union so a typo fails to compile. */
+export type AuditAction = "create" | "update" | "delete" | "restore" | "index"
+
+/** One recorded write. */
+export interface AuditEntry {
+	readonly action: AuditAction
+	readonly resource: string
+	readonly resourceId: string
+	readonly actor: AuditActor
+	readonly metadata: Record<string, unknown>
+}
+
+/**
+ * The append-only audit trail.
+ *
+ * ## WHY THIS IS A PORT AND NOT A CALL TO THE REPOSITORY
+ *
+ * Auditing is a cross-cutting concern that applies to every write, in every use
+ * case. Putting it on `DocumentRepository` would mean every repository grew a
+ * `record()` method and every write path grew a call to remember it — which is
+ * exactly the property that produces audit logs with gaps in them. As its own
+ * port, the dependency is one collaborator in `DocumentUseCaseDeps`, and the
+ * policy for what gets recorded lives in one place (see application/audit.ts)
+ * rather than being re-derived at each site.
+ *
+ * Reads are on the port too because an audit trail nobody can read is a cost
+ * with no benefit.
+ */
+export interface ActivityRepository {
+	record(entry: AuditEntry): Promise<void>
+
+	/** Newest first. `resourceId` filters to one document. */
+	list(opts: {
+		resourceId?: string
+		limit: number
+		offset: number
+	}): Promise<ActivityRecord[]>
+}
+
+/**
+ * An audit row as read back.
+ *
+ * Separate from `AuditEntry` because the two differ in the only way that
+ * matters to a reader: an entry is a request to record something, and a record
+ * is a statement about the past that already happened, with an id and a
+ * timestamp the caller did not supply and cannot change.
+ */
+export interface ActivityRecord extends AuditEntry {
+	readonly id: string
+	readonly actor: AuditActor
+	readonly createdAt: string
+}

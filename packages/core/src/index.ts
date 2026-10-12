@@ -46,6 +46,19 @@ export {
 	shouldCreateRevision,
 } from "./domain"
 
+// The audit trail's types are part of the public surface because the
+// PRESENTATION layer builds one: `auditActorOf` in apps/api translates a
+// request session into an AuditActor. Keeping these type-only (the port and the
+// entries are interfaces; there is nothing runtime to export here) means a
+// consumer can type an actor without pulling in the repositories.
+export type {
+	ActivityRecord,
+	ActivityRepository,
+	AuditAction,
+	AuditActor,
+	AuditEntry,
+} from "./domain"
+
 // --- the flat, dependency-bound surface apps/mcp, the worker and scripts/ use ---
 export {
 	listSections,
@@ -101,20 +114,27 @@ export {
 	makeListRevisions,
 	makeGetRevision,
 	makeRestoreRevision,
+	makeAuditor,
+	metadataFor,
+	SYSTEM_ACTOR,
 } from "./application"
 
 // --- infrastructure: wiring, repositories, adapters ---
 export {
 	getDocumentRepository,
 	getRevisionRepository,
+	getActivityRepository,
 	documentUseCases,
 	revisionUseCases,
 	indexingUseCases,
+	activityUseCases,
+	withAudit,
 	contentMirror,
 	contentParser,
 	embeddingIndex,
 	createDocumentRepository,
 	createRevisionRepository,
+	createActivityRepository,
 } from "./infrastructure"
 
 // --- search: reused as-is from @mcpedia/search ---
@@ -142,6 +162,20 @@ export type {
 	ContentMirror,
 	ContentParser,
 } from "./domain"
+
+// Typed errors. The API's presentation layer maps AppErrorCode to a status, so
+// these are part of the package's public surface, not just an internal detail.
+export {
+	AppError,
+	asAppError,
+	badRequest,
+	conflict,
+	forbidden,
+	internal,
+	notFound,
+	unauthorized,
+} from "./domain"
+export type { AppErrorCode } from "./domain"
 
 export type {
 	RevisionSummary,

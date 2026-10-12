@@ -42,13 +42,20 @@ import {
 	makeSnapshotRevision,
 	makeUpdateDocument,
 } from "../application"
+import { createActivityRepository } from "./drizzle.activity.repository"
 import { createDocumentRepository } from "./drizzle.document.repository"
 import { createRevisionRepository } from "./drizzle.revision.repository"
 import { contentMirror, contentParser, embeddingIndex } from "./adapters"
-import type { DocumentRepository, RevisionRepository } from "../domain"
+import type {
+	ActivityRepository,
+	AuditActor,
+	DocumentRepository,
+	RevisionRepository,
+} from "../domain"
 
 let documents: DocumentRepository | null = null
 let revisions: RevisionRepository | null = null
+let activity: ActivityRepository | null = null
 
 /** The document repository, bound to the real database. Built once. */
 export function getDocumentRepository(): DocumentRepository {
@@ -62,14 +69,47 @@ export function getRevisionRepository(): RevisionRepository {
 	return revisions
 }
 
-/** The wired document use cases. */
-export function documentUseCases() {
-	const deps = {
-		documents: getDocumentRepository(),
-		revisions: getRevisionRepository(),
-		index: embeddingIndex,
-		mirror: contentMirror,
+/** The audit trail, bound to the real database. Built once. */
+export function getActivityRepository(): ActivityRepository {
+	if (!activity) activity = createActivityRepository()
+	return activity
+}
+
+/**
+ * The use cases, with the audit trail attached.
+ *
+ * ## WHY THE ACTOR IS A PARAMETER HERE
+ *
+ * `actor` is threaded through from the caller rather than read from a module-level
+ * "current user" — an ambient identity would be a lie in a process that serves
+ * many concurrent requests, and a global mutable one would be a race. The
+ * presentation layer reads the actor from the request and passes it here, which
+ * makes the dependency explicit and makes "who did this write" answerable in a
+ * unit test by passing an actor literal.
+ */
+export function withAudit<T extends object>(
+	deps: T,
+	actor?: AuditActor,
+): T & { activity: ActivityRepository; actor?: AuditActor } {
+	return {
+		...deps,
+		activity: getActivityRepository(),
+		// A caller with no actor is a SYSTEM write, not an unaudited one.
+		...(actor ? { actor } : {}),
 	}
+}
+
+/** The wired document use cases. */
+export function documentUseCases(actor?: AuditActor) {
+	const deps = withAudit(
+		{
+			documents: getDocumentRepository(),
+			revisions: getRevisionRepository(),
+			index: embeddingIndex,
+			mirror: contentMirror,
+		},
+		actor,
+	)
 	return {
 		create: makeCreateDocument(deps),
 		update: makeUpdateDocument(deps),
@@ -87,31 +127,48 @@ export function documentUseCases() {
 }
 
 /** The wired revision use cases. */
-export function revisionUseCases() {
+export function revisionUseCases(actor?: AuditActor) {
 	return {
 		list: makeListRevisions({ revisions: getRevisionRepository() }),
 		get: makeGetRevision({ revisions: getRevisionRepository() }),
-		restore: makeRestoreRevision({
-			revisions: getRevisionRepository(),
-			documents: getDocumentRepository(),
-			index: embeddingIndex,
-			mirror: contentMirror,
-		}),
+		restore: makeRestoreRevision(
+			withAudit(
+				{
+					revisions: getRevisionRepository(),
+					documents: getDocumentRepository(),
+					index: embeddingIndex,
+					mirror: contentMirror,
+				},
+				actor,
+			),
+		),
 		snapshot: makeSnapshotRevision({ revisions: getRevisionRepository() }),
 	}
 }
 
 /** The wired indexing use cases. */
-export function indexingUseCases() {
-	const deps = {
-		documents: getDocumentRepository(),
-		revisions: getRevisionRepository(),
-		index: embeddingIndex,
-		parser: contentParser,
-	}
+export function indexingUseCases(actor?: AuditActor) {
+	// Indexing runs with no actor unless one is supplied, which is the normal
+	// case: the CLI, the worker and the git-sync hook are all system writes.
+	const deps = withAudit(
+		{
+			documents: getDocumentRepository(),
+			revisions: getRevisionRepository(),
+			index: embeddingIndex,
+			parser: contentParser,
+		},
+		actor,
+	)
 	return {
 		indexFile: makeIndexContentFile(deps),
 		runFullIndex: makeRunFullIndex(deps),
+	}
+}
+
+/** The audit trail on its own, for callers that read the trail directly. */
+export function activityUseCases() {
+	return {
+		list: getActivityRepository(),
 	}
 }
 

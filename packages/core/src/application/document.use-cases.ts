@@ -41,25 +41,42 @@
  * contain a revision for a document that does not exist.
  */
 import {
-	slugToRelPath,
-	validateSlug,
+	type ActivityRepository,
+	type AuditActor,
 	type ContentMirror,
 	type CreateDocInput,
-	type Document,
+	conflict,
 	type DocumentMeta,
 	type DocumentRepository,
 	type IndexingPort,
+	notFound,
 	type RevisionRepository,
+	slugToRelPath,
 	type UpdateDocInput,
+	validateSlug,
 } from "../domain"
+import { makeAuditor, metadataFor, SYSTEM_ACTOR } from "./audit"
 import { makeSnapshotRevision } from "./revision.use-cases"
 
-/** The collaborators every document use case needs. */
+/**
+ * The collaborators every document use case needs.
+ *
+ * `activity` and `actor` exist for the audit trail. Both are OPTIONAL, and
+ * neither optional means "skip the audit": a write with no actor records itself
+ * as a system write. That default is deliberate — the alternative, refusing to
+ * record a write whose principal is unknown, produces audit tables with gaps
+ * exactly where automation is writing, which is the majority of writes in this
+ * system.
+ */
 export interface DocumentUseCaseDeps {
 	documents: DocumentRepository
 	revisions: RevisionRepository
 	index: IndexingPort
 	mirror: ContentMirror
+	/** The audit trail. Absent disables recording; it never blocks a write. */
+	activity?: ActivityRepository | null
+	/** Who is performing this write. Defaults to SYSTEM_ACTOR. */
+	actor?: AuditActor
 	/** Injected so tests get stable timestamps. Defaults to the wall clock. */
 	now?: () => Date
 }
@@ -92,6 +109,7 @@ function logDegraded(operation: string, slug: string, err: unknown): void {
 export function makeCreateDocument(deps: DocumentUseCaseDeps) {
 	const { documents, revisions, index, mirror } = deps
 	const snapshotRevision = makeSnapshotRevision({ revisions })
+	const audit = makeAuditor(deps.activity ?? null)
 
 	return async function createDocument(
 		input: CreateDocInput,
@@ -102,7 +120,7 @@ export function makeCreateDocument(deps: DocumentUseCaseDeps) {
 
 		const existing = await documents.getBySlug(slug)
 		if (existing) {
-			throw new Error(`document already exists at slug: ${slug}`)
+			throw conflict(`document already exists at slug: ${slug}`)
 		}
 
 		const nowIso = clock(deps)().toISOString()
@@ -122,6 +140,16 @@ export function makeCreateDocument(deps: DocumentUseCaseDeps) {
 		}
 
 		await documents.insert({ ...input, section, slug, path: relPath, meta })
+
+		await audit({
+			action: "create",
+			resource: "document",
+			resourceId: slug,
+			actor: deps.actor ?? SYSTEM_ACTOR,
+			// Nothing to diff on a create — the body is the entry, and copying it
+			// here would duplicate the whole corpus in a second table.
+			metadata: metadataFor("create", {}, { title: meta.title, section }),
+		})
 
 		// History of exactly what was written, taken before the async work
 		// below can fail. The revision number comes from snapshotRevision, which
@@ -159,13 +187,14 @@ export function makeCreateDocument(deps: DocumentUseCaseDeps) {
 export function makeUpdateDocument(deps: DocumentUseCaseDeps) {
 	const { documents, revisions, index, mirror } = deps
 	const snapshotRevision = makeSnapshotRevision({ revisions })
+	const audit = makeAuditor(deps.activity ?? null)
 
 	return async function updateDocument(
 		slug: string,
 		input: UpdateDocInput,
 	): Promise<DocumentMeta> {
 		const doc = await documents.getBySlug(slug)
-		if (!doc) throw new Error(`document not found: ${slug}`)
+		if (!doc) throw notFound(`document not found: ${slug}`)
 
 		const updatedAt = clock(deps)().toISOString()
 		const updated: DocumentMeta = {
@@ -187,6 +216,31 @@ export function makeUpdateDocument(deps: DocumentUseCaseDeps) {
 		const body = input.body ?? doc.body
 
 		await documents.update(slug, updated, body)
+
+		// The diff is computed from the merge that is already in hand, so it is
+		// exact by construction rather than by asking a second implementation to
+		// recompute the same comparison and hoping they agree.
+		await audit({
+			action: "update",
+			resource: "document",
+			resourceId: slug,
+			actor: deps.actor ?? SYSTEM_ACTOR,
+			metadata: metadataFor("update", {
+				title: [doc.title, updated.title],
+				section: [doc.section, updated.section],
+				status: [doc.status, updated.status],
+				author: [doc.author, updated.author],
+				// Byte counts, not bodies: the audit needs to know whether the text
+				// changed and by how much, and copying the content would duplicate
+				// the corpus behind a second authorisation boundary.
+				//
+				// `?.length ?? 0` rather than `.length` because the merge above
+				// already treats a missing body as "unchanged" — reading it
+				// unconditionally here would make the audit stricter than the write
+				// it is describing, and turn a valid update into a TypeError.
+				body: [`${doc.body?.length ?? 0}b`, `${body?.length ?? 0}b`],
+			}),
+		})
 
 		// Snapshotted through the shared helper so the dedup rule and the
 		// revision numbering have exactly one implementation. The original
@@ -220,9 +274,13 @@ export function makeUpdateDocument(deps: DocumentUseCaseDeps) {
  * silently vanished.
  */
 export function makeDeleteDocument(
-	deps: Pick<DocumentUseCaseDeps, "documents" | "mirror">,
+	deps: Pick<
+		DocumentUseCaseDeps,
+		"documents" | "mirror" | "activity" | "actor"
+	>,
 ) {
 	const { documents, mirror } = deps
+	const audit = makeAuditor(deps.activity ?? null)
 
 	return async function deleteDocument(
 		slug: string,
@@ -231,6 +289,21 @@ export function makeDeleteDocument(
 		if (!doc) return { deleted: false }
 
 		await documents.remove(slug)
+
+		// Recorded AFTER the delete, and deliberately not cascading: once the row
+		// is gone there is nothing left for a foreign key to point at, and the
+		// title captured here is the only remaining record of what was removed.
+		await audit({
+			action: "delete",
+			resource: "document",
+			resourceId: slug,
+			actor: deps.actor ?? SYSTEM_ACTOR,
+			metadata: metadataFor(
+				"delete",
+				{},
+				{ title: doc.title, section: doc.section },
+			),
+		})
 
 		try {
 			await mirror.remove(doc.path)

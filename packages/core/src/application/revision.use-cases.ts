@@ -22,6 +22,8 @@
  */
 import {
 	shouldCreateRevision,
+	type ActivityRepository,
+	type AuditActor,
 	type DocumentMeta,
 	type DocumentRepository,
 	type RestoreResult,
@@ -29,6 +31,7 @@ import {
 	type RevisionRepository,
 	type RevisionSummary,
 } from "../domain"
+import { makeAuditor, metadataFor, SYSTEM_ACTOR } from "./audit"
 
 /** Dependencies for the revision use cases. */
 export interface RevisionDeps {
@@ -44,6 +47,18 @@ export interface RevisionDeps {
 			body: string
 		}): Promise<void>
 	}
+	/**
+	 * The audit trail, for `restore` only.
+	 *
+	 * Present on this interface but used by exactly one use case, which is why
+	 * the other factories take `Pick<RevisionDeps, ...>` slices. Audit belongs on
+	 * the restore path — it is the one revision operation that moves a document
+	 * backwards, and "who rolled this back, and to when" is a question nobody
+	 * can answer from the revision rows alone.
+	 */
+	activity?: ActivityRepository | null
+	/** Who is performing the restore. Defaults to SYSTEM_ACTOR. */
+	actor?: AuditActor
 	/** Injected so tests get stable timestamps. Defaults to the wall clock. */
 	now?: () => Date
 }
@@ -133,6 +148,7 @@ export function makeGetRevision(deps: Pick<RevisionDeps, "revisions">) {
  */
 export function makeRestoreRevision(deps: RevisionDeps) {
 	const { revisions, documents, index, mirror } = deps
+	const audit = makeAuditor(deps.activity ?? null)
 
 	return async function restoreRevision(
 		id: string,
@@ -180,6 +196,25 @@ export function makeRestoreRevision(deps: RevisionDeps) {
 		}
 
 		await documents.update(ref.slug, restored, detail.body)
+
+		// Recorded before the disk write and the rebuild, both of which are
+		// best-effort and can fail without undoing the restore. An audit entry
+		// written after them could be lost to a failure that did not affect the
+		// document, leaving a restore that happened with no trace.
+		await audit({
+			action: "restore",
+			resource: "document",
+			resourceId: ref.slug,
+			actor: deps.actor ?? SYSTEM_ACTOR,
+			metadata: metadataFor(
+				"restore",
+				{},
+				{
+					revisionId: id,
+					revisionNo: detail.revisionNo,
+				},
+			),
+		})
 
 		// Sync back to disk (source of truth for file-based reads). A failed
 		// backup must not fail a restore that already committed.

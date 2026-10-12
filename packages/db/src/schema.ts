@@ -1,4 +1,4 @@
-import { sql, SQL } from "drizzle-orm"
+import { type SQL, sql } from "drizzle-orm"
 import {
 	boolean,
 	customType,
@@ -10,7 +10,6 @@ import {
 	text,
 	timestamp,
 	uuid,
-	vector,
 } from "drizzle-orm/pg-core"
 
 // tsvector isn't a first-class drizzle type; wrap the raw Postgres type.
@@ -125,6 +124,89 @@ export const documentRevisions = pgTable(
 
 export type DocumentRevisionRow = typeof documentRevisions.$inferSelect
 export type NewDocumentRevisionRow = typeof documentRevisions.$inferInsert
+
+/**
+ * The audit trail: who changed what, when, and through which credential.
+ *
+ * ## WHY THIS IS A TABLE AND NOT A LOG LINE
+ *
+ * Every write in this system is reversible, which is exactly what makes an
+ * append-only record of the writes worth keeping. The revisions table answers
+ * "what did this document look like before"; it cannot answer "who deleted it",
+ * and after a deletion there is nothing left to inspect. An audit row is written
+ * in the SAME transaction as the change it describes, so an entry cannot exist
+ * for a write that was rolled back — a log line can, and would lie.
+ *
+ * `actorId` is nullable on purpose. A migration run by the indexer and a write
+ * by the MCP server both mutate documents, and neither has a better-auth user
+ * id. Recording NULL ("system") is honest; recording a placeholder user id
+ * would be a lie that later reads as a real actor.
+ *
+ * `via` records WHICH credential performed the write, which is the one fact
+ * that distinguishes a human editing in a browser from a machine re-indexing.
+ * Both are legitimate; only the audit row says which happened.
+ */
+export const documentActivity = pgTable(
+	"document_activity",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		/**
+		 * The better-auth user, or NULL for a system-initiated write.
+		 *
+		 * Deliberately NOT a foreign key with `onDelete: cascade` — that would
+		 * erase the audit history the moment the account was removed, which is
+		 * precisely the case an audit log exists to survive.
+		 */
+		actorId: text("actor_id"),
+		/** "admin" | "user" at the time of the write, or NULL for system writes. */
+		actorRole: text("actor_role"),
+		/** "webhook-secret" | "session" | "system". */
+		via: text("via").notNull().default("system"),
+		/** create | update | delete | restore | index | export */
+		action: text("action").notNull(),
+		/** The document slug acted on. Plain text, not an FK: a delete must keep
+		 * its trail even though the row it referenced is gone. */
+		resource: text("resource").notNull().default("document"),
+		/**
+		 * The identifier of the thing acted on — the document slug.
+		 *
+		 * NOT NULL, and not a foreign key. Both are load-bearing: a nullable
+		 * resource id would make "everything that happened to this document" need
+		 * a NULL-guard on every read, and a foreign key would delete the audit
+		 * row when the document was deleted — erasing the only remaining record
+		 * of the thing that happened to it.
+		 */
+		resourceId: text("resource_id").notNull(),
+		/**
+		 * Free-form detail — what changed, why, which job id, which commit.
+		 *
+		 * JSONB rather than columns because the shape differs per action, and a
+		 * union of five payload types in a table schema buys nothing over one
+		 * JSONB column that the domain types at the port.
+		 */
+		metadata: jsonb("metadata")
+			.$type<Record<string, unknown>>()
+			.notNull()
+			.default({}),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+	},
+	(t) => ({
+		// Supports "what happened to this document" — the query an audit is read
+		// for. Leading with slug would help a by-document view but not the
+		// recent-activity feed, which is what this table is actually read for.
+		createdIdx: index("document_activity_created_at_idx").on(t.createdAt),
+		resourceIdx: index("document_activity_resource_idx").on(
+			t.resource,
+			t.resourceId,
+		),
+		actorIdx: index("document_activity_actor_id_idx").on(t.actorId),
+	}),
+)
+
+export type DocumentActivityRow = typeof documentActivity.$inferSelect
+export type NewDocumentActivityRow = typeof documentActivity.$inferInsert
 
 export type DocumentRow = typeof documents.$inferSelect
 export type NewDocumentRow = typeof documents.$inferInsert

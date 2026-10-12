@@ -22,14 +22,17 @@
  * documented here because "errors are caught and logged" reads like a bug in
  * review unless the reason is written down next to it.
  */
-import {
-	type DocumentMeta,
-	type DocumentRepository,
-	type IndexFileResult,
-	type IndexingPort,
-	type IndexResult,
-	type RevisionRepository,
+import type {
+	ActivityRepository,
+	AuditActor,
+	DocumentMeta,
+	DocumentRepository,
+	IndexFileResult,
+	IndexingPort,
+	IndexResult,
+	RevisionRepository,
 } from "../domain"
+import { makeAuditor, metadataFor, SYSTEM_ACTOR } from "./audit"
 import { makeSnapshotRevision } from "./revision.use-cases"
 
 /**
@@ -64,6 +67,19 @@ export interface IndexingDeps {
 	revisions: RevisionRepository
 	index: IndexingPort
 	parser: ContentParser
+	/**
+	 * The audit trail.
+	 *
+	 * Indexing writes are the most frequent writes in the system — a full-corpus
+	 * run touches every document — so whether they are recorded is a deliberate
+	 * choice rather than an obvious one. They ARE recorded, because an
+	 * unexplained change to a document is exactly the thing the trail exists to
+	 * explain, and "the indexer rewrote it" is an answer that needs a row behind
+	 * it to be worth anything.
+	 */
+	activity?: ActivityRepository | null
+	/** Who initiated the index run. Defaults to SYSTEM_ACTOR. */
+	actor?: AuditActor
 	/** Injected so tests get stable timestamps and deterministic output. */
 	now?: () => Date
 	/** Injected so tests can capture log output instead of printing it. */
@@ -78,6 +94,7 @@ export interface IndexingDeps {
  * worker, and the git-sync hook — no business logic is duplicated between them.
  */
 export function makeIndexContentFile(deps: IndexingDeps) {
+	const audit = makeAuditor(deps.activity ?? null)
 	const { documents, revisions, index, parser } = deps
 	const snapshotRevision = makeSnapshotRevision({ revisions })
 	const log = deps.log ?? ((m: string) => console.log(m))
@@ -91,6 +108,18 @@ export function makeIndexContentFile(deps: IndexingDeps) {
 		const nowIso = resolveTimestamp(meta.updatedAt, deps.now)
 
 		await documents.upsertFromFile({ meta, body, updatedAt: nowIso })
+
+		await audit({
+			action: "index",
+			resource: "document",
+			resourceId: meta.slug,
+			actor: deps.actor ?? SYSTEM_ACTOR,
+			// `reason` is the CLI/worker/git-sync label ("index", "git-push") and
+			// `relPath` is the file this came from. Together they are the
+			// difference between "the corpus changed" and "somebody edited a
+			// document", which are otherwise indistinguishable in the trail.
+			metadata: metadataFor("index", {}, { reason, relPath }),
+		})
 
 		// Semantic chunks (embedding). A failure here must not abort the whole
 		// index — log and continue; FTS still works without embeddings.
