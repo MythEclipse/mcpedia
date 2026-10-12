@@ -74,7 +74,13 @@ jobs:
         env:
           MOON_VERSION: "2.6.1"
         run: |
-          curl --proto '=https' --tlsv1.2 -LsSf https://moonrepo.dev/install/moon.sh | sh -s -- "$MOON_VERSION"
+          # Pipe to BASH, not sh. moonrepo's installer is a bash script — its
+          # line 7 is `set -eo pipefail`, which dash rejects outright with
+          # "set: Illegal option -o pipefail" and exits 2. The runner's /bin/sh
+          # is dash, so `... | sh` fails before moon is ever downloaded. A
+          # pipe cannot carry the shebang, so the interpreter has to be named
+          # on the left of the pipe.
+          curl --proto '=https' --tlsv1.2 -LsSf https://moonrepo.dev/install/moon.sh | bash -s -- "$MOON_VERSION"
           # The installer writes to ~/.moon/bin, which is not on PATH by
           # default in a clean runner.
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
