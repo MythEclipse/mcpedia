@@ -10,6 +10,8 @@ import {
 	listDocuments,
 	listRevisions,
 	listSections,
+	recallDocumentFacts,
+	reflect,
 	restoreRevision,
 	semanticSearch,
 	updateDocument,
@@ -67,7 +69,7 @@ export function createMcpServer(authSecret?: string): McpServer {
 		"search_documents",
 		{
 			description:
-				"Full-text search across the MCPedia knowledge base (Postgres FTS). Returns ranked documents with a headline snippet.",
+				"Keyword-weighted search across the MCPedia knowledge base. Returns ranked documents with a headline snippet. Ranking is hindsight's fused score, not a Postgres ts_rank.",
 			inputSchema: z.object({
 				query: z.string().describe("Free-text search query"),
 				limit: z.number().int().positive().max(50).optional(),
@@ -179,7 +181,7 @@ export function createMcpServer(authSecret?: string): McpServer {
 		"hybrid_search",
 		{
 			description:
-				"Hybrid search fusing full-text (Postgres FTS) and semantic (embedding) signals via Reciprocal Rank Fusion. Best general-purpose search.",
+				"Hybrid search over the hindsight bank. Returns matching DOCUMENTS ranked by a fused keyword+semantic score. Best general-purpose search; use reflect only when you need synthesis across documents.",
 			inputSchema: z.object({
 				query: z.string().describe("Free-text or natural-language query"),
 				limit: z.number().int().positive().max(50).optional(),
@@ -189,6 +191,55 @@ export function createMcpServer(authSecret?: string): McpServer {
 			const hits = await hybridSearch(query, limit ?? 10)
 			return {
 				content: [{ type: "text", text: JSON.stringify(hits, null, 2) }],
+			}
+		},
+	)
+
+	server.registerTool(
+		"reflect",
+		{
+			description:
+				'SYNTHESIZE across the whole corpus. Runs hindsight\'s reasoning LLM over retrieved facts and observations to answer a question no single fact answers — e.g. "which technique needs no heap leak". Expensive (~16k input tokens per call, measured), so prefer hybrid_search for plain lookup and reach for this only when the answer must weigh several documents against each other.',
+			inputSchema: z.object({
+				query: z
+					.string()
+					.describe("A question that requires weighing multiple documents"),
+				budget: z
+					.enum(["low", "mid", "high"])
+					.optional()
+					.describe(
+						"LLM effort. Defaults to low. Measured on a 3-document bank: low and mid differ by ~30 output tokens, because the corpus retrieval dominates — a bigger budget rarely buys more.",
+					),
+				maxTokens: z
+					.number()
+					.int()
+					.positive()
+					.optional()
+					.describe("Cap on response tokens (server default 4096)"),
+			}),
+		},
+		async ({ query, budget, maxTokens }) => {
+			const answer = await reflect(query, {
+				...(budget ? { budget } : {}),
+				...(maxTokens ? { maxTokens } : {}),
+			})
+			return {
+				content: [
+					{
+						type: "text",
+						text: JSON.stringify(
+							{
+								text: answer.text,
+								usage: {
+									inputTokens: answer.inputTokens,
+									outputTokens: answer.outputTokens,
+								},
+							},
+							null,
+							2,
+						),
+					},
+				],
 			}
 		},
 	)
@@ -463,32 +514,39 @@ export function createMcpServer(authSecret?: string): McpServer {
 	)
 
 	server.registerResource(
-		"mcpedia-doc-chunks",
-		new ResourceTemplate("mcpedia://docs/{+slug}/chunks", { list: undefined }),
+		"mcpedia-doc-facts",
+		new ResourceTemplate("mcpedia://docs/{+slug}/facts", { list: undefined }),
 		{
-			title: "MCPedia document chunks",
-			description: "Preview of the embedded semantic chunks for a document.",
+			title: "MCPedia document facts",
+			description:
+				"The facts hindsight extracted from a document — the units semantic search actually matches against.",
 			mimeType: "application/json",
 		},
 		async (uri, vars) => {
 			const slug = String(vars.slug)
 			const doc = await getDocument(slug)
 			if (!doc) throw new Error(`Document not found: ${slug}`)
-			// Chunk the body the same way the indexer does (size 1000 / overlap 150)
-			// so the resource mirrors what semantic search actually sees.
-			const { chunkText } = await import("@mcpedia/embeddings")
-			const chunks = chunkText(doc.body, { size: 1000, overlap: 150 })
+			// This used to be a local `chunkText` preview, described as "the chunks
+			// semantic search actually sees". That promise is now false: hindsight
+			// does its own chunking and stores FACTS, so a locally-computed chunk
+			// would mirror nothing. The resource now reports the real units, which
+			// is the only version of this that an agent can trust.
+			const facts = await recallDocumentFacts(slug)
 			return {
 				contents: [
 					{
 						uri: uri.href,
 						mimeType: "application/json",
 						text: JSON.stringify(
-							chunks.map((c, i) => ({
-								index: i,
-								length: c.length,
-								preview: c.slice(0, 200),
-							})),
+							{
+								slug,
+								title: doc.title,
+								// The body is chunked and embedded by hindsight; its internal
+								// segmentation is deliberately not reproduced here, because
+								// any local guess would differ from what search used.
+								bodyLength: doc.body?.length ?? 0,
+								facts,
+							},
 							null,
 							2,
 						),

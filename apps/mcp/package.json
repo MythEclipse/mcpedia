@@ -18,7 +18,6 @@
 		"@mcpedia/config": "workspace:*",
 		"@mcpedia/core": "workspace:*",
 		"@mcpedia/queue": "workspace:*",
-		"@mcpedia/search": "workspace:*",
 		"@modelcontextprotocol/sdk": "^1.29.0",
 		"zod": "^4.0.0"
 	},
