@@ -81,10 +81,14 @@ jobs:
           # pipe cannot carry the shebang, so the interpreter has to be named
           # on the left of the pipe.
           curl --proto '=https' --tlsv1.2 -LsSf https://moonrepo.dev/install/moon.sh | bash -s -- "$MOON_VERSION"
-          # The installer writes to ~/.moon/bin, which is not on PATH by
-          # default in a clean runner.
+          # Export PATH for the REST OF THIS STEP as well as for later ones.
+          # Appending to GITHUB_PATH only takes effect in subsequent steps —
+          # each `run:` block is a fresh shell — so the bare `moon` call below
+          # needs the export, and the bare `moon run :check` two steps later
+          # needs the GITHUB_PATH half.
+          export PATH="$HOME/.moon/bin:$PATH"
+          "$HOME/.moon/bin/moon" --version
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
-          moon --version
 
       # The `check` task sets `options.cache: false` — it cannot be cached,
       # because its inputs are workspace-wide and moon resolves an input glob
