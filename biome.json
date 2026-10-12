@@ -36,9 +36,24 @@
 		}
 	},
 	"linter": {
-		"enabled": false,
+		"enabled": true,
 		"rules": {
-			"preset": "recommended"
+			"preset": "recommended",
+			"correctness": {
+				"noUnusedImports": "warn",
+				"noUnusedFunctionParameters": "warn",
+				"noUnusedVariables": "warn",
+				"useExhaustiveDependencies": "off"
+			},
+			"suspicious": {
+				"noExplicitAny": "error",
+				"noArrayIndexKey": "off"
+			},
+			"style": {
+				"noNonNullAssertion": "off",
+				"useTemplate": "warn",
+				"useImportType": "warn"
+			}
 		}
 	},
 	"assist": {

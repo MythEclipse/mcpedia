@@ -1,26 +1,27 @@
 {
-  "name": "@mcpedia/db",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts",
-    "./schema": "./src/schema.ts"
-  },
-  "dependencies": {
-    "@mcpedia/config": "workspace:*",
-    "drizzle-orm": "^0.45.4",
-    "postgres": "^3.4.5"
-  },
-  "devDependencies": {
-    "@types/node": "^26",
-    "drizzle-kit": "^0.31.10"
-  },
-  "scripts": {
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/migrate.ts",
-    "db:migrate:adopt": "tsx src/migrate-adopt.ts",
-    "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
-  }
+	"name": "@mcpedia/db",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./schema": "./src/schema.ts",
+		"./migrate": "./src/migrate.ts"
+	},
+	"dependencies": {
+		"@mcpedia/config": "workspace:*",
+		"drizzle-orm": "^0.45.4",
+		"postgres": "^3.4.5"
+	},
+	"devDependencies": {
+		"@types/node": "^26",
+		"drizzle-kit": "^0.31.10"
+	},
+	"scripts": {
+		"db:generate": "drizzle-kit generate",
+		"db:migrate": "tsx src/migrate.ts",
+		"db:migrate:adopt": "tsx src/migrate-adopt.ts",
+		"db:push": "drizzle-kit push",
+		"db:studio": "drizzle-kit studio"
+	}
 }

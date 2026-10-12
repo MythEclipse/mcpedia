@@ -1,20 +1,20 @@
 {
-  "name": "@mcpedia/worker",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "start": "tsx src/index.ts",
-    "lint": "tsc --noEmit",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@mcpedia/config": "workspace:*",
-    "@mcpedia/core": "workspace:*",
-    "@mcpedia/db": "workspace:*",
-    "@mcpedia/queue": "workspace:*"
-  },
-  "devDependencies": {
-    "typescript": "^5.6.0"
-  }
+	"name": "@mcpedia/worker",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"start": "tsx src/index.ts",
+		"lint": "biome lint .",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@mcpedia/config": "workspace:*",
+		"@mcpedia/core": "workspace:*",
+		"@mcpedia/db": "workspace:*",
+		"@mcpedia/queue": "workspace:*"
+	},
+	"devDependencies": {
+		"typescript": "^5.6.0"
+	}
 }

@@ -1,14 +1,15 @@
 {
-  "name": "@mcpedia/config",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts",
-    "./sections": "./src/sections.ts"
-  },
-  "dependencies": {
-    "@mcpedia/types": "workspace:*",
-    "zod": "^4.6.5"
-  }
+	"name": "@mcpedia/config",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./sections": "./src/sections.ts",
+		"./startup": "./src/startup.ts"
+	},
+	"dependencies": {
+		"@mcpedia/types": "workspace:*",
+		"zod": "^4.6.5"
+	}
 }

@@ -20,7 +20,8 @@
     "@mcpedia/search": "workspace:*",
     "@mcpedia/types": "workspace:*",
     "docx": "^9.9.0",
-    "drizzle-orm": "^0.45.4"
+    "drizzle-orm": "^0.45.4",
+    "ts-pattern": "^5.9.0"
   },
   "scripts": {
     "test": "vitest run"

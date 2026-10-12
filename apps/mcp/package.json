@@ -1,29 +1,29 @@
 {
-  "name": "@mcpedia/mcp",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "bin": {
-    "mcpedia-mcp": "./src/index.ts"
-  },
-  "scripts": {
-    "start": "tsx src/index.ts",
-    "serve:http": "tsx src/http.ts",
-    "lint": "tsc --noEmit",
-    "typecheck": "tsc --noEmit",
-    "smoke": "tsx src/smoke.ts",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "@mcpedia/config": "workspace:*",
-    "@mcpedia/core": "workspace:*",
-    "@mcpedia/queue": "workspace:*",
-    "@mcpedia/search": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^4.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "^26",
-    "typescript": "^5.6.0"
-  }
+	"name": "@mcpedia/mcp",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"bin": {
+		"mcpedia-mcp": "./src/index.ts"
+	},
+	"scripts": {
+		"start": "tsx src/index.ts",
+		"serve:http": "tsx src/http.ts",
+		"lint": "biome lint .",
+		"typecheck": "tsc --noEmit",
+		"smoke": "tsx src/smoke.ts",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@mcpedia/config": "workspace:*",
+		"@mcpedia/core": "workspace:*",
+		"@mcpedia/queue": "workspace:*",
+		"@mcpedia/search": "workspace:*",
+		"@modelcontextprotocol/sdk": "^1.29.0",
+		"zod": "^4.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^26",
+		"typescript": "^5.6.0"
+	}
 }
