@@ -55,8 +55,8 @@ export interface MigrationGuardResult {
 	 * true (either nothing pending, or the pending batch is additive).
 	 */
 	pending: JournalEntry[]
-	/** Journal tags the guard refused, when ok is false. */
-	refused?: string[]
+	/** Journal entries the guard refused, when ok is false. */
+	refused?: JournalEntry[]
 }
 
 /** One entry from drizzle's `meta/_journal.json`. */
@@ -164,7 +164,7 @@ function findCollision(
 
 	for (const statement of statements) {
 		for (const match of statement.matchAll(CREATE_TABLE)) {
-			const name = relationName(match[1])
+			const name = relationName(match[1] ?? "")
 			if (existing.has(name) && !created.has(name)) {
 				return {
 					reason: `it creates table "${name}", which already exists`,
@@ -175,7 +175,7 @@ function findCollision(
 		}
 
 		for (const match of statement.matchAll(MUTATE_TABLE)) {
-			const name = relationName(match[1])
+			const name = relationName(match[1] ?? "")
 			if (existing.has(name) && !created.has(name)) {
 				return {
 					reason: `it ${/^\s*alter/i.test(match[0]) ? "alters" : "drops"} table "${name}", which predates the batch`,
@@ -185,7 +185,7 @@ function findCollision(
 		}
 
 		for (const match of statement.matchAll(TRUNCATE)) {
-			const name = relationName(match[1])
+			const name = relationName(match[1] ?? "")
 			return {
 				reason: `it truncates table "${name}", which is destructive to replay`,
 				table: name,
@@ -326,6 +326,19 @@ async function listExistingTables(db: QueryableDb): Promise<Set<string>> {
 	}
 }
 
-// Re-exported so callers can build a properly typed handle without importing
-// drizzle's PostgresJsDatabase generics directly.
-export type { PostgresJsDatabase }
+/**
+ * The database handle shape this guard needs.
+ *
+ * `PostgresJsDatabase` re-exported WITHOUT generics defaults its schema
+ * parameter to `Record<string, never>`, and a concrete
+ * `PostgresJsDatabase<typeof schema>` is NOT assignable to that — the error
+ * reads as a schema mismatch and has nothing to do with the guard.
+ *
+ * Widening the parameter to a bare `Record<string, unknown>` is what actually
+ * works, and it is legal because the installed drizzle constrains
+ * `TSchema extends Record<string, unknown>` (verified in
+ * drizzle-orm/postgres-js/driver.d.ts, not recalled). `unknown` is rejected by
+ * that constraint; the Record form satisfies it while accepting every concrete
+ * schema.
+ */
+export type AnyDatabase = PostgresJsDatabase<Record<string, unknown>>

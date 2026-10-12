@@ -5,10 +5,9 @@ import { runFullIndex } from "@mcpedia/core"
 // each content file, upserts `documents`, chunks+embeds, and snapshots a
 // revision when the body changed.
 async function main() {
-	const reason =
-		process.argv[2] && process.argv[2].startsWith("--reason=")
-			? process.argv[2].slice("--reason=".length)
-			: "index"
+	const reason = process.argv[2]?.startsWith("--reason=")
+		? process.argv[2].slice("--reason=".length)
+		: "index"
 	await runFullIndex(reason)
 }
 

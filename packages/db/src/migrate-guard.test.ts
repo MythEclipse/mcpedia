@@ -26,7 +26,17 @@ import {
 const JOURNAL = readMigrationJournal()
 const TAGS = JOURNAL.map((e) => e.tag)
 const BASELINE = TAGS[0]
-const ADDITIVE = TAGS[1]
+
+/**
+ * Every migration newer than the baseline.
+ *
+ * Derived rather than pinned to a single index. `TAGS[1]` was correct when the
+ * journal had exactly two entries and silently became wrong the moment a third
+ * was added — the test then asserted that the audit-table migration was the only
+ * pending entry, which is a statement about the journal's length, not about the
+ * guard's behaviour.
+ */
+const ADDITIVE = TAGS.slice(1)
 
 /**
  * A stand-in db that answers by query text: `to_regclass` for the table check,
@@ -74,18 +84,34 @@ function fakeDb(opts: {
 }
 
 describe("the journal on disk", () => {
-	test("is the squashed baseline plus one additive migration", () => {
-		// Load-bearing: every "additive" case below reads 0001's real SQL. If the
-		// chain is regenerated with a destructive migration in it, the additive
-		// assertions must start failing rather than quietly passing.
+	test("is a baseline followed by at least one additive migration", () => {
 		expect(BASELINE).toBe("0000_military_wolfpack")
-		expect(ADDITIVE).toBeTruthy()
-		expect(JOURNAL[1]?.when).toBeGreaterThan(JOURNAL[0]?.when ?? 0)
+		expect(ADDITIVE.length).toBeGreaterThan(0)
+		// Monotonic timestamps: the guard compares `when` to decide what is
+		// pending, so an out-of-order entry would make "newer" meaningless.
+		for (let i = 1; i < JOURNAL.length; i++) {
+			expect(JOURNAL[i]?.when).toBeGreaterThan(JOURNAL[i - 1]?.when ?? 0)
+		}
 	})
 
-	test("0001 creates only new tables and never alters the document tables", () => {
+	/**
+	 * EVERY migration after the baseline must be purely additive.
+	 *
+	 * Written as a loop over the real journal rather than a single pinned tag
+	 * because the safety property is about the CHAIN, not about 0001. Pinned to
+	 * one file, this test would have passed unchanged while the migration that
+	 * adds `document_activity` went completely unchecked — which is exactly what
+	 * happened.
+	 *
+	 * The properties: no ALTER or DROP of the document tables (their shape is
+	 * what an adopted database already has, and the guard's whole purpose is to
+	 * let such a database through), no DROP/TRUNCATE at all, and no change to
+	 * the generated search column (rewriting it would require a reindex, which is
+	 * a data migration, not a schema migration).
+	 */
+	test.each(ADDITIVE)("%s is purely additive", (tag) => {
 		const sql = readFileSync(
-			new URL(`../drizzle/${ADDITIVE}.sql`, import.meta.url).pathname,
+			new URL(`../drizzle/${tag}.sql`, import.meta.url).pathname,
 			"utf8",
 		)
 		expect(sql).not.toMatch(
@@ -143,8 +169,9 @@ describe("assertMigrationTargetIsClean", () => {
 			}),
 		)
 		expect(guard.ok).toBe(true)
-		// Only the additive entry is pending; the baseline is already recorded.
-		expect(guard.pending.map((e) => e.tag)).toEqual([ADDITIVE])
+		// Everything newer than the baseline is pending; the baseline itself is
+		// already recorded, so it must NOT appear.
+		expect(guard.pending.map((e) => e.tag)).toEqual(ADDITIVE)
 	})
 
 	test("allows a database that is already fully up to date", async () => {
