@@ -60,8 +60,8 @@ const raw = (key: string): string => dotEnv[key] ?? process.env[key] ?? ""
  * The env schema.
  *
  * Everything is optional and every unset value resolves to "". This is
- * deliberate and load-bearing: `next build` imports this module during static
- * generation with no .env present, and throwing at import time breaks the
+ * deliberate and load-bearing: `vite build` imports this module during
+ * bundling with no .env present, and throwing at import time breaks the
  * build. Values that MUST be present (a database, a signing key) are checked by
  * the code that actually uses them, at request time, where the error can name
  * what is missing — see requireEnv below and apps/web's auth setup.
@@ -79,14 +79,23 @@ const EnvSchema = z.object({
 			"DATABASE_URL must be a postgres:// or postgresql:// URL",
 		)
 		.optional(),
-	EMBED_BASE_URL: z
+	/**
+	 * hindsight's HTTP endpoint. Replaces the EMBED_* trio, which described a
+	 * local embedding provider that hindsight made unnecessary — hindsight
+	 * chunks and embeds on its own side.
+	 *
+	 * Optional and empty-resolving like everything else here, because this
+	 * module is imported by the Vite build with no .env present. The adapter
+	 * supplies the local default; a malformed URL is still rejected here.
+	 */
+	HINDSIGHT_API_URL: z
 		.string()
 		.refine((v) => v === "" || /^https?:\/\//.test(v), {
-			message: "EMBED_BASE_URL must be an http(s):// URL",
+			message: "HINDSIGHT_API_URL must be an http(s):// URL",
 		})
 		.optional(),
-	EMBED_API_KEY: z.string().optional(),
-	EMBED_MODEL: z.string().optional(),
+	/** Defaults to "mcpedia"; see the adapter's bankId(). */
+	HINDSIGHT_BANK_ID: z.string().optional(),
 	REDIS_URL: z
 		.string()
 		.refine((v) => v === "" || /^rediss?:\/\//.test(v), {
@@ -120,9 +129,8 @@ const EnvSchema = z.object({
 const parsed = EnvSchema.safeParse({
 	CONTENT_ROOT: raw("CONTENT_ROOT"),
 	DATABASE_URL: raw("DATABASE_URL"),
-	EMBED_BASE_URL: raw("EMBED_BASE_URL"),
-	EMBED_API_KEY: raw("EMBED_API_KEY"),
-	EMBED_MODEL: raw("EMBED_MODEL"),
+	HINDSIGHT_API_URL: raw("HINDSIGHT_API_URL"),
+	HINDSIGHT_BANK_ID: raw("HINDSIGHT_BANK_ID"),
 	REDIS_URL: raw("REDIS_URL"),
 	REDIS_PASSWORD: raw("REDIS_PASSWORD"),
 	QUEUE_PREFIX: raw("QUEUE_PREFIX"),
@@ -148,9 +156,8 @@ const or = (value: string | undefined, fallback = "") => value || fallback
 export const CONTENT_ROOT = or(env.CONTENT_ROOT, resolve(REPO_ROOT, "content"))
 
 export const DATABASE_URL = or(env.DATABASE_URL)
-export const EMBED_BASE_URL = or(env.EMBED_BASE_URL)
-export const EMBED_API_KEY = or(env.EMBED_API_KEY)
-export const EMBED_MODEL = or(env.EMBED_MODEL)
+export const HINDSIGHT_API_URL = or(env.HINDSIGHT_API_URL)
+export const HINDSIGHT_BANK_ID = or(env.HINDSIGHT_BANK_ID)
 
 // Redis + BullMQ (shared Redis instance).
 export const REDIS_URL = or(env.REDIS_URL, "redis://100.121.180.82:6379")

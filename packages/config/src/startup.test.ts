@@ -4,6 +4,7 @@ import {
 	assertWebhookSecret,
 	collectStartupEnv,
 	formatEnvReport,
+	MISSING,
 } from "./startup.ts"
 
 /**
@@ -25,6 +26,11 @@ const GOOD = {
 	BETTER_AUTH_URL: "https://mcpedia.example.com",
 	WEBHOOK_SECRET: "hook-secret",
 	REDIS_URL: "redis://localhost:6379",
+	// The adapter defaults both to a local hindsight, so they are not required
+	// — but they must not be BLANK either, which is why a "complete"
+	// environment sets them rather than leaving them out.
+	HINDSIGHT_API_URL: "http://127.0.0.1:8890",
+	HINDSIGHT_BANK_ID: "mcpedia",
 } as const
 
 describe("collectStartupEnv", () => {
@@ -35,7 +41,16 @@ describe("collectStartupEnv", () => {
 	})
 
 	it("lists EVERY missing required key in one pass", () => {
-		const report = collectStartupEnv({})
+		// MISSING, not `{}`: an empty override object means "fall through to the
+		// real environment", so on a machine that exports DATABASE_URL this test
+		// would silently accept the ambient value and never exercise the
+		// required-ness at all. This is a real trap — it failed here the moment a
+		// DATABASE_URL existed in the shell.
+		const report = collectStartupEnv({
+			DATABASE_URL: MISSING,
+			BETTER_AUTH_SECRET: MISSING,
+			BETTER_AUTH_URL: MISSING,
+		})
 		const keys = report.fatal.map((p) => p.key).sort()
 		expect(keys).toContain("DATABASE_URL")
 		expect(keys).toContain("BETTER_AUTH_SECRET")
@@ -72,14 +87,37 @@ describe("collectStartupEnv", () => {
 		expect(report.warnings.some((p) => p.key === "WEBHOOK_SECRET")).toBe(true)
 	})
 
-	it("does not report a problem for optional embedding settings", () => {
-		const report = collectStartupEnv({
+	// The adapter supplies a local default for both, so an UNSET value is a
+	// deliberate choice. A blank STRING is not: the resolved config turns a
+	// missing key into "", so a blank HINDSIGHT_API_URL must be reported rather
+	// than silently becoming an empty base URL.
+	it("treats hindsight settings as optional but not blank-able", () => {
+		// Unset entirely: accepted, because the adapter defaults both.
+		expect(collectStartupEnv({ ...GOOD }).problems).toEqual([])
+
+		// Blank: reported. This is the WEBHOOK_SECRET `.min(1)` reasoning applied
+		// to the new names — absent and empty are different states and only one
+		// of them means "use the default".
+		//
+		// Asserted as a SET, not a list: `""` violates both `.min(1)` and
+		// `.url()`, so Zod emits two issues for one key. The count is Zod's
+		// business; what matters is that each key is flagged.
+		const blank = collectStartupEnv({
 			...GOOD,
-			EMBED_BASE_URL: "",
-			EMBED_API_KEY: "",
-			EMBED_MODEL: "",
-		})
-		expect(report.problems).toEqual([])
+			HINDSIGHT_API_URL: "",
+			HINDSIGHT_BANK_ID: "",
+		}).problems
+		expect([...new Set(blank.map((p) => p.key))].sort()).toEqual([
+			"HINDSIGHT_API_URL",
+			"HINDSIGHT_BANK_ID",
+		])
+
+		// A malformed URL is caught with a message that names the key.
+		const malformed = collectStartupEnv({
+			...GOOD,
+			HINDSIGHT_API_URL: "not a url",
+		}).problems
+		expect(malformed.map((p) => p.key)).toContain("HINDSIGHT_API_URL")
 	})
 })
 
@@ -91,7 +129,11 @@ describe("assertStartupEnv", () => {
 	it("throws naming every problem, not just the first", () => {
 		let message = ""
 		try {
-			assertStartupEnv({})
+			assertStartupEnv({
+				DATABASE_URL: MISSING,
+				BETTER_AUTH_SECRET: MISSING,
+				BETTER_AUTH_URL: MISSING,
+			})
 			throw new Error("expected a throw")
 		} catch (error) {
 			message = error instanceof Error ? error.message : String(error)

@@ -33,9 +33,8 @@ import {
 	BETTER_AUTH_SECRET,
 	BETTER_AUTH_URL,
 	DATABASE_URL,
-	EMBED_API_KEY,
-	EMBED_BASE_URL,
-	EMBED_MODEL,
+	HINDSIGHT_API_URL,
+	HINDSIGHT_BANK_ID,
 	REDIS_PASSWORD,
 	REDIS_URL,
 	WEBHOOK_SECRET,
@@ -92,9 +91,20 @@ const StartupSchema = z.object({
 			message: "must be a redis:// or rediss:// URL",
 		}),
 	REDIS_PASSWORD: z.string().optional(),
-	EMBED_BASE_URL: z.string().optional(),
-	EMBED_API_KEY: z.string().optional(),
-	EMBED_MODEL: z.string().optional(),
+	// hindsight replaced the local embedding provider, so EMBED_BASE_URL,
+	// EMBED_API_KEY and EMBED_MODEL are GONE. They are not migrated into
+	// something like HINDSIGHT_API_KEY on purpose: hindsight is reached over a
+	// plain HTTP endpoint that this deployment does not put behind an API key,
+	// and inventing a required secret would fail every deploy for a value
+	// nobody set.
+	HINDSIGHT_API_URL: z
+		.string()
+		.min(1)
+		.url("must be a valid URL, e.g. http://127.0.0.1:8890")
+		.optional(),
+	// Defaults to "mcpedia" in the adapter, so it only needs to be settable —
+	// an unset value is a deliberate choice, not a misconfiguration.
+	HINDSIGHT_BANK_ID: z.string().min(1).optional(),
 })
 
 /**
@@ -128,23 +138,43 @@ const OPTIONAL_BY_DESIGN = new Set(["WEBHOOK_SECRET"])
  * the decision at the call site is what lets the Vitest suite exercise this
  * function without a live Postgres.
  */
+/**
+ * Sentinel for "treat this key as unset".
+ *
+ * Exported so a test — or a caller assembling an environment by hand — can
+ * assert what happens when a REQUIRED key is absent, on a machine that
+ * happens to export it. Passing `MISSING` is honest about intent; blanking a
+ * real environment variable is a side effect on every other reader of it.
+ */
+export const MISSING = Symbol("env.missing")
+
 export function collectStartupEnv(
-	overrides: Partial<Record<string, string>> = {},
+	overrides: Partial<Record<string, string | typeof MISSING>> = {},
 ): StartupEnvReport {
 	// Precedence matches ./index.ts exactly: an explicit override (the test
 	// case, or a platform that injects a computed value) beats the resolved
 	// export. Anything not overridden falls through to the real environment.
-	const values: Record<string, string> = {
+	//
+	// MISSING lets a caller say "treat this key as UNSET" without mutating
+	// process.env. Without it, asserting "this key is required" is impossible
+	// to test on a machine that legitimately exports the key — the ambient
+	// value wins and the required-ness silently goes untested. This is how the
+	// "every missing required key" test found DATABASE_URL already set and
+	// concluded it was optional.
+	const resolved: Record<string, string> = {
 		DATABASE_URL,
 		BETTER_AUTH_SECRET,
 		BETTER_AUTH_URL,
 		WEBHOOK_SECRET,
 		REDIS_URL,
 		REDIS_PASSWORD,
-		EMBED_BASE_URL,
-		EMBED_API_KEY,
-		EMBED_MODEL,
-		...overrides,
+		HINDSIGHT_API_URL,
+		HINDSIGHT_BANK_ID,
+	}
+	const values: Record<string, string> = {}
+	for (const [key, resolvedValue] of Object.entries(resolved)) {
+		const override = overrides[key]
+		values[key] = override === MISSING ? "" : (override ?? resolvedValue)
 	}
 
 	const parsed = StartupSchema.safeParse(values)
