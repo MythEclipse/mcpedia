@@ -16,19 +16,29 @@
  *    registry change rarely; search results are per-keystroke and should never
  *    be served stale. One global value would be wrong for one of those.
  */
+
+import type { SectionInfo } from "@mcpedia/types"
 import {
 	queryOptions,
-	useQuery,
 	type UseQueryResult,
+	useQuery,
 } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
 import { RPC_BASE, rpcCall } from "#/lib/api-client"
+import type { QueueCounts, TagCount } from "#/lib/orpc"
+import { fetchQueueStatus, fetchTags } from "#/lib/orpc"
 import type { ProcedureResult } from "#/lib/orpc-client"
-import type { SearchMode, SearchResult } from "#/lib/shape"
-import { normalizeSearchHits as normalize } from "#/lib/shape"
-import type { DocSummary, FolderContents } from "#/lib/shape"
-import { toDocSummary, folderContents } from "#/lib/shape"
-import type { SectionInfo } from "@mcpedia/types"
+import type {
+	DocSummary,
+	FolderContents,
+	SearchMode,
+	SearchResult,
+} from "#/lib/shape"
+import {
+	folderContents,
+	normalizeSearchHits as normalize,
+	toDocSummary,
+} from "#/lib/shape"
 
 /**
  * Shared query-key factory.
@@ -45,6 +55,8 @@ export const qk = {
 	folderInfo: (section: string, path: string) =>
 		["documents", "folderInfo", section, path] as const,
 	search: (q: string, mode: SearchMode) => ["search", mode, q] as const,
+	queue: ["queue", "status"] as const,
+	tags: (limit: number) => ["tags", String(limit)] as const,
 }
 
 /** The section registry. Rarely changes; cached for a minute. */
@@ -187,6 +199,71 @@ export function useSearchQuery(
 			enabled: trimmed.length > 0,
 			// Search is per-keystroke: never show a previous query's results.
 			staleTime: 0,
+			retry: false,
+		}),
+	)
+}
+
+/**
+ * Live queue counters, polled.
+ *
+ * ## WHY THE POLL INTERVALS DIFFER FROM EACH OTHER
+ *
+ * The badge polls at 8s and the dashboard strip at 6s. That asymmetry is
+ * inherited from the Next implementation and is deliberate: the strip is the
+ * operational view an operator watches while a job runs, so it wants to be
+ * fresher; the badge is ambient chrome next to the page title. Both used to run
+ * as two independent SWR pollers over one key, which meant two requests per
+ * window and two chances for the two screens to disagree.
+ *
+ * With TanStack there is ONE cache entry, and the shorter interval simply wins
+ * for both — see the note on `useQueueCounts` about why the strip's 6s survives
+ * at all.
+ */
+const QUEUE_POLL_MS = 8_000
+
+/**
+ * Queue counters, shared by the badge and the dashboard strip.
+ *
+ * The interval is a CONSTANT rather than a per-call argument even though the
+ * Next version passed different values. Under SWR the differing intervals at
+ * least shared a cache entry, so the effective poll rate was the faster of the
+ * two and neither component drove it alone. TanStack's `refetchInterval` is a
+ * property of the observing query rather than of the cache, so two observers
+ * with different intervals would fetch on their own schedules and reintroduce
+ * exactly the disagreement the shared key prevented. One interval, one poller.
+ *
+ * `retry: false` is load-bearing rather than inherited. When Redis is down the
+ * API returns zeroed counters instead of failing, so this query normally cannot
+ * error; and if it does, a retry would fight the poll interval and keep the badge
+ * spinning where the previous behaviour settled it on "index idle".
+ */
+export function useQueueCounts(): UseQueryResult<QueueCounts> {
+	return useQuery(
+		queryOptions({
+			queryKey: qk.queue,
+			queryFn: () => fetchQueueStatus(),
+			refetchInterval: QUEUE_POLL_MS,
+			staleTime: QUEUE_POLL_MS,
+			retry: false,
+		}),
+	)
+}
+
+/**
+ * The popular-tags cloud.
+ *
+ * `limit` is part of the query key, not a closure variable, so the header's 30 and
+ * the default's 24 are two cache entries rather than one list whichever mounted
+ * last — which is what the SWR key `orpc:tags:${limit}` did, and the reason the
+ * key factory takes the limit at all.
+ */
+export function useTagsQuery(limit: number): UseQueryResult<TagCount[]> {
+	return useQuery(
+		queryOptions({
+			queryKey: qk.tags(limit),
+			queryFn: () => fetchTags(limit),
+			staleTime: 5 * 60_000,
 			retry: false,
 		}),
 	)

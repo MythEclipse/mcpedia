@@ -1,7 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "plugins": [{ "name": "next" }],
     // vite.config.ts imports ./src/build/no-server-imports.ts with an explicit
     // extension: Vite's upcoming default `configLoader: "native"` loads the
     // config through Node's own ESM resolver, which does NOT do extensionless
@@ -11,7 +10,6 @@
     // emits from tsc (Next and Vite each run their own compiler).
     "allowImportingTsExtensions": true,
     "paths": {
-      "@/*": ["./app/*"],
       "#/*": ["./src/*"],
       // NOTE: there is deliberately NO "@mcpedia/*" -> "../../packages/*" alias.
       //
@@ -28,11 +26,9 @@
     },
     "allowJs": true
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts"
-  ],
+  // No next-env.d.ts and no .next/types/** here: Next is gone from this package
+  // (apps/web is a Vite SPA). Both used to exist so tsc would pick up Next's
+  // generated route validator, which typechecked pages that no longer exist.
+  "include": ["**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules"]
 }

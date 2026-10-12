@@ -22,31 +22,31 @@
  * apps/web/app/lib/auth.ts (`isAuthorized`: valid header OR an admin session),
  * expressed over HTTP instead of over a Next request context.
  *
- * ## REQUIRED API CONTRACT — NOT YET IMPLEMENTED, AND NOT BY THIS CHANGE
+ * ## THE API CONTRACT — IMPLEMENTED, AND VERIFIED
  *
- * apps/api is outside this task's write scope, so the server half is specified
- * here and left as a blocker for whoever owns that package. Three additions,
- * none of which may change how the existing secret path behaves:
+ * This was written when apps/api was outside this task's write scope, and it
+ * listed three server-side additions as blockers. All three have since landed in
+ * apps/api, and the assertions below are the live ones:
  *
- *   a. Mount better-auth's handler at /api/auth/* on the API app, so the SPA
- *      has an auth endpoint to talk to. Today the only such handler is the Next
- *      route at apps/web/app/api/auth/[...all]/route.ts, which the SPA does not
- *      run. Needs better-auth + @better-auth/drizzle-adapter as apps/api deps.
+ *   a. better-auth's handler is MOUNTED at /api/auth/* on the API app
+ *      (apps/api/src/app.ts). The path matches this client's `basePath` and the
+ *      dev proxy in vite.config.ts.
  *
- *   b. Make auth.me ALSO resolve the session cookie. Its response shape is
- *      already the one the SPA consumes and must NOT change:
- *      { authenticated, role, via }. `via` gains a "session" value beside the
- *      existing "webhook-secret"; it stays null when unauthenticated.
+ *   b. auth.me ALSO resolves the session cookie. The response shape is unchanged:
+ *      { authenticated, role, via }. `via` gained "session" beside the existing
+ *      "webhook-secret", and stays null when unauthenticated. A signed-in
+ *      non-admin now reports { authenticated: true, role: "user" }, which is
+ *      deliberately NOT the same answer as "not signed in" — the SPA renders
+ *      read-only for the first and gates for the second.
  *
- *   c. Let requireWriteAuth accept a valid admin session in addition to the
- *      header. The secret comparison, the fail-closed behaviour on an
- *      unconfigured WEBHOOK_SECRET, and the MCP x-webhook-secret path must all
- *      stay exactly as they are.
+ *   c. The write gate accepts a valid admin session in addition to the header
+ *      (`requireWriteAuthOrSession`). The secret comparison, the fail-closed
+ *      behaviour on the MCP path, and the MCP x-webhook-secret flow are unchanged;
+ *      see apps/api/src/presentation/session-gate.test.ts for the proof that the
+ *      added path is additive rather than a loosening.
  *
- * Until (a) and (b) land, /login cannot reach an auth endpoint and auth.me
- * reports `authenticated: false` for every browser (it only inspects the secret
- * header today). /create's beforeLoad therefore redirects to /login, which is
- * the correct, safe behaviour for an unauthenticated caller — not a crash.
+ * Nothing here sends a secret, and nothing here needs to: the browser proves who
+ * it is with an httpOnly session cookie it never reads.
  *
  * ## WHY THE WRITE CALLS SEND NO SECRET HEADER
  *
@@ -77,24 +77,31 @@
 export const RPC_BASE = "/trpc"
 
 export {
-	rpcUrl,
-	rpcCall,
 	isOrpcErrorJson,
 	OrpcCallError,
 	OrpcTransportError,
+	rpcCall,
+	rpcUrl,
 } from "./orpc-client"
 
 import { rpcCall } from "./orpc-client"
 
-/** Mirrors apps/api/src/presentation/context.ts `AppRole`. */
-export type AppRole = "admin"
+/**
+ * Mirrors apps/api/src/presentation/context.ts `AppRole`.
+ *
+ * "user" is the value better-auth's bootstrap rule gives every account after the
+ * first — see apps/api/src/auth.ts. The SPA only needs to tell admin from not, so
+ * this is a union rather than a boolean: a signed-in non-admin is a real state
+ * that renders read-only, and widening the type later is not a breaking change.
+ */
+export type AppRole = "admin" | "user"
 
 /**
  * Mirrors the auth.me handler in apps/api/src/presentation/routers/auth.ts.
  *
- * `via` is a string, not a literal union, on purpose: it is diagnostic detail
- * and the server is free to add another value ("session") without breaking
- * every consumer's build. Only `role` gates UI.
+ * `via` stays a plain `string`: it is diagnostic detail, and the server is free to
+ * add another value without breaking every consumer's build. Only `role` gates UI
+ * — nothing branches on how the caller proved who they are.
  */
 export interface MeResponse {
 	authenticated: boolean
@@ -111,6 +118,7 @@ export interface MeResponse {
  * declarations are nominally distinct in this position). Import it once.
  */
 export type { SectionInfo } from "@mcpedia/types"
+
 import type { SectionInfo } from "@mcpedia/types"
 
 /** Mirrors the documents.folderInfo handler. */

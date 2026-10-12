@@ -1,20 +1,35 @@
 import { describe, expect, it } from "vitest"
-import { QUEUE_STATUS_KEY } from "./QueueBadge"
-import { tagCloudKey, tagOpacity } from "./TagCloud"
+import { qk } from "#/lib/queries"
+import { tagOpacity } from "./TagCloud"
 
-describe("SWR cache keys", () => {
+/**
+ * Cache-key identity, for both former SWR keys.
+ *
+ * These were string-key assertions under SWR (`"orpc:queue/status"`, and
+ * `orpc:tags:${limit}` interpolated). TanStack keys are structural arrays, so the
+ * property that mattered — two observers of one resource share one entry — is
+ * now expressed as deep equality on an array rather than as string equality. The
+ * reasoning is unchanged; only the representation moved.
+ */
+describe("query keys", () => {
 	it("shares one queue key across the badge and the strip", () => {
-		// Two different keys would mean two independent pollers for the same
-		// five integers, doubling requests and letting the two disagree on
-		// screen for up to a refresh interval.
-		expect(QUEUE_STATUS_KEY).toBe("orpc:queue/status")
+		// Two different keys would mean two independent pollers for the same five
+		// integers, doubling requests and letting the two disagree on screen for
+		// up to a refresh interval.
+		expect(qk.queue).toEqual(["queue", "status"])
 	})
 
 	it("keys the tag cloud by limit", () => {
-		// TagCloudClient renders at 30 while the default is 24; a shared key
-		// would let one render adopt the other's list.
-		expect(tagCloudKey(24)).not.toBe(tagCloudKey(30))
-		expect(tagCloudKey(30)).toContain("30")
+		// TagCloud renders at 30 in the header while the default is 24; a shared
+		// key would let one render adopt the other's list.
+		expect(qk.tags(24)).not.toEqual(qk.tags(30))
+		expect(qk.tags(30)).toContain("30")
+	})
+
+	it("puts every tag key under the same 'tags' prefix", () => {
+		// So one `invalidateQueries({ queryKey: ["tags"] })` clears all of them —
+		// the reason the factory nests rather than emitting flat strings.
+		expect(qk.tags(24)[0]).toBe(qk.tags(30)[0])
 	})
 })
 

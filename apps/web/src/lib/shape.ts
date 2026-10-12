@@ -85,7 +85,7 @@ export function byUpdatedDesc(docs: DocSummary[]): DocSummary[] {
  */
 export function buildFolderTree(
 	docs: DocSummary[],
-	section: string,
+	_section: string,
 ): TreeNode[] {
 	const root: TreeNode[] = []
 
@@ -94,23 +94,34 @@ export function buildFolderTree(
 		let current = root
 
 		// Start at 1: parts[0] is the section itself, which every slug shares and
-		// which the section page already renders above the tree.
-		for (let i = 1; i < parts.length; i++) {
-			const part = parts[i]
-			const isLeaf = i === parts.length - 1
+		// which the section page already renders above the tree. Iterating the
+		// already-sliced tail — rather than reading `parts[i]` under an
+		// `i < parts.length` guard — yields each segment as a plain `string`.
+		// `noUncheckedIndexedAccess` types a raw index read as `string | undefined`,
+		// and defaulting it here would fabricate an empty folder name rather than
+		// surface a malformed slug, so the read is eliminated instead of asserted.
+		const segments = parts.slice(1)
 
-			let node = current.find((n) => n.name === part)
-			if (!node) {
-				node = {
-					name: part,
-					slug: parts.slice(0, i + 1).join("/"),
-					title: "",
-					children: [],
-					isLeaf: false,
-					docCount: 0,
-				}
-				current.push(node)
+		for (const [offset, part] of segments.entries()) {
+			// Slugs stay rooted at the section, so the slice depth is one more
+			// than the offset within the tail.
+			const depth = offset + 1
+			const isLeaf = offset === segments.length - 1
+
+			// `existing ?? { … }` gives `node` a `TreeNode` type from the start.
+			// The previous `let node = find(…); if (!node) { node = … }` was one
+			// write away from leaving `node` possibly-undefined, which is what
+			// every one of the six reads below inherited.
+			const existing = current.find((n) => n.name === part)
+			const node: TreeNode = existing ?? {
+				name: part,
+				slug: parts.slice(0, depth + 1).join("/"),
+				title: "",
+				children: [],
+				isLeaf: false,
+				docCount: 0,
 			}
+			if (!existing) current.push(node)
 
 			if (isLeaf) {
 				node.isLeaf = true
@@ -315,11 +326,17 @@ export function folderContents(
 	for (const doc of docs) {
 		if (!doc.slug.startsWith(prefix)) continue
 		const rel = doc.slug.slice(prefix.length)
-		const parts = rel.split("/")
-		if (parts.length === 1) {
+		// The immediate subfolder is everything before the first separator.
+		// Slicing on `indexOf` keeps the name a plain `string`: `rel.split("/")[0]`
+		// is provably in range (`String#split` never returns an empty array), but
+		// `noUncheckedIndexedAccess` still types it `string | undefined` and a
+		// `?? ""` default would invent a nameless folder entry in the sidebar.
+		const separator = rel.indexOf("/")
+		if (separator === -1) {
 			documents.push(doc)
 		} else {
-			folders.set(parts[0], (folders.get(parts[0]) ?? 0) + 1)
+			const name = rel.slice(0, separator)
+			folders.set(name, (folders.get(name) ?? 0) + 1)
 		}
 	}
 
@@ -355,11 +372,68 @@ export interface SearchResult {
 	section: string
 	score: number
 	/**
-	 * Already sanitised by Postgres `ts_headline` on the server for keyword and
-	 * hybrid hits, and a plain substring for semantic hits. Rendered with
-	 * dangerouslySetInnerHTML because <mark> highlighting is the point.
+	 * HTML-safe snippet: every character except the `<mark>` / `</mark>` pair
+	 * Postgres inserts around query terms is entity-escaped, so the caller can
+	 * render it with dangerouslySetInnerHTML.
 	 */
 	snippet: string
+}
+
+/**
+ * Escape a search snippet for innerHTML, preserving only `<mark>`/`</mark>`.
+ *
+ * This is required, not defensive. Postgres documents that `ts_headline`
+ * output is NOT safe for direct inclusion in a web page: it returns excerpts of
+ * the original document with some simple XML tags removed, which is not
+ * guaranteed to remove all HTML. `keywordSearch` calls it with only
+ * `StartSel`/`StopSel` set to `<mark>`, so a document body containing markup
+ * reaches the client verbatim and would execute.
+ *
+ * Escaping here rather than trusting the server keeps the guarantee at the
+ * point of use: the value that reaches `dangerouslySetInnerHTML` is safe by
+ * construction, whichever search mode produced it. Semantic hits are plain
+ * substrings with no `<mark>` at all, and are escaped identically.
+ *
+ * so the snippet arrives already containing those two tags and nothing else
+ * authored by us. Everything else in it is untrusted document text.
+ *
+ * ## WHY THIS IS NOT A `.replace()` CHAIN
+ *
+ * The obvious implementation — escape `<`, then escape `&`, then escape `>` —
+ * cannot work, and did not. Escaping `>` unconditionally also destroys the `>`
+ * of the whitelisted `<mark>` tag itself:
+ *
+ *     "<mark>x</mark>"
+ *       .replace(/<(?!\/?mark>)/g, "&lt;")   // no-op: <mark> is allowed
+ *       .replace(/>/g, "&gt;")              // hits BOTH closing brackets
+ *     => "<mark&gt;x</mark&gt;"
+ *
+ * The browser then renders the literal text `<mark>x</mark>` instead of
+ * highlighting anything. It is a visible, total loss of the feature the escaping
+ * exists to support, and it was caught by a test asserting the snippet shape.
+ *
+ * The fix is to SPLIT on the whitelisted tags, escape each text segment on its
+ * own, and re-attach the tags literally. Each segment therefore contains no tag
+ * at all, so a plain three-character escape is both sufficient and correct.
+ */
+export function sanitizeSnippet(raw: string): string {
+	// Split with the delimiters CAPTURED, so the tags survive in the odd-indexed
+	// slots and can be re-emitted verbatim.
+	const parts = raw.split(/(<\/?mark>)/g)
+	return parts
+		.map((part, index) =>
+			// An odd index is a captured `</mark>`/`<mark>` — emit as-is.
+			index % 2 === 1
+				? part
+				: part
+						.replace(
+							/&(?!(?:lt|gt|amp|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g,
+							"&amp;",
+						)
+						.replace(/</g, "&lt;")
+						.replace(/>/g, "&gt;"),
+		)
+		.join("")
 }
 
 /**
@@ -378,7 +452,7 @@ function fromDocumentHit(hit: {
 		title: hit.doc.title,
 		section: hit.doc.section,
 		score: hit.rank,
-		snippet: hit.snippet,
+		snippet: sanitizeSnippet(hit.snippet),
 	}
 }
 
@@ -399,7 +473,7 @@ function fromChunkHit(hit: {
 		title: parts[parts.length - 1] ?? hit.slug,
 		section: parts[0] ?? "docs",
 		score: hit.score,
-		snippet: hit.content.slice(0, 160),
+		snippet: sanitizeSnippet(hit.content.slice(0, 160)),
 	}
 }
 
@@ -517,10 +591,8 @@ export function headingSlug(text: string, taken: Set<string>): string {
  * as opening a template literal, and the \uXXXX ranges stay legible instead of
  * being silently rendered as the characters themselves.
  */
-const SLUG_PUNCTUATION = new RegExp(
-	"[\\u2000-\\u206F\\u2E00-\\u2E7F\\\\'!\"#$%&()*+,./:;<=>?@\\[\\]^`{|}~]",
-	"g",
-)
+const SLUG_PUNCTUATION =
+	/[\u2000-\u206F\u2E00-\u2E7F\\'!"#$%&()*+,./:;<=>?@[\]^`{|}~]/g
 
 const SLUG_WHITESPACE = /\s/g
 
@@ -551,8 +623,13 @@ export function extractToc(source: string): TocEntry[] {
 	for (const line of source.split("\n")) {
 		const m = line.match(/^(#{2,3})\s+(.+?)\s*#*\s*$/)
 		if (!m) continue
-		const text = m[2].trim()
-		entries.push({ id: headingSlug(text, taken), text, level: m[1].length })
+		// Both groups are mandatory in the pattern (`#{2,3}` and `.+?` are neither
+		// optional nor starred), so neither default is reachable. They exist only
+		// to satisfy `noUncheckedIndexedAccess`, which types every capture group as
+		// `string | undefined` regardless of the pattern that produced it.
+		const [, hashes = "", raw = ""] = m
+		const text = raw.trim()
+		entries.push({ id: headingSlug(text, taken), text, level: hashes.length })
 	}
 	return entries
 }

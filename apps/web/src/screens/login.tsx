@@ -1,6 +1,6 @@
-import { useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
-import { Lock, Key, Mail, Eye, EyeOff, ArrowLeft } from "lucide-react"
+import { ArrowLeft, Eye, EyeOff, Key, Lock, Mail } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { signIn, signUp } from "../lib/auth-client"
 
 /**
@@ -22,6 +22,15 @@ export default function LoginPage() {
 	const [showPassword, setShowPassword] = useState(false)
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+	const emailRef = useRef<HTMLInputElement>(null)
+
+	// The email field is the one that matters on sign-in, so it takes focus.
+	// Done in an effect rather than with React's `autoFocus` attribute: the
+	// attribute only applies at mount, and the sign-up/sign-in toggle keeps
+	// this component mounted, so it would never re-apply after a mode switch.
+	useEffect(() => {
+		if (mode === "sign-in") emailRef.current?.focus()
+	}, [mode])
 
 	async function handleSubmit(e: React.FormEvent) {
 		e.preventDefault()
@@ -75,17 +84,20 @@ export default function LoginPage() {
 				<form onSubmit={handleSubmit} className="space-y-4">
 					{mode === "sign-up" && (
 						<div>
-							<label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono">
+							<label
+								htmlFor="login-name"
+								className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono"
+							>
 								Name
 							</label>
 							<div className="relative">
 								<input
+									id="login-name"
 									type="text"
 									value={name}
 									onChange={(e) => setName(e.target.value)}
 									placeholder="Ada Lovelace"
 									className={fieldClass}
-									autoFocus
 								/>
 								<Mail className="w-3.5 h-3.5 text-[var(--text-dim)] absolute left-3 top-3.5 pointer-events-none" />
 							</div>
@@ -93,29 +105,37 @@ export default function LoginPage() {
 					)}
 
 					<div>
-						<label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono">
+						<label
+							htmlFor="login-email"
+							className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono"
+						>
 							Email
 						</label>
 						<div className="relative">
 							<input
+								id="login-email"
+								ref={emailRef}
 								type="email"
 								value={email}
 								onChange={(e) => setEmail(e.target.value)}
 								placeholder="admin@example.com"
 								className={fieldClass}
 								required
-								autoFocus={mode === "sign-in"}
 							/>
 							<Mail className="w-3.5 h-3.5 text-[var(--text-dim)] absolute left-3 top-3.5 pointer-events-none" />
 						</div>
 					</div>
 
 					<div>
-						<label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono">
+						<label
+							htmlFor="login-password"
+							className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono"
+						>
 							Password
 						</label>
 						<div className="relative">
 							<input
+								id="login-password"
 								type={showPassword ? "text" : "password"}
 								value={password}
 								onChange={(e) => setPassword(e.target.value)}

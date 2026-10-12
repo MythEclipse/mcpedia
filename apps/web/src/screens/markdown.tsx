@@ -9,20 +9,20 @@
  * along with the whole app/ tree.
  */
 
-import React, { useState } from "react"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
-import rehypeSlug from "rehype-slug"
-import rehypeHighlight from "rehype-highlight"
 import {
-	Copy,
+	AlertTriangle,
 	Check,
+	Copy,
+	Flame,
 	Info,
 	Lightbulb,
-	AlertTriangle,
-	Flame,
 	ShieldAlert,
 } from "lucide-react"
+import React, { useState } from "react"
+import ReactMarkdown from "react-markdown"
+import rehypeHighlight from "rehype-highlight"
+import rehypeSlug from "rehype-slug"
+import remarkGfm from "remark-gfm"
 
 function extractText(node: React.ReactNode): string {
 	if (node === null || node === undefined || typeof node === "boolean") {
@@ -52,9 +52,10 @@ function PreBlock({
 		const className =
 			(children.props as { className?: string })?.className || ""
 		const match = /language-(\w+)/.exec(className)
-		if (match) {
-			language = match[1]
-		}
+		// The capture group is mandatory, so the `?? "text"` is unreachable
+		// fallback for `noUncheckedIndexedAccess` — a `Pre` whose className
+		// lacks the token keeps the default label, exactly as before.
+		language = match?.[1] ?? "text"
 	}
 
 	function handleCopy() {
@@ -127,7 +128,7 @@ export default function Markdown({ source }: { source: string }) {
 				remarkPlugins={[remarkGfm]}
 				rehypePlugins={[rehypeSlug, rehypeHighlight]}
 				components={{
-					pre: PreBlock as any,
+					pre: PreBlock,
 					code: ({
 						children,
 						className,
@@ -164,7 +165,10 @@ export default function Markdown({ source }: { source: string }) {
 						)
 
 						if (alertMatch) {
-							const alertType = alertMatch[1].toUpperCase()
+							// The group is mandatory in the alternation, so `?? "NOTE"`
+							// is unreachable and only narrows away
+							// `noUncheckedIndexedAccess`.
+							const alertType = (alertMatch[1] ?? "NOTE").toUpperCase()
 							let borderClass =
 								"border-indigo-500 bg-indigo-500/10 text-indigo-900 dark:text-indigo-200 print:bg-indigo-50 print:text-indigo-950"
 							let Icon = Info

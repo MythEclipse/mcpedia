@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { isAdmin, shouldRedirectToLogin } from "./gate"
-import { DEFAULT_SECTION, sectionIdsFrom } from "../lib/sections"
 import type { MeResponse } from "../lib/api-client"
+import { DEFAULT_SECTION, sectionIdsFrom } from "../lib/sections"
+import { isAdmin, shouldRedirectToLogin } from "./gate"
 
 /**
  * The gate, and the one piece of loader logic in /create.

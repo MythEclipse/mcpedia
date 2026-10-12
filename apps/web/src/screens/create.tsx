@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react"
 import { Plus } from "lucide-react"
+import { useEffect, useState } from "react"
 import { fetchFolderInfo } from "../lib/api-client"
 import { DEFAULT_SECTION } from "../lib/sections"
 import DocForm from "./doc-form"
@@ -39,8 +39,7 @@ import DocForm from "./doc-form"
  */
 
 /** The section whose folder tree is fetched first. */
-export { DEFAULT_SECTION } from "../lib/sections"
-export { sectionIdsFrom } from "../lib/sections"
+export { DEFAULT_SECTION, sectionIdsFrom } from "../lib/sections"
 
 export interface CreatePageProps {
 	/** Loader data: the sections that already exist. */

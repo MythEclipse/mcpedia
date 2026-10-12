@@ -1,7 +1,7 @@
 "use client"
 
+import { Moon, Sun } from "lucide-react"
 import { useEffect, useState } from "react"
-import { Sun, Moon } from "lucide-react"
 
 const STORAGE_KEY = "mcpedia-theme"
 

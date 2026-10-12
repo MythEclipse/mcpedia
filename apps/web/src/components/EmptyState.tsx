@@ -1,5 +1,5 @@
-import { FileQuestion, SearchX, AlertCircle, Inbox } from "lucide-react"
 import { Link } from "@tanstack/react-router"
+import { AlertCircle, Inbox } from "lucide-react"
 
 export function EmptyState({
 	title = "No results",

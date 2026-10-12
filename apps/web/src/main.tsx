@@ -9,12 +9,13 @@
  * Those reads move to the API (oRPC at /rpc, proxied in dev) and are fetched
  * from TanStack Query hooks — see src/lib/queries.ts.
  */
-import { StrictMode } from "react"
-import { createRoot } from "react-dom/client"
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { RouterProvider } from "@tanstack/react-router"
-import { createAppRouter } from "#/routes"
+import { StrictMode } from "react"
+import { createRoot } from "react-dom/client"
 import { RPCError } from "#/lib/errors"
+import { createAppRouter } from "#/routes"
 import "./styles.css"
 
 const container = document.getElementById("root")

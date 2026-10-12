@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, afterEach } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { AUTH_BASE_URL } from "./auth-config"
 import { isAdminSession, type Session } from "./gate-session"
 

@@ -1,8 +1,9 @@
-import { test, expect, describe } from "vitest"
 import {
 	DEFAULT_SECTIONS,
 	SECTION_PRESETS as SECTION_PRESETS_REAL,
 } from "@mcpedia/config/sections"
+import { describe, expect, test } from "vitest"
+import type { DocSummary } from "./shape"
 import {
 	buildFolderTree,
 	byUpdatedDesc,
@@ -10,7 +11,6 @@ import {
 	customFieldEntries,
 	customFieldLabel,
 	DEFAULT_SECTIONS_FALLBACK,
-	SECTION_PRESETS,
 	docsInSection,
 	exportTargetSlug,
 	extractToc,
@@ -21,13 +21,13 @@ import {
 	normalizeSearchHits,
 	parseSearchMode,
 	readingTime,
+	SECTION_PRESETS,
 	sectionMeta,
 	sectionsOrDefaults,
 	slugToTitle,
 	sortTree,
 	toDocSummary,
 } from "./shape"
-import type { DocSummary } from "./shape"
 
 /** A document with only the fields the shapers read. */
 function doc(slug: string, over: Partial<DocSummary> = {}): DocSummary {
@@ -123,13 +123,16 @@ describe("buildFolderTree", () => {
 			docCount: 1,
 		})
 
-		const install = tree[0].children[0]
+		// Positional reads use `?.` so a missing entry still fails the assertion
+		// below (vitest reports `undefined` against the expected object) instead
+		// of throwing a raw TypeError that hides which fixture broke.
+		const install = tree[0]?.children[0]
 		expect(install).toMatchObject({
 			name: "install",
 			slug: "docs/setup/install",
 		})
 
-		const leaf = install.children[0]
+		const leaf = install?.children[0]
 		expect(leaf).toMatchObject({
 			name: "linux",
 			slug: "docs/setup/install/linux",
@@ -181,7 +184,7 @@ describe("buildFolderTree", () => {
 			"docs",
 		)
 		expect(tree).toHaveLength(1)
-		expect(tree[0].children).toHaveLength(2)
+		expect(tree[0]?.children).toHaveLength(2)
 	})
 
 	test("an empty input yields an empty tree", () => {
@@ -367,8 +370,11 @@ describe("normalizeSearchHits", () => {
 				snippet: "s",
 			},
 		])
-		expect(hit.score).toBe(0.9)
-		expect(hit.slug).toBe("ctf/b")
+		// `hit` is possibly undefined under `noUncheckedIndexedAccess`. The assertions
+		// below compare against `undefined` when it is, and fail — which is the
+		// same signal the previous code gave by throwing.
+		expect(hit?.score).toBe(0.9)
+		expect(hit?.slug).toBe("ctf/b")
 	})
 
 	test("semantic hits are chunks, so title and section come from the slug", () => {
@@ -412,7 +418,7 @@ describe("extractToc", () => {
 	})
 
 	test("strips closing hashes (closed ATX)", () => {
-		expect(extractToc("## Closed ##")[0].text).toBe("Closed")
+		expect(extractToc("## Closed ##")[0]?.text).toBe("Closed")
 	})
 
 	test("requires whitespace after the hashes, so #hashtag is not a heading", () => {
@@ -434,7 +440,7 @@ describe("sectionsOrDefaults", () => {
 		const live = [
 			{ id: "docs", label: "Live", icon: "X", desc: "", docCount: 3 },
 		]
-		expect(sectionsOrDefaults(live)[0].label).toBe("Live")
+		expect(sectionsOrDefaults(live)[0]?.label).toBe("Live")
 	})
 
 	test("falls back to the static registry when the API returns nothing", () => {
@@ -461,7 +467,13 @@ describe("sectionsOrDefaults", () => {
 			Object.keys(SECTION_PRESETS_REAL).sort(),
 		)
 		for (const [id, preset] of Object.entries(SECTION_PRESETS)) {
+			// `Record<string, T>` indexed by a runtime key is `T | undefined`
+			// under `noUncheckedIndexedAccess`. A throw keeps the loop honest:
+			// optional-chaining here would compare `undefined` to a real value and
+			// fail, but the throw names the offending id instead of reporting three
+			// confusing mismatches.
 			const real = SECTION_PRESETS_REAL[id]
+			if (!real) throw new Error(`section preset missing for ${id}`)
 			expect(preset.label, `label for ${id}`).toBe(real.label)
 			expect(preset.icon, `icon for ${id}`).toBe(real.icon)
 			expect(preset.desc, `desc for ${id}`).toBe(real.desc)

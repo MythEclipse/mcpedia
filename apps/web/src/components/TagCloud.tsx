@@ -19,12 +19,18 @@
  * The `limit` prop is kept because TagCloudClient renders it at 30 while the
  * default is 24, and that difference is visible in the header count.
  */
-import useSWR from "swr"
 import { Tag } from "lucide-react"
-import { fetchTags, searchHref, type TagCount } from "../lib/orpc"
+import { useTagsQuery } from "#/lib/queries"
+import { searchHref } from "../lib/orpc"
 
-/** SWR key. Includes the limit so the two limits never share a cache entry. */
-export const tagCloudKey = (limit: number) => `orpc:tags:${limit}` as const
+/**
+ * The query key for a tag list at a given limit.
+ *
+ * Re-exported from lib/queries rather than reimplemented here: the key and the
+ * hook that uses it must not be able to drift, which is exactly what happened
+ * while the key lived in this file and the query in another.
+ */
+export { qk as queryKeys } from "#/lib/queries"
 
 /**
  * Font weight per tag, relative to the most common one.
@@ -40,11 +46,7 @@ export function tagOpacity(count: number, max: number): number {
 }
 
 export default function TagCloud({ limit = 24 }: { limit?: number }) {
-	const { data, isLoading } = useSWR<TagCount[]>(
-		tagCloudKey(limit),
-		() => fetchTags(limit),
-		{ revalidateOnFocus: false },
-	)
+	const { data, isLoading } = useTagsQuery(limit)
 	const tags = data ?? []
 
 	if (isLoading) {

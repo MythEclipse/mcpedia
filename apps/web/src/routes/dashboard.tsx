@@ -16,16 +16,17 @@
  * page did `if (!data) return null`, so the dashboard never reserved space for a
  * strip that has not loaded.
  */
+
+import { QueueStrip } from "../components/QueueBadge"
+import TagCloud from "../components/TagCloud"
 import { fetchDocuments, fetchSections, searchHref } from "../lib/orpc"
 import {
 	countUniqueTags,
+	type DashboardData,
 	recentDocuments,
 	sectionShare,
 	topTags,
-	type DashboardData,
 } from "./dashboard-data"
-import { QueueStrip } from "../components/QueueBadge"
-import TagCloud from "../components/TagCloud"
 
 /**
  * Plain anchors, not TanStack <Link>, for destinations this route does not own.

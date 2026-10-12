@@ -1,13 +1,13 @@
 "use client"
 
-import { useState } from "react"
 import { Link, useRouterState } from "@tanstack/react-router"
+import { Lock, Menu, Plus, Search, X } from "lucide-react"
+import { useState } from "react"
+import CommandMenu from "#/components/CommandMenu"
 import { DocLink, SearchLink } from "#/components/DocLink"
+import ThemeToggle from "#/components/ThemeToggle"
 import { useSectionsQuery } from "#/lib/queries"
 import { sectionsOrDefaults } from "#/lib/shape"
-import ThemeToggle from "#/components/ThemeToggle"
-import CommandMenu from "#/components/CommandMenu"
-import { Plus, Search, Menu, X, Lock } from "lucide-react"
 
 export default function Header() {
 	const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -95,6 +95,7 @@ export default function Header() {
 
 					{/* Mobile menu toggle */}
 					<button
+						type="button"
 						onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
 						className="md:hidden p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-elevated)] transition-colors"
 						aria-label="Toggle navigation"

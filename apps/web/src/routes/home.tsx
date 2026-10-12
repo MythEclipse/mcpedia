@@ -6,30 +6,31 @@
  * @mcpedia/core in-process, this reads the same two procedures over oRPC via
  * the query hooks. The rendering below is unchanged.
  */
+
+import {
+	ArrowRight,
+	BookOpen,
+	Clock,
+	Database,
+	FileText,
+	Folder,
+	Layers,
+	Plus,
+	Search,
+	Terminal,
+} from "lucide-react"
 import { DocLink, SearchLink } from "#/components/DocLink"
 import InteractiveTopology from "#/components/InteractiveTopology"
 import McpConfigSnippet from "#/components/McpConfigSnippet"
 import { useDocumentsQuery, useSectionsQuery } from "#/lib/queries"
+import type { DocSummary } from "#/lib/shape"
 import {
 	buildFolderTree,
 	byUpdatedDesc,
 	docsInSection,
-	sectionsOrDefaults,
 	sectionMeta,
+	sectionsOrDefaults,
 } from "#/lib/shape"
-import type { DocSummary } from "#/lib/shape"
-import {
-	Search,
-	Plus,
-	BookOpen,
-	ArrowRight,
-	Database,
-	Layers,
-	Folder,
-	FileText,
-	Clock,
-	Terminal,
-} from "lucide-react"
 
 /**
  * The first five entries of a section, rendered as an indented file tree.

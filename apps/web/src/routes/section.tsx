@@ -7,17 +7,17 @@
  * builder in #/lib/shape rather than the page's own copy.
  */
 import { Link, useParams } from "@tanstack/react-router"
+import { Clock, FileDown, FileText, Folder, Plus } from "lucide-react"
 import { DocLink } from "#/components/DocLink"
 import { useDocumentsQuery, useSectionsQuery } from "#/lib/queries"
+import type { TreeNode } from "#/lib/shape"
 import {
 	buildFolderTree,
 	byUpdatedDesc,
 	docsInSection,
-	sectionsOrDefaults,
 	sectionMeta,
+	sectionsOrDefaults,
 } from "#/lib/shape"
-import type { TreeNode } from "#/lib/shape"
-import { Folder, FileText, FileDown, Plus, Clock } from "lucide-react"
 
 /**
  * The folder tree, with the current path highlighted.

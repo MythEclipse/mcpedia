@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
 	DEFAULT_SORT,
-	SORT_OPTIONS,
 	isExportableDocument,
 	parseSortOption,
 	resolveExportRequest,
+	SORT_OPTIONS,
 } from "./export-pdf-params"
 
 describe("parseSortOption", () => {

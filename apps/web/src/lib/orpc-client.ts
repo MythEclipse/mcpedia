@@ -48,6 +48,7 @@
  * request reads as anonymous.
  */
 
+import type { AppRouter } from "@mcpedia/api"
 /**
  * The procedure tree, as a TYPE ONLY.
  *
@@ -72,7 +73,6 @@
  * So the generic is applied here, and the inference lives in one place.
  */
 import type { RouterClient } from "@orpc/server"
-import type { AppRouter } from "@mcpedia/api"
 
 export type AppRouterClient = RouterClient<AppRouter, Record<never, never>>
 export type { AppRouter }
@@ -104,8 +104,6 @@ type Unwrap<T> = T extends {
 }
 	? V
 	: T
-
-type OutputOf<T> = T extends (...args: never[]) => infer R ? Unwrap<R> : unknown
 
 /**
  * The return type of the procedure named by `P`.

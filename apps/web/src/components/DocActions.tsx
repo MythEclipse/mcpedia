@@ -1,8 +1,8 @@
 "use client"
 
+import { Check, Copy, Edit3, FileDown, FileText, Share2 } from "lucide-react"
 import { useState } from "react"
 import { DocLink } from "#/components/DocLink"
-import { Copy, Check, Share2, FileDown, FileText, Edit3 } from "lucide-react"
 
 interface DocActionsProps {
 	slug: string

@@ -56,23 +56,23 @@ import {
 	redirect,
 	useLoaderData,
 } from "@tanstack/react-router"
-import { Shell } from "#/routes/shell"
+import { fetchMe, fetchSections } from "#/lib/api-client"
+import { sectionIdsFrom } from "#/lib/sections"
+import { DashboardView, dashboardLoader } from "#/routes/dashboard"
+import { DocRoute } from "#/routes/document"
+import {
+	ExportPdfPage,
+	exportLoaderDeps,
+	exportPdfLoader,
+	validateExportSearch,
+} from "#/routes/export-pdf"
 import { HomePage } from "#/routes/home"
 import { SearchPage, validateSearch } from "#/routes/search"
 import { SectionPage } from "#/routes/section"
-import { DocRoute } from "#/routes/document"
-import { dashboardLoader, DashboardView } from "#/routes/dashboard"
-import {
-	exportLoaderDeps,
-	exportPdfLoader,
-	ExportPdfPage,
-	validateExportSearch,
-} from "#/routes/export-pdf"
-import { fetchMe, fetchSections } from "#/lib/api-client"
-import { sectionIdsFrom } from "#/lib/sections"
+import { Shell } from "#/routes/shell"
+import CreatePage from "#/screens/create"
 import { shouldRedirectToLogin } from "#/screens/gate"
 import LoginPage from "#/screens/login"
-import CreatePage from "#/screens/create"
 
 const rootRoute = createRootRoute({
 	component: Shell,
@@ -203,7 +203,7 @@ const routeTree = rootRoute.addChildren([
 	sectionRoute.addChildren([docRoute]),
 ])
 
-export { routeTree, rootRoute }
+export { rootRoute, routeTree }
 
 /*
  * Typed accessors. `getRouteApi` resolves a route id to its loader-data type.

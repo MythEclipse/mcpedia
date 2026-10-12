@@ -1,33 +1,33 @@
-import { useState, useRef } from "react"
 import { useRouter } from "@tanstack/react-router"
 import {
 	Bold,
-	Italic,
+	Code,
+	Edit3,
+	Eye,
 	Heading2,
 	Heading3,
-	Code,
+	Italic,
 	Link as LinkIcon,
 	Plus,
-	Trash2,
-	Eye,
-	Edit3,
 	Sliders,
+	Trash2,
 } from "lucide-react"
-import Markdown from "./markdown"
+import { useRef, useState } from "react"
 import {
 	DEFAULT_SECTION_LIST,
 	DEFAULT_TYPE_LIST,
+	OrpcCallError,
 	PRESET_FIELDS,
 	RPC_BASE,
 	rpcCall,
-	OrpcCallError,
 } from "../lib/api-client"
 import {
+	type DocFormValues,
 	toCreateInput,
 	toUpdateInput,
 	validateDocForm,
-	type DocFormValues,
 } from "../lib/writes"
+import Markdown from "./markdown"
 
 interface DocFormProps {
 	mode: "create" | "edit"
@@ -154,7 +154,14 @@ export default function DocForm({
 		value: string,
 	) {
 		const updated = [...customFields]
-		updated[index][field] = value
+		// An out-of-range index is a caller bug (the row that owns this handler
+		// rendered it), so bail rather than mutating `undefined`. Returning
+		// unchanged state keeps the controlled inputs consistent — the previous
+		// `updated[index][field] = value` would have thrown on a stale index
+		// after a concurrent `removeCustomField`.
+		const target = updated[index]
+		if (!target) return
+		target[field] = value
 		setCustomFields(updated)
 	}
 
@@ -244,10 +251,14 @@ export default function DocForm({
 
 			{/* Document Title */}
 			<div>
-				<label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono">
+				<label
+					htmlFor="doc-title"
+					className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono"
+				>
 					Document Title *
 				</label>
 				<input
+					id="doc-title"
 					type="text"
 					value={title}
 					onChange={(e) => setTitle(e.target.value)}
@@ -260,10 +271,14 @@ export default function DocForm({
 			{/* Section, Type, Status */}
 			<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 				<div>
-					<label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono">
+					<label
+						htmlFor="doc-section"
+						className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono"
+					>
 						Section
 					</label>
 					<input
+						id="doc-section"
 						type="text"
 						list="section-list"
 						value={section}
@@ -285,10 +300,14 @@ export default function DocForm({
 				</div>
 
 				<div>
-					<label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono">
+					<label
+						htmlFor="doc-type"
+						className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono"
+					>
 						Document Type
 					</label>
 					<input
+						id="doc-type"
 						type="text"
 						list="type-list"
 						value={type}
@@ -306,10 +325,14 @@ export default function DocForm({
 				</div>
 
 				<div>
-					<label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono">
+					<label
+						htmlFor="doc-status"
+						className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono"
+					>
 						Status
 					</label>
 					<select
+						id="doc-status"
 						value={status}
 						onChange={(e) => setStatus(e.target.value as typeof status)}
 						className={baseInputCls}
@@ -323,10 +346,14 @@ export default function DocForm({
 			{/* Folder + Slug */}
 			<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 				<div>
-					<label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono">
+					<label
+						htmlFor="doc-parent-folder"
+						className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono"
+					>
 						Parent Folder / Chapter
 					</label>
 					<select
+						id="doc-parent-folder"
 						value={parentFolder}
 						onChange={(e) => setParentFolder(e.target.value)}
 						className={baseInputCls}
@@ -342,11 +369,15 @@ export default function DocForm({
 				</div>
 
 				<div>
-					<label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono">
+					<label
+						htmlFor="doc-slug"
+						className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono"
+					>
 						{isEdit ? "Document Path" : "Slug (File name) *"}
 					</label>
 					{isEdit ? (
 						<input
+							id="doc-slug"
 							type="text"
 							value={slug ?? ""}
 							readOnly
@@ -354,6 +385,7 @@ export default function DocForm({
 						/>
 					) : (
 						<input
+							id="doc-slug"
 							type="text"
 							value={slugInput}
 							onChange={(e) => setSlugInput(e.target.value)}
@@ -374,10 +406,14 @@ export default function DocForm({
 			{/* Tags + Author */}
 			<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 				<div>
-					<label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono">
+					<label
+						htmlFor="doc-tags"
+						className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono"
+					>
 						Tags (comma separated)
 					</label>
 					<input
+						id="doc-tags"
 						type="text"
 						value={tags}
 						onChange={(e) => setTags(e.target.value)}
@@ -386,10 +422,14 @@ export default function DocForm({
 					/>
 				</div>
 				<div>
-					<label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono">
+					<label
+						htmlFor="doc-author"
+						className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5 font-mono"
+					>
 						Author
 					</label>
 					<input
+						id="doc-author"
 						type="text"
 						value={author}
 						onChange={(e) => setAuthor(e.target.value)}

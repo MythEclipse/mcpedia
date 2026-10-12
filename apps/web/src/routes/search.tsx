@@ -13,15 +13,16 @@
  *    client-side rendering. TanStack loaders and hooks read the location
  *    synchronously, so there is nothing to suspend on.
  */
-import { useEffect, useState } from "react"
+
 import { useNavigate, useSearch } from "@tanstack/react-router"
-import { DocLink } from "#/components/DocLink"
-import SearchBar from "#/components/SearchBar"
-import { EmptyState, ErrorState } from "#/components/EmptyState"
-import { useSearchQuery, useSectionsQuery, useDebounced } from "#/lib/queries"
-import { parseSearchMode, sectionsOrDefaults, SEARCH_MODES } from "#/lib/shape"
-import type { SearchMode } from "#/lib/shape"
 import { SearchX } from "lucide-react"
+import { useEffect, useState } from "react"
+import { DocLink } from "#/components/DocLink"
+import { EmptyState, ErrorState } from "#/components/EmptyState"
+import SearchBar from "#/components/SearchBar"
+import { useDebounced, useSearchQuery, useSectionsQuery } from "#/lib/queries"
+import type { SearchMode } from "#/lib/shape"
+import { parseSearchMode, SEARCH_MODES, sectionsOrDefaults } from "#/lib/shape"
 
 const SUGGESTIONS = [
 	"stack alignment",
@@ -202,6 +203,7 @@ export function SearchPage() {
 						{SUGGESTIONS.map((term) => (
 							<button
 								key={term}
+								type="button"
 								onClick={() => setQuery(term)}
 								className="px-3 py-1 bg-[var(--bg-elevated)] hover:bg-[var(--bg-elevated-hover)] border border-[var(--border-color)] hover:border-[var(--text-muted)] rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all font-mono text-xs cursor-pointer"
 							>
@@ -253,6 +255,7 @@ export function SearchPage() {
 										// Snippet arrives pre-sanitised by Postgres ts_headline
 										// (keyword/hybrid) or as a plain chunk substring
 										// (semantic); <mark> is the point of rendering it.
+										// biome-ignore lint/security/noDangerouslySetInnerHtml: value escaped by sanitizeSnippet in normalizeSearchHits; only <mark> survives
 										dangerouslySetInnerHTML={{ __html: r.snippet }}
 									/>
 								)}

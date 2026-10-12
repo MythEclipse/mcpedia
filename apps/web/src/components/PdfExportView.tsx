@@ -21,30 +21,30 @@
  * generation still lives behind the Next app's /api/export during the
  * migration; wiring it to the API is a separate piece of work.
  */
-import { useMemo, useState } from "react"
-import { Link } from "@tanstack/react-router"
-import Markdown from "./Markdown"
+
+import { getSectionMeta } from "@mcpedia/config/sections"
 import {
-	extractDocCategory,
-	extractDocPoints,
-	extractDocDifficulty,
-	sortExportDocuments,
 	compileExportMarkdown,
 	type Document,
 	type ExportData,
 	type ExportSortOption,
+	extractDocCategory,
+	extractDocDifficulty,
+	extractDocPoints,
+	sortExportDocuments,
 } from "@mcpedia/core/export-helpers"
-import { getSectionMeta } from "@mcpedia/config/sections"
 import {
-	Printer,
-	FileDown,
-	FileText,
-	Copy,
-	Check,
 	ArrowLeft,
 	BookOpen,
+	Check,
+	Copy,
+	FileDown,
+	FileText,
+	Printer,
 } from "lucide-react"
+import { useMemo, useState } from "react"
 import { isExportableDocument } from "../routes/export-pdf-params"
+import Markdown from "./Markdown"
 
 /** Frontmatter keys that are already shown as a labelled field, or are noise. */
 const REDUNDANT_EXTRA_KEYS = new Set([

@@ -1,9 +1,9 @@
 "use client"
 
+import { Sparkles } from "lucide-react"
 import { DocLink } from "#/components/DocLink"
 import { useRelatedQuery } from "#/lib/queries"
 import { sectionMeta } from "#/lib/shape"
-import { Sparkles } from "lucide-react"
 
 export default function RelatedGrid({ slug }: { slug: string }) {
 	const { data, isPending, isError } = useRelatedQuery(slug, 4)

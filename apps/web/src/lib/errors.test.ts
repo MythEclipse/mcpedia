@@ -1,5 +1,5 @@
-import { test, expect, describe } from "vitest"
-import { RPCError, errorMessage, isNotFound } from "./errors"
+import { describe, expect, test } from "vitest"
+import { errorMessage, isNotFound, RPCError } from "./errors"
 
 /**
  * The retry policy in main.tsx branches on `error instanceof RPCError &&

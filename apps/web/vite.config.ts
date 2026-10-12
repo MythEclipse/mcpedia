@@ -48,14 +48,11 @@ export default defineConfig({
 			// better-auth's catch-all. Same-origin so the session cookie stays
 			// first-party — a cross-origin call would drop it.
 			//
-			// KNOWN GAP, verified not assumed: the API does NOT serve this path
-			// yet. `grep -rn '"/api' apps/api/src/` returns nothing; the only
-			// /api/auth handler in the repo today is the Next route at
-			// apps/web/app/api/auth/[...all]/route.ts, which the SPA does not run.
-			// Requests here therefore reach :4020 and 404 until better-auth is
-			// mounted on the API app (port gap #3 in the frontend-redesign recon).
-			// The entry stays so the client needs no config change once that
-			// lands, and so the same-origin cookie scope is right from day one.
+			// The API now serves this path (apps/api/src/app.ts mounts better-auth
+			// at /api/auth/*), so this proxy forwards a real endpoint rather than
+			// swallowing the request. In production Caddy forwards the same path to
+			// the same origin, which is what keeps the cookie first-party in both
+			// environments.
 			"/api/auth": { target: "http://127.0.0.1:4020", changeOrigin: false },
 		},
 	},

@@ -18,45 +18,45 @@
  * recognised and ignored here, and the Edit button links to the Next route that
  * still serves it.
  */
-import { Link, useParams, notFound } from "@tanstack/react-router"
-import { DocLink } from "#/components/DocLink"
-import Markdown from "#/components/Markdown"
-import TOC from "#/components/TOC"
-import RelatedGrid from "#/components/RelatedGrid"
-import DocActions from "#/components/DocActions"
-import { EmptyState } from "#/components/EmptyState"
+import { Link, notFound, useParams } from "@tanstack/react-router"
 import {
-	useDocumentQuery,
+	CheckCircle2,
+	Clock,
+	FileDown,
+	FileText,
+	Folder,
+	Tag,
+	Target,
+	Trophy,
+	XCircle,
+	Zap,
+} from "lucide-react"
+import DocActions from "#/components/DocActions"
+import { DocLink } from "#/components/DocLink"
+import { EmptyState } from "#/components/EmptyState"
+import Markdown from "#/components/Markdown"
+import RelatedGrid from "#/components/RelatedGrid"
+import TOC from "#/components/TOC"
+import {
 	type DocumentResult,
+	useDocumentQuery,
 	useDocumentsQuery,
 	useFolderInfoQuery,
 	useSectionsQuery,
 } from "#/lib/queries"
+import type { DocSummary } from "#/lib/shape"
 import {
 	customFieldEntries,
 	customFieldLabel,
 	exportTargetSlug,
+	folderContents,
 	isExportPath,
 	joinSlug,
 	readingTime,
-	sectionsOrDefaults,
 	sectionMeta,
+	sectionsOrDefaults,
 	slugToTitle,
-	folderContents,
 } from "#/lib/shape"
-import type { DocSummary } from "#/lib/shape"
-import {
-	Folder,
-	FileText,
-	Clock,
-	FileDown,
-	Tag,
-	Target,
-	CheckCircle2,
-	XCircle,
-	Trophy,
-	Zap,
-} from "lucide-react"
 
 /**
  * The custom frontmatter badges — CTF documents carry points, difficulty,

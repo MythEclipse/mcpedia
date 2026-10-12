@@ -1,5 +1,5 @@
-import { test, expect } from "vitest"
 import GithubSlugger from "github-slugger"
+import { expect, test } from "vitest"
 import { extractToc, headingSlug } from "./shape"
 
 /**

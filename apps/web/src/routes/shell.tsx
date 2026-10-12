@@ -7,7 +7,7 @@
  * before first paint to avoid a flash), and there is no <SWRProvider> — the
  * query client is created once in main.tsx.
  */
-import { Link, Outlet } from "@tanstack/react-router"
+import { Outlet } from "@tanstack/react-router"
 import { SearchLink } from "#/components/DocLink"
 import Header from "#/components/Header"
 import Sidebar from "#/components/Sidebar"

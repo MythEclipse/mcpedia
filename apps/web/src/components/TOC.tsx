@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import GithubSlugger from "github-slugger"
-import { AlignLeft, ArrowUp, Hash } from "lucide-react"
+import { AlignLeft, ArrowUp } from "lucide-react"
+import { useEffect, useState } from "react"
 
 interface TOCEntry {
 	id: string
@@ -21,8 +21,13 @@ export default function TOC({ source }: { source: string }) {
 		for (const line of lines) {
 			const m = line.match(/^(#{2,3})\s+(.+?)\s*#*\s*$/)
 			if (m) {
-				const level = m[1].length
-				const text = m[2].trim()
+				// Both capture groups are mandatory in the pattern, so neither
+				// default is reachable — they exist only to satisfy
+				// `noUncheckedIndexedAccess`, which types every group as
+				// `string | undefined` no matter what the regex guarantees.
+				const [, hashes = "", raw = ""] = m
+				const level = hashes.length
+				const text = raw.trim()
 				entries.push({ id: slugger.slug(text), text, level })
 			}
 		}
@@ -52,7 +57,9 @@ export default function TOC({ source }: { source: string }) {
 			},
 		)
 
-		headingElements.forEach((el) => observer.observe(el))
+		headingElements.forEach((el) => {
+			observer.observe(el)
+		})
 		return () => observer.disconnect()
 	}, [toc])
 

@@ -15,8 +15,8 @@
  *
  * Same-origin is load-bearing: the session cookie is first-party, and a
  * cross-origin call would drop it. This is the path vite.config.ts proxies in
- * dev, and the path apps/api is specified to mount (see api-client.ts's contract
- * note — the API does not serve it yet, which is a blocker, not a design choice).
+ * dev, and the path apps/api mounts better-auth at (apps/api/src/app.ts), so the
+ * endpoint exists in both environments.
  */
 export const AUTH_BASE_PATH = "/api/auth"
 

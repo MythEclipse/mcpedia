@@ -1,20 +1,20 @@
 "use client"
 
-import { useState, useMemo } from "react"
 import { useRouterState } from "@tanstack/react-router"
-import { DocLink } from "#/components/DocLink"
-import { useDocumentsQuery } from "#/lib/queries"
-import { buildFolderTree, sectionMeta } from "#/lib/shape"
-import type { TreeNode } from "#/lib/shape"
 import {
+	ChevronRight,
+	FileText,
 	Folder,
 	FolderOpen,
-	FileText,
-	ChevronRight,
+	Plus,
 	Search,
 	X,
-	Plus,
 } from "lucide-react"
+import { useMemo, useState } from "react"
+import { DocLink } from "#/components/DocLink"
+import { useDocumentsQuery } from "#/lib/queries"
+import type { TreeNode } from "#/lib/shape"
+import { buildFolderTree, sectionMeta } from "#/lib/shape"
 
 /**
  * The folder tree comes from #/lib/shape now, not from a second copy in this
@@ -164,6 +164,7 @@ export default function Sidebar() {
 					<Search className="w-3.5 h-3.5 text-[var(--text-dim)] absolute left-2.5 top-2.5 pointer-events-none" />
 					{filterText && (
 						<button
+							type="button"
 							onClick={() => setFilterText("")}
 							className="absolute right-2 top-2 p-0.5 text-[var(--text-dim)] hover:text-[var(--text-primary)] rounded"
 							aria-label="Clear filter"

@@ -1,8 +1,8 @@
 "use client"
 
+import { Check, Copy, Laptop, Server, Sparkles, Terminal } from "lucide-react"
 import { useState } from "react"
 import Markdown from "#/components/Markdown"
-import { Sparkles, Terminal, Server, Copy, Check, Laptop } from "lucide-react"
 
 const CONFIGS = [
 	{
@@ -77,14 +77,27 @@ export default function McpConfigSnippet() {
 	const [activeTab, setActiveTab] = useState("claude")
 	const [copied, setCopied] = useState(false)
 
-	const current = CONFIGS.find((c) => c.id === activeTab) || CONFIGS[0]
+	// Same shape as InteractiveTopology: `CONFIGS[0]` is
+	// `Config | undefined` under `noUncheckedIndexedAccess`, and every read
+	// below (`current.lang`, `current.content`, `current.filename`) would throw
+	// on an empty list. `activeTab` only ever holds an id rendered from
+	// `CONFIGS` itself, so `find` always hits; the guard documents that.
+	const current = CONFIGS.find((c) => c.id === activeTab) ?? CONFIGS.at(0)
+	if (!current) return null
+
+	// Read the two fields the handlers need into consts at the guard. A narrowing
+	// established here does NOT survive into a `function` declaration body —
+	// declarations hoist, so the call could textually precede the `if (!current)`
+	// above, and TS re-widens the read. Function *expressions* would be fine;
+	// binding the values keeps the existing declaration style.
+	const content = current.content
 
 	const markdownSnippet = `\`\`\`${current.lang}
-${current.content}
+${content}
 \`\`\``
 
 	function handleCopyAll() {
-		navigator.clipboard.writeText(current.content)
+		navigator.clipboard.writeText(content)
 		setCopied(true)
 		setTimeout(() => setCopied(false), 2000)
 	}

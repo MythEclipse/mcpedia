@@ -29,8 +29,8 @@ import { AUTH_BASE_PATH } from "./auth-config"
 import type { Session } from "./gate-session"
 
 export { AUTH_BASE_PATH, AUTH_BASE_URL } from "./auth-config"
-export { isAdminSession } from "./gate-session"
 export type { Role, Session } from "./gate-session"
+export { isAdminSession } from "./gate-session"
 
 export const authClient = createAuthClient({
 	// `basePath`, NOT `baseURL`. A relative baseURL is rejected by better-auth's

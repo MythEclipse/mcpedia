@@ -1,25 +1,24 @@
 "use client"
 
-import { useState } from "react"
 import { Link } from "@tanstack/react-router"
 import {
-	Cpu,
-	Database,
-	Layers,
-	Sparkles,
-	Search,
-	Globe,
-	Server,
 	ArrowRight,
-	CheckCircle2,
+	Database,
+	Globe,
+	Layers,
+	Search,
+	Server,
+	Sparkles,
 } from "lucide-react"
+import { useState } from "react"
 
 interface NodeDetail {
 	id: string
 	title: string
 	badge: string
 	type: "client" | "protocol" | "core" | "storage"
-	icon: any
+	/** A lucide-react icon component, rendered as `<Icon className=... />`. */
+	icon: React.ComponentType<{ className?: string }>
 	desc: string
 	metrics: { label: string; value: string }[]
 	features: string[]
@@ -146,7 +145,15 @@ const NODES: NodeDetail[] = [
 export default function InteractiveTopology() {
 	const [activeNodeId, setActiveNodeId] = useState<string>("core-engine")
 
-	const activeNode = NODES.find((n) => n.id === activeNodeId) || NODES[0]
+	// `NODES.find(...) || NODES[0]` was the original guard, but `NODES[0]` is
+	// `NodeDetail | undefined` under `noUncheckedIndexedAccess` — and worse, an
+	// empty `NODES` would have rendered a component whose every
+	// `activeNode.<field>` read threw. `NODES` is a module-level literal that
+	// ships six entries, so this cannot fire today; the early return keeps that
+	// a type-checked fact instead of a comment, and degrades to the shell chrome
+	// rather than a white screen if the list is ever emptied.
+	const activeNode = NODES.find((n) => n.id === activeNodeId) ?? NODES.at(0)
+	if (!activeNode) return null
 	const ActiveIcon = activeNode.icon
 
 	return (

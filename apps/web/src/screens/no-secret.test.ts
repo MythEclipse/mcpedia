@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest"
-import { readFileSync, readdirSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
+import { describe, expect, it } from "vitest"
 
 /**
  * THE SECURITY PROPERTY OF THIS PORT, as a test.
@@ -69,10 +69,16 @@ function code(src: string): string {
 /** The module specifiers a file imports. */
 function importSpecifiers(src: string): string[] {
 	const codeOnly = code(src)
-	return [
-		...[...codeOnly.matchAll(/\bfrom\s+["']([^"']+)["']/g)].map((m) => m[1]),
-		...[...codeOnly.matchAll(/\bimport\s+["']([^"']+)["']/g)].map((m) => m[1]),
-	]
+	// Capture group 1 is mandatory in both patterns, but `matchAll` types it
+	// `string | undefined` under `noUncheckedIndexedAccess`. Dropping the
+	// impossible case explicitly keeps `string[]` honest — a `?? ""` default
+	// would append an empty specifier that the caller then tests as a path.
+	const specs = (re: RegExp): string[] =>
+		[...codeOnly.matchAll(re)].flatMap((m) => (m[1] ? [m[1]] : []))
+
+	const from = specs(/\bfrom\s+["']([^"']+)["']/g)
+	const bare = specs(/\bimport\s+["']([^"']+)["']/g)
+	return [...from, ...bare]
 }
 
 describe("the SPA never holds the webhook secret", () => {
@@ -108,8 +114,12 @@ describe("the SPA never holds the webhook secret", () => {
 			const codeOnly = code(read(file))
 			// Look inside header OBJECTS for a credential-valued key.
 			for (const m of codeOnly.matchAll(/headers\s*:\s*\{([^}]*)\}/g)) {
-				if (/secret|authorization|cookie/i.test(m[1])) {
-					leaked.push(`${file}: ${m[1].trim()}`)
+				// Capture group 1 is mandatory in the pattern; `?? ""` only
+				// satisfies `noUncheckedIndexedAccess` and leaves the test
+				// behaviour identical.
+				const body = m[1] ?? ""
+				if (/secret|authorization|cookie/i.test(body)) {
+					leaked.push(`${file}: ${body.trim()}`)
 				}
 			}
 			// Or any call that passes a credential as a header option.
@@ -166,8 +176,30 @@ describe("the write gate stays where it was", () => {
 		expect(middleware).toMatch(/not-configured/)
 		expect(middleware).toMatch(/invalid-secret/)
 		// Still refuses when the secret is unset, rather than falling through.
-		expect(middleware).toMatch(/if\s*\(\s*!ctx\.expectedSecret\s*\)/)
+		//
+		// The check lives in `verifyWebhookSecret` rather than inline in the
+		// gate, because both credential paths share it and must not drift. It is
+		// matched here in its current form — an empty `expected` yields
+		// "not-configured" before any comparison is attempted. The BEHAVIOURAL
+		// proof is in apps/api/src/presentation/gate.test.ts, which drives the
+		// real HTTP surface with an unset secret and asserts 401 with core
+		// untouched; this source assertion is only the early tripwire.
+		expect(middleware).toMatch(
+			/if\s*\(\s*!expected\s*\)\s*return\s*"not-configured"/,
+		)
 		expect(middleware).toMatch(/return next\(\)/)
+	})
+
+	it("shares one secret comparison between both credential paths", () => {
+		// Two independent implementations of "is this secret valid" is how a
+		// session path ends up laxer than the header path. One helper, used by
+		// every path, is what makes that impossible.
+		const middleware = readFileSync(
+			join(SRC, "../../api/src/presentation/middleware.ts"),
+			"utf8",
+		)
+		expect(middleware).toMatch(/export function verifyWebhookSecret/)
+		expect(middleware).toMatch(/safeSecretEqual\(provided, expected\)/)
 	})
 
 	it("leaves the MCP x-webhook-secret path untouched", () => {

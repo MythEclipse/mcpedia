@@ -16,36 +16,17 @@
  *   - `role="status"` / `aria-live="polite"` are kept on both so a screen
  *     reader announces polling updates instead of silently mutating the page.
  *
- * The fetch moved from SWR-over-/api/queue/status to useSWR over the oRPC
- * client. SWR is kept rather than replaced with a hand-rolled interval because
- * it already handles the failure mode this component cares about: with
- * shouldRetryOnError off and the API returning zeroed counters when Redis is
- * down, the badge settles on "index idle" instead of spinning forever.
+ * The fetch is now `useQueueCounts` from lib/queries, so the polling lives in
+ * the same place as every other read and SWR is gone from the app entirely.
+ * The failure mode this component cares about is unchanged: with `retry: false`
+ * and the API returning zeroed counters when Redis is down, the badge settles on
+ * "index idle" instead of spinning forever.
  */
-import useSWR from "swr"
-import { Clock, CheckCircle2, AlertTriangle, Hourglass } from "lucide-react"
-import { fetchQueueStatus, type QueueCounts } from "../lib/orpc"
-
-/**
- * SWR key. A constant rather than an inline string so the badge and the strip
- * share ONE cache entry — two keys would mean two independent pollers for the
- * same five integers.
- */
-export const QUEUE_STATUS_KEY = "orpc:queue/status" as const
-
-/** The fetcher SWR calls. Adapts the oRPC shape to the flat counters. */
-export const fetchQueueCounts = () => fetchQueueStatus()
+import { AlertTriangle, CheckCircle2, Clock, Hourglass } from "lucide-react"
+import { useQueueCounts } from "#/lib/queries"
 
 export function QueueBadge() {
-	const { data, error, isLoading } = useSWR<QueueCounts>(
-		QUEUE_STATUS_KEY,
-		fetchQueueCounts,
-		{
-			refreshInterval: 8_000,
-			dedupingInterval: 4_000,
-			revalidateOnFocus: false,
-		},
-	)
+	const { data, error, isLoading } = useQueueCounts()
 
 	if (isLoading) {
 		return (
@@ -99,10 +80,10 @@ export function QueueBadge() {
  * Kept distinct from QueueBadge on purpose: see the note at the top of the file.
  */
 export function QueueStrip() {
-	const { data } = useSWR<QueueCounts>(QUEUE_STATUS_KEY, fetchQueueCounts, {
-		refreshInterval: 6_000,
-		revalidateOnFocus: false,
-	})
+	// Same hook as the badge, so one cache entry and one poller serve both. The
+	// Next version gave the strip a faster 6s interval; see useQueueCounts for why
+	// that is now a single constant rather than two schedules.
+	const { data } = useQueueCounts()
 
 	if (!data) return null
 

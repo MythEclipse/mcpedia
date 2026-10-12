@@ -34,12 +34,11 @@
  */
 import type { DocumentMeta, ExportData, SectionInfo } from "@mcpedia/types"
 import { RPC_BASE, rpcCall } from "./api-client"
-import { aggregateTags, flattenQueueCounts, searchHref } from "./shaping"
 import type { QueueCounts, TagCount } from "./shaping"
+import { aggregateTags, flattenQueueCounts, searchHref } from "./shaping"
 
-export { searchHref }
 export type { QueueCounts, TagCount }
-export { aggregateTags, flattenQueueCounts }
+export { aggregateTags, flattenQueueCounts, searchHref }
 
 /** documents.list — published documents with metadata (no bodies). */
 export async function fetchDocuments(

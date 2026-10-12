@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest"
 import type { DocumentMeta } from "@mcpedia/types"
+import { describe, expect, it } from "vitest"
 import {
 	countUniqueTags,
 	recentDocuments,
