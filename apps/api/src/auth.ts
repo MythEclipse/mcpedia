@@ -77,6 +77,23 @@ function buildAuth(secret: string) {
 	return betterAuth({
 		secret,
 		baseURL: baseURL(),
+		// better-auth derives trustedOrigins from baseURL when the option is
+		// absent, so BETTER_AUTH_URL alone would trust exactly ONE hostname.
+		//
+		// Both of these serve the same app from the same Caddy blocks:
+		// mcpedia.asepharyana.my.id is an explicit alias of wiki. — same SPA,
+		// same API on :4020, same session cookie name. So a session established on
+		// one must be honoured on the other, or the user signs in successfully and
+		// the very next navigation reports them as signed out. That is worse than
+		// a hard failure: nothing errors, the cookie is simply ignored.
+		//
+		// baseURL stays first because better-auth uses it to build absolute
+		// callback URLs; this list is an addition, not a replacement.
+		trustedOrigins: [
+			baseURL(),
+			"https://wiki.asepharyana.my.id",
+			"https://mcpedia.asepharyana.my.id",
+		],
 		// Single-tenant email/password. No social providers are configured, so the
 		// only way to obtain an `account` row is credential sign-up.
 		emailAndPassword: {
