@@ -1,3 +1,4 @@
+import type { SearchHitSummary } from "./client"
 import { McpediaClient } from "./client"
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET ?? ""
@@ -54,7 +55,7 @@ async function main() {
 	// Show available tools on startup
 	const tools = await client.listTools()
 	console.log(
-		`Available tools (${tools.length}): ${tools.map((t: any) => t.name).join(", ")}`,
+		`Available tools (${tools.length}): ${tools.map((t) => t.name).join(", ")}`,
 	)
 	console.log("")
 
@@ -82,13 +83,13 @@ async function main() {
 				case "/tools": {
 					const t = await client.listTools()
 					console.log(
-						t.map((x: any) => `  ${x.name}: ${x.description || ""}`).join("\n"),
+						t.map((x) => `  ${x.name}: ${x.description || ""}`).join("\n"),
 					)
 					break
 				}
 				case "/resources": {
 					const r = await client.listResources()
-					console.log(r.map((x: any) => `  ${x.uri}`).join("\n"))
+					console.log(r.map((x) => `  ${x.uri}`).join("\n"))
 					break
 				}
 				case "/search": {
@@ -119,7 +120,7 @@ async function main() {
 					if (!arg) throw new Error("Usage: /related <slug>")
 					const rel = await client.getRelated(arg)
 					console.log(
-						rel.map((x: any) => `  ${x.title} (${x.slug})`).join("\n"),
+						rel.map((x) => `  ${x.title ?? x.slug} (${x.slug})`).join("\n"),
 					)
 					break
 				}
@@ -155,6 +156,7 @@ async function main() {
 				case "/quit":
 					await client.disconnect()
 					process.exit(0)
+					break
 				default:
 					console.log(`Unknown command: ${name}. Type /help for commands.`)
 			}
@@ -173,7 +175,7 @@ async function main() {
 	}
 }
 
-function printHits(hits: any[]) {
+function printHits(hits: SearchHitSummary[]) {
 	if (!hits.length) {
 		console.log("No results.")
 		return
@@ -191,7 +193,7 @@ function printHits(hits: any[]) {
 		console.log(`  ${title} ${score}`)
 		console.log(`    /${slug}  ·  ${section}`)
 		if (h.snippet || h.doc?.excerpt) {
-			const snip = (h.snippet || h.doc?.excerpt).slice(0, 120)
+			const snip = (h.snippet ?? h.doc?.excerpt ?? "").slice(0, 120)
 			console.log(`    ${snip}...`)
 		}
 	}

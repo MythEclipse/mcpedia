@@ -1,6 +1,72 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
+import type { Resource } from "@modelcontextprotocol/sdk/types.js"
 import { createMcpServer } from "../src/index"
+
+/** A keyword/hybrid search hit, as the smoke assertions read it. */
+interface SearchHit {
+	doc: { slug: string; title?: string }
+}
+
+/** A semantic chunk hit. */
+interface SemanticHit {
+	slug: string
+	score: number
+}
+
+/** The `content` array off a tool result, if it has one. */
+function blocksOf(result: unknown): unknown[] {
+	if (typeof result !== "object" || result === null) return []
+	const { content } = result as { content?: unknown }
+	return Array.isArray(content) ? content : []
+}
+
+/** The `contents` array off a resource read, if it has one. */
+function resourceBlocksOf(result: unknown): unknown[] {
+	if (typeof result !== "object" || result === null) return []
+	const { contents } = result as { contents?: unknown }
+	return Array.isArray(contents) ? contents : []
+}
+
+/** The text body of the first block, or "" when there is none. */
+function textOf(blocks: unknown[]): string {
+	const first: unknown = blocks[0]
+	if (typeof first !== "object" || first === null) return ""
+	const { text } = first as { text?: unknown }
+	return typeof text === "string" ? text : ""
+}
+
+/** The text body of a tool result. */
+function toolText(result: unknown): string {
+	return textOf(blocksOf(result))
+}
+
+/**
+ * Parse a tool result's text body as JSON.
+ *
+ * Generic so each call site keeps the concrete shape it immediately indexes
+ * into, instead of re-asserting `unknown` at nine separate places.
+ */
+function toolJson<T>(result: unknown): T {
+	return JSON.parse(toolText(result)) as T
+}
+
+/** The text body of a resource read. */
+function resourceText(result: unknown): string {
+	return textOf(resourceBlocksOf(result))
+}
+
+/**
+ * The first element, or throw.
+ *
+ * Every caller has already asserted the array is non-empty; this keeps that
+ * guarantee in the type instead of scattering `!` across the smoke assertions.
+ */
+function first<T>(items: readonly T[]): T {
+	const head: T | undefined = items[0]
+	if (head === undefined) throw new Error("expected a non-empty array")
+	return head
+}
 
 async function main() {
 	const server = createMcpServer()
@@ -39,19 +105,19 @@ async function main() {
 		name: "search_documents",
 		arguments: { query: "websocket", limit: 10 },
 	})
-	const hits = JSON.parse((search.content as any)[0].text)
+	const hits = toolJson<SearchHit[]>(search)
 	if (!Array.isArray(hits) || hits.length < 1) {
 		throw new Error("search_documents returned no hits")
 	}
 	console.log(`search_documents("websocket") => ${hits.length} hits`)
-	console.log("  top:", hits[0].doc.slug, hits[0].doc.title)
+	console.log("  top:", first(hits).doc.slug, first(hits).doc.title)
 
 	// 3) get_document
 	const get = await client.callTool({
 		name: "get_document",
 		arguments: { slug: "docs/websocket/contract" },
 	})
-	const body = (get.content as any)[0].text
+	const body = toolText(get)
 	if (!body.includes("WebSocket Contract")) {
 		throw new Error("get_document returned unexpected body")
 	}
@@ -66,7 +132,7 @@ async function main() {
 		name: "get_document",
 		arguments: { slug: "nope/missing" },
 	})
-	if (!(missing as any).isError) {
+	if (!missing.isError) {
 		throw new Error("get_document should report isError for missing doc")
 	}
 	console.log("get_document('nope/missing') => isError ok")
@@ -76,7 +142,7 @@ async function main() {
 		name: "list_documents",
 		arguments: { section: "docs" },
 	})
-	const docs = JSON.parse((list.content as any)[0].text)
+	const docs = toolJson<Array<{ slug: string }>>(list)
 	if (docs.length !== 4)
 		throw new Error(`list_documents docs != 4 (got ${docs.length})`)
 	console.log("list_documents(section=docs) =>", docs.length, "doc")
@@ -86,12 +152,12 @@ async function main() {
 		name: "semantic_search",
 		arguments: { query: "websocket connection closing unexpectedly", limit: 5 },
 	})
-	const semHits = JSON.parse((sem.content as any)[0].text)
+	const semHits = toolJson<SemanticHit[]>(sem)
 	if (!Array.isArray(semHits) || semHits.length < 1) {
 		throw new Error("semantic_search returned no hits")
 	}
 	console.log(
-		`semantic_search => ${semHits.length} chunks, top: ${semHits[0].slug}@${semHits[0].score.toFixed(3)}`,
+		`semantic_search => ${semHits.length} chunks, top: ${first(semHits).slug}@${first(semHits).score.toFixed(3)}`,
 	)
 
 	// 7) hybrid_search
@@ -99,17 +165,17 @@ async function main() {
 		name: "hybrid_search",
 		arguments: { query: "websocket timeout debugging", limit: 5 },
 	})
-	const hybHits = JSON.parse((hyb.content as any)[0].text)
+	const hybHits = toolJson<SearchHit[]>(hyb)
 	if (!Array.isArray(hybHits) || hybHits.length < 1) {
 		throw new Error("hybrid_search returned no hits")
 	}
 	console.log(
-		`hybrid_search => ${hybHits.length} docs, top: ${hybHits[0].doc.slug}`,
+		`hybrid_search => ${hybHits.length} docs, top: ${first(hybHits).doc.slug}`,
 	)
 
 	// 8) resources: list
 	const resList = await client.listResources()
-	const resNames = resList.resources.map((r: any) => r.name).sort()
+	const resNames = resList.resources.map((r: Resource) => r.name).sort()
 	console.log("resources:", resNames.join(", "))
 	if (!resNames.includes("mcpedia-docs-list")) {
 		throw new Error("expected mcpedia-docs-list resource")
@@ -117,7 +183,7 @@ async function main() {
 
 	// 9) resource: read the docs list (must not throw, returns JSON content)
 	const readList = await client.readResource({ uri: "mcpedia://docs" })
-	const listText = (readList.contents as any)[0].text
+	const listText = resourceText(readList)
 	if (!listText.includes("docs/websocket/contract")) {
 		throw new Error("mcpedia://docs did not list the websocket contract doc")
 	}
@@ -127,13 +193,13 @@ async function main() {
 	const readDoc = await client.readResource({
 		uri: "mcpedia://docs/docs/websocket/contract",
 	})
-	const docText = (readDoc.contents as any)[0].text
+	const docText = resourceText(readDoc)
 	if (!docText.includes("WebSocket Contract")) {
 		throw new Error("mcpedia://docs/{slug} returned unexpected body")
 	}
 	console.log("readResource(mcpedia://docs/docs/websocket/contract) => ok")
 
-	const readRev = await client.readResource({
+	await client.readResource({
 		uri: "mcpedia://docs/docs/websocket/contract/revisions",
 	})
 	console.log("readResource(.../revisions) => ok")

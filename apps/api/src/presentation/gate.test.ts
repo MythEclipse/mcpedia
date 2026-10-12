@@ -1,7 +1,7 @@
-import { test, expect, vi, beforeEach } from "vitest"
-import { createApp } from "../app"
+import type { Hono } from "hono"
+import { beforeEach, expect, test, vi } from "vitest"
 import type { ApiDeps } from "../app"
-import { Hono } from "hono"
+import { createApp } from "../app"
 
 const fakeQueue = {
 	getWaitingCount: () => Promise.resolve(0),
@@ -18,6 +18,29 @@ const coreCalls = vi.hoisted(() => ({
 	restoreRevision: [] as unknown[][],
 }))
 
+/**
+ * The write handlers now resolve the caller's identity so they can stamp the
+ * audit trail, which means `sessionLoader` runs on every write. `sessionLoader`
+ * calls `getSessionForRequest` — stubbing `getAuth` would leave the real lookup
+ * running, and its rejection (no database, no trusted origin) is a plain Error
+ * that `mapAppErrors` cannot classify, so it surfaced as a 500 on the SUCCESS
+ * path. These tests are about the secret gate, so the session is always absent
+ * here: the gate must accept the secret without ever needing one.
+ */
+const sessionState = vi.hoisted(() => ({ loads: 0 }))
+
+vi.mock("../auth", async () => {
+	const actual = await vi.importActual<typeof import("../auth")>("../auth")
+	return {
+		...actual,
+		getSessionForRequest: async () => {
+			sessionState.loads++
+			return null
+		},
+		isAdminRequest: async () => false,
+	}
+})
+
 vi.mock("@mcpedia/queue", () => ({
 	getQueue: () => fakeQueue,
 	enqueueFullIndex: async () => ({ id: "full" }),
@@ -25,33 +48,132 @@ vi.mock("@mcpedia/queue", () => ({
 	INDEX_QUEUE: "mcpedia-index",
 }))
 
-vi.mock("@mcpedia/core", () => ({
-	createDocument: (...a: unknown[]) => {
-		coreCalls.createDocument.push(a)
-		return Promise.resolve({ slug: "docs/test" })
-	},
-	updateDocument: (...a: unknown[]) => {
-		coreCalls.updateDocument.push(a)
-		return Promise.resolve({ slug: a[0] })
-	},
-	deleteDocument: (...a: unknown[]) => {
-		coreCalls.deleteDocument.push(a)
-		return Promise.resolve({ deleted: true })
-	},
-	restoreRevision: (...a: unknown[]) => {
-		coreCalls.restoreRevision.push(a)
-		return Promise.resolve({ restored: true })
-	},
-	listSections: () => Promise.resolve([]),
-	listDocuments: () => Promise.resolve([]),
-	listRevisions: () => Promise.resolve([]),
-	getDocument: () => Promise.resolve(null),
-	getRelated: () => Promise.resolve([]),
-	getRevision: () => Promise.resolve(null),
-	classifyPath: () => "none",
-	extractFoldersForSection: () => [],
-	getExportDocuments: () => Promise.resolve({ summary: {}, documents: [] }),
-}))
+vi.mock("@mcpedia/core", async () => {
+	// `asAppError` is spread in from the REAL module rather than stubbed. The
+	// error-mapping middleware calls it on every thrown value, so a mock that
+	// omits it makes the property access itself throw ("No asAppError export is
+	// defined on the @mcpedia/core mock") and every typed status collapses to a
+	// 500. Reusing the genuine implementation keeps the test exercising the same
+	// narrowing that production does.
+	const real =
+		await vi.importActual<typeof import("@mcpedia/core")>("@mcpedia/core")
+
+	/**
+	 * Built as a named object BEFORE it is returned.
+	 *
+	 * The composition-root fakes delegate to the legacy stubs by name, and inside
+	 * an object literal a property reference resolves to a local binding — not to
+	 * a sibling key. `createDocument(...)` in that position is a ReferenceError
+	 * for an undeclared identifier, which surfaces as an unhandled 500 on every
+	 * request rather than a test failure that names the problem.
+	 */
+	const api = {
+		asAppError: real.asAppError,
+		// `requireRole` raises its refusals with these. A mock that omits them
+		// makes the property access itself throw — "[vitest] No 'unauthorized'
+		// export is defined on the @mcpedia/core mock" — and because that is a
+		// plain Error rather than a branded AppError it escapes `mapAppErrors`
+		// as a genuine 500. Every "refused -> 401" assertion then failed with a
+		// status that says nothing about authorization.
+		forbidden: real.forbidden,
+		unauthorized: real.unauthorized,
+		conflict: real.conflict,
+		notFound: real.notFound,
+		badRequest: real.badRequest,
+		createDocument: (...a: unknown[]) => {
+			coreCalls.createDocument.push(a)
+			// Reserved slugs stand in for specific database states so the
+			// typed-error assertions below reach the mapper instead of a stub.
+			// "docs/boom" raises an UNBRANDED error — a driver fault, not ours —
+			// which must stay a generic 500.
+			if (a[0] && typeof a[0] === "object") {
+				const slug = (a[0] as { slug?: string }).slug
+				if (slug === "docs/taken") {
+					return Promise.reject(
+						real.conflict(`document already exists at slug: ${slug}`),
+					)
+				}
+				if (slug === "docs/boom") {
+					return Promise.reject(new Error("connect ECONNREFUSED 10.0.0.5:5432"))
+				}
+				if (slug === "../etc/passwd") {
+					return Promise.reject(real.badRequest(`invalid slug: ${slug}`))
+				}
+			}
+			return Promise.resolve({ slug: "docs/test" })
+		},
+		updateDocument: (...a: unknown[]) => {
+			coreCalls.updateDocument.push(a)
+			if (a[0] === "docs/gone") {
+				return Promise.reject(
+					real.notFound(`document not found: ${a[0] as string}`),
+				)
+			}
+			return Promise.resolve({ slug: a[0] })
+		},
+		deleteDocument: (...a: unknown[]) => {
+			coreCalls.deleteDocument.push(a)
+			return Promise.resolve({ deleted: true })
+		},
+		restoreRevision: (...a: unknown[]) => {
+			coreCalls.restoreRevision.push(a)
+			return Promise.resolve({ restored: true })
+		},
+		listSections: () => Promise.resolve([]),
+		listDocuments: () => Promise.resolve([]),
+		listRevisions: () => Promise.resolve([]),
+		getDocument: () => Promise.resolve(null),
+		getRelated: () => Promise.resolve([]),
+		getRevision: () => Promise.resolve(null),
+		classifyPath: () => "none",
+		extractFoldersForSection: () => [],
+		getExportDocuments: () => Promise.resolve({ summary: {}, documents: [] }),
+
+		/**
+		 * The routers call the COMPOSITION ROOT, not these legacy wrappers.
+		 *
+		 * Both are faked, and both record into the SAME `coreCalls` buckets,
+		 * because the reserved-slug behaviour above is the point of this file and
+		 * duplicating it would let the two fakes drift.
+		 *
+		 * The actor is DELIBERATELY NOT forwarded into the legacy stub. It is a
+		 * factory argument, not part of the use case's own signature, and splicing
+		 * it in would shift every positional index — the reserved-slug checks read
+		 * `a[0]` and would then be inspecting the actor. The actor's own
+		 * propagation is asserted in session-gate.test.ts, which is where a
+		 * session exists; these tests are about the secret gate, where none does.
+		 */
+		documentUseCases: () => ({
+			create: (input: unknown) =>
+				(api.createDocument as (...x: unknown[]) => Promise<unknown>)(input),
+			update: (slug: string, input: unknown) =>
+				(api.updateDocument as (...x: unknown[]) => Promise<unknown>)(
+					slug,
+					input,
+				),
+			remove: (slug: string) =>
+				(api.deleteDocument as (...x: unknown[]) => Promise<unknown>)(slug),
+			get: () => Promise.resolve(null),
+			list: () => Promise.resolve([]),
+			related: () => Promise.resolve([]),
+			sections: () => Promise.resolve([]),
+			folderInfo: () => Promise.resolve({}),
+			export: () => Promise.resolve({ summary: {}, documents: [] }),
+		}),
+		revisionUseCases: () => ({
+			list: () => Promise.resolve([]),
+			get: () => Promise.resolve(null),
+			restore: (id: string) =>
+				(api.restoreRevision as (...x: unknown[]) => Promise<unknown>)(id),
+			snapshot: () => Promise.resolve(false),
+		}),
+		indexingUseCases: () => ({
+			indexFile: () => Promise.resolve({ indexed: true, chunks: 0 }),
+			runFullIndex: () => Promise.resolve({ indexed: 0, chunks: 0 }),
+		}),
+	}
+	return api
+})
 
 function deps(secret: string): ApiDeps {
 	return { queue: fakeQueue, webhookSecret: secret }
@@ -71,7 +193,7 @@ function rpc(app: Hono, procedure: string, input: unknown, secret?: string) {
 
 let SECRET: string
 beforeEach(() => {
-	SECRET = "secret-" + Math.random().toString(36).slice(2)
+	SECRET = `secret-${Math.random().toString(36).slice(2)}`
 	for (const k of Object.keys(coreCalls) as Array<keyof typeof coreCalls>) {
 		coreCalls[k].length = 0
 	}
@@ -228,4 +350,64 @@ test("unknown procedure path -> 404", async () => {
 	const app = await createApp(deps(SECRET))
 	const res = await app.request("/rpc/no/such/procedure", { method: "POST" })
 	expect(res.status).toBe(404)
+})
+
+// ---------------------------------------------------------------------------
+// Typed application errors carry their status to the wire.
+//
+// The mock above throws REAL AppErrors so these exercise the actual mapping in
+// presentation/middleware.ts -> error-mapping.ts, not a reimplementation of it.
+// Before the typed-error change every one of these was an opaque 500.
+// ---------------------------------------------------------------------------
+
+test("a duplicate document -> 409 CONFLICT, not a 500", async () => {
+	const app = await createApp(deps(SECRET))
+	const res = await rpc(
+		app,
+		"documents/create",
+		{ slug: "docs/taken", title: "T", section: "docs", body: "# x" },
+		SECRET,
+	)
+	expect(res.status).toBe(409)
+	expect(await res.json()).toMatchObject({
+		json: { code: "CONFLICT", status: 409 },
+	})
+})
+
+test("updating a missing document -> 404 NOT_FOUND", async () => {
+	const app = await createApp(deps(SECRET))
+	const res = await rpc(app, "documents/update", { slug: "docs/gone" }, SECRET)
+	expect(res.status).toBe(404)
+	expect(await res.json()).toMatchObject({
+		json: { code: "NOT_FOUND", status: 404 },
+	})
+})
+
+test("an invalid slug -> 400 BAD_REQUEST from the domain layer", async () => {
+	const app = await createApp(deps(SECRET))
+	const res = await rpc(
+		app,
+		"documents/create",
+		{ slug: "../etc/passwd", title: "T", section: "docs", body: "# x" },
+		SECRET,
+	)
+	expect(res.status).toBe(400)
+	expect(await res.json()).toMatchObject({ json: { code: "BAD_REQUEST" } })
+})
+
+test("an unexpected internal fault still reports 500 without leaking details", async () => {
+	// A foreign exception — no brand, so the mapper must leave it alone.
+	const app = await createApp(deps(SECRET))
+	const res = await rpc(
+		app,
+		"documents/create",
+		{ slug: "docs/boom", title: "T", section: "docs", body: "# x" },
+		SECRET,
+	)
+	expect(res.status).toBe(500)
+	const body = await res.text()
+	// The specific cause must NOT reach the caller...
+	expect(body).not.toContain("documents/boom")
+	// ...but oRPC's generic message is still there, so the shape is unchanged.
+	expect(body).toContain("INTERNAL_SERVER_ERROR")
 })

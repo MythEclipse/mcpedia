@@ -1,6 +1,22 @@
-import { test, expect, vi } from "vitest"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
+import { expect, test, vi } from "vitest"
+
+/**
+ * The text body of a tool result.
+ *
+ * `content` is a union of block kinds; only text blocks carry `text`, so this
+ * narrows once here rather than asserting `any[]` at each call site.
+ */
+function resultText(result: unknown): string {
+	if (typeof result !== "object" || result === null) return ""
+	const { content } = result as { content?: unknown }
+	if (!Array.isArray(content)) return ""
+	const first: unknown = content[0]
+	if (typeof first !== "object" || first === null) return ""
+	const { text } = first as { text?: unknown }
+	return typeof text === "string" ? text : ""
+}
 
 // -----------------------------------------------------------------------
 // Mock the heavy dependencies so the MCP server is fully testable without
@@ -109,12 +125,12 @@ test("index_document WITH auth secret -> enqueues job", async () => {
 		arguments: { slug: "docs/foo" },
 	})
 	expect(res.isError).toBeFalsy()
-	const text = (res.content as any[])[0].text
+	const text = resultText(res)
 	const parsed = JSON.parse(text)
 	expect(parsed.ok).toBe(true)
 	expect(parsed.jobId).toBeTruthy()
 	expect(calls.enqueueIndexDoc).toHaveLength(1)
-	expect(calls.enqueueIndexDoc[0][0]).toBe("docs/foo.md")
+	expect(calls.enqueueIndexDoc[0]?.[0] ?? "").toBe("docs/foo.md")
 	await client.close()
 	await server.close()
 })
@@ -155,7 +171,7 @@ test("restore_revision without auth -> isError; with auth -> calls core.restoreR
 	})
 	expect(res.isError).toBeFalsy()
 	expect(calls.restoreRevision).toHaveLength(1)
-	expect(calls.restoreRevision[0][0]).toBe("rev-123")
+	expect(calls.restoreRevision[0]?.[0] ?? "").toBe("rev-123")
 	await c2.close()
 	await s2.close()
 })
@@ -164,7 +180,7 @@ test("queue_status is public (no auth needed)", async () => {
 	const { client, server } = await connect() // no secret
 	const res = await client.callTool({ name: "queue_status", arguments: {} })
 	expect(res.isError).toBeFalsy()
-	const text = (res.content as any[])[0].text
+	const text = resultText(res)
 	expect(JSON.parse(text).queue).toBe("mcpedia-index")
 	await client.close()
 	await server.close()
@@ -200,7 +216,7 @@ test("create_document with auth secret -> success", async () => {
 		},
 	})
 	expect(res.isError).toBeFalsy()
-	const text = (res.content as any[])[0].text
+	const text = resultText(res)
 	const parsed = JSON.parse(text)
 	expect(parsed.ok).toBe(true)
 	await client.close()

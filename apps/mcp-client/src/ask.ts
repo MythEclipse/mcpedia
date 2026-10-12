@@ -14,6 +14,29 @@ import { McpediaClient } from "./client"
 
 const MCP_URL = process.env.MCP_URL ?? "https://mcp.asepharyana.my.id/mcp"
 
+/** The sections `createDocument` accepts. */
+const DOC_SECTIONS = ["docs", "writeups", "research", "notes"] as const
+type DocSection = (typeof DOC_SECTIONS)[number]
+
+/**
+ * Narrow a free-text `--section=` argument to a valid section.
+ *
+ * The CLI takes an arbitrary string, so this validates rather than asserting:
+ * an unrecognised value is rejected loudly instead of being forwarded to the
+ * server as a section that does not exist. Defaults to "docs", matching the
+ * previous `opts.section || "docs"`.
+ */
+function toDocSection(raw: string | undefined): DocSection {
+	if (raw === undefined || raw === "") return "docs"
+	const match = DOC_SECTIONS.find((s) => s === raw)
+	if (!match) {
+		throw new Error(
+			`Unknown section "${raw}". Expected one of: ${DOC_SECTIONS.join(", ")}`,
+		)
+	}
+	return match
+}
+
 async function main() {
 	const [, , command, ...args] = process.argv
 	if (!command) {
@@ -36,7 +59,7 @@ async function main() {
 				const tools = await client.listTools()
 				console.log(
 					JSON.stringify(
-						tools.map((t: any) => ({
+						tools.map((t) => ({
 							name: t.name,
 							description: t.description,
 						})),
@@ -95,7 +118,7 @@ async function main() {
 				const res = await client.createDocument({
 					slug: opts.slug || "",
 					title: opts.title || "Untitled",
-					section: (opts.section || "docs") as any,
+					section: toDocSection(opts.section),
 					body: opts.body || "",
 					tags: opts.tags ? opts.tags.split(",") : [],
 					author: opts.author,

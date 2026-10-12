@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 // Tests for the MCP client wrapper. Uses a fake Client that implements the
 // subset of methods McpediaClient uses, so no network/DB is needed.
@@ -6,6 +6,15 @@ import { describe, it, expect, vi } from "vitest"
 // Mock the SDK client to avoid real network connections.
 // vi.mock() is hoisted above the imports, so this fixture list has to be built
 // with vi.hoisted() or the mock factory would reference it before initialization.
+/** The argument shape McpediaClient passes to callTool. */
+interface CallToolRequest {
+	name: string
+	// McpediaClient always passes `arguments` (it defaults to `{}`), so this is
+	// required rather than optional: `noUncheckedIndexedAccess` would otherwise
+	// make every `args.slug` read in the fake an `unknown`.
+	arguments: Record<string, unknown>
+}
+
 const mockTools = vi.hoisted(() => [
 	{ name: "search_documents", description: "keyword search" },
 	{ name: "get_document", description: "get doc body" },
@@ -20,7 +29,7 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
 		listTools() {
 			return Promise.resolve({ tools: mockTools })
 		}
-		callTool(opts: any) {
+		callTool(opts: CallToolRequest) {
 			const { name, arguments: args } = opts
 			if (name === "get_document") {
 				return Promise.resolve({
@@ -51,7 +60,7 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
 				resources: [{ uri: "mcpedia://docs", mimeType: "application/json" }],
 			})
 		}
-		readResource({ uri }: any) {
+		readResource({ uri }: { uri: string }) {
 			return Promise.resolve({
 				contents: [{ uri, mimeType: "text/markdown", text: "# Test" }],
 			})
@@ -60,9 +69,7 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
 }))
 
 vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
-	StreamableHTTPClientTransport: class {
-		constructor(url: URL, opts?: any) {}
-	},
+	StreamableHTTPClientTransport: class {},
 }))
 
 const { McpediaClient } = await import("../src/client")
@@ -72,8 +79,8 @@ describe("McpediaClient", () => {
 		const client = await McpediaClient.connect("http://localhost:0/mcp")
 		const tools = await client.listTools()
 		expect(tools.length).toBe(4)
-		expect(tools.map((t: any) => t.name)).toContain("search_documents")
-		expect(tools.map((t: any) => t.name)).toContain("get_document")
+		expect(tools.map((t) => t.name)).toContain("search_documents")
+		expect(tools.map((t) => t.name)).toContain("get_document")
 		await client.disconnect()
 	})
 

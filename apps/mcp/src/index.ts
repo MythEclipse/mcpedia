@@ -1,32 +1,31 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
-import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js"
-import { z } from "zod"
+import { createHash, timingSafeEqual } from "node:crypto"
+import { WEBHOOK_SECRET } from "@mcpedia/config"
 import {
-	listDocuments,
-	listSections,
+	createDocument,
+	deleteDocument,
 	getDocument,
 	getRelated,
-	semanticSearch,
 	hybridSearch,
 	keywordSearch,
+	listDocuments,
 	listRevisions,
-	getRevision,
+	listSections,
 	restoreRevision,
-	readContentFile,
-	createDocument,
+	semanticSearch,
 	updateDocument,
-	deleteDocument,
 } from "@mcpedia/core"
 import {
-	enqueueIndexDoc,
 	enqueueFullIndex,
+	enqueueIndexDoc,
 	getQueue,
 	INDEX_QUEUE,
 } from "@mcpedia/queue"
-import { CONTENT_ROOT, WEBHOOK_SECRET } from "@mcpedia/config"
-import { createHash, timingSafeEqual } from "node:crypto"
-import { join } from "node:path"
+import {
+	McpServer,
+	ResourceTemplate,
+} from "@modelcontextprotocol/sdk/server/mcp.js"
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
+import { z } from "zod"
 
 // Write tools require the caller to supply `x-webhook-secret` matching the
 // configured WEBHOOK_SECRET. Read tools are open. `authSecret` is threaded from
