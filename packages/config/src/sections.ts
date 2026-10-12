@@ -60,7 +60,7 @@ export const SECTION_PRESETS: Record<
 	},
 }
 
-export function getSectionMeta(id: string, count?: number): SectionConfig {
+export function getSectionMeta(id: string, _count?: number): SectionConfig {
 	const cleanId = (id || "docs").toLowerCase().trim()
 	if (SECTION_PRESETS[cleanId]) {
 		return { id: cleanId, ...SECTION_PRESETS[cleanId] }

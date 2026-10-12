@@ -24,8 +24,12 @@ function readDotEnv(): Record<string, string> {
 	for (const line of readFileSync(dotEnv, "utf8").split("\n")) {
 		const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
 		if (!m) continue
-		const key = m[1]
-		let val = m[2]
+		// `noUncheckedIndexedAccess` widens a RegExpMatchArray element to
+		// `string | undefined` even though the pattern's two capture groups
+		// cannot fail to participate once `m` is non-null. Defaulting documents
+		// that rather than asserting it away.
+		const [, key = "", valRaw = ""] = m
+		let val = valRaw
 		if (
 			(val.startsWith('"') && val.endsWith('"')) ||
 			(val.startsWith("'") && val.endsWith("'"))
