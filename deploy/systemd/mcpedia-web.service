@@ -1,0 +1,32 @@
+[Unit]
+Description=MCPedia Web (native, Vite SPA)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# WorkingDirectory follows the payload, not a git checkout.
+#
+# It used to point at /home/code/mcpedia, a checkout that has since been deleted,
+# so this unit could not survive a restart even though the running process had
+# simply never been restarted since. A unit that cannot restart is not a unit.
+WorkingDirectory=/opt/mcpedia-web/share/mcpedia-web
+Environment=PORT=4016
+Environment=NODE_ENV=production
+# Same rule as the other three mcpedia units: secrets via bws-exec, and no
+# EnvironmentFile anywhere. A static SPA needs no secret, but the rule is worth
+# more than the exception -- one convention means the next unit authored here
+# cannot quietly reintroduce the deleted-.env dependency.
+#
+# The app name is `mcpedia`, not `mcpedia-web`: all mcpedia secrets carry the
+# `mcpedia_` prefix and bws-exec keys off that prefix.
+ExecStart=/usr/local/bin/bws-exec mcpedia /opt/mcpedia-web/bin/mcpedia-web
+Restart=always
+RestartSec=3
+User=code
+Group=code
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
