@@ -11,12 +11,17 @@
 set -euo pipefail
 
 SHA="${1:?usage: deploy-direct.sh <git-sha>}"
-REPO=/home/code/mcpedia
-PNPM=/home/code/.local/bin/pnpm
-# Explicit URL: the checkout's `origin` may point at a local mirror that lags
-# GitHub, and a deploy must land the SHA CI just tested, not a 10-minute-old
-# tip.
-REMOTE_URL="${MCPEDIA_REMOTE:-https://github.com/asepharyana/mcpedia.git}"
+
+# The payload CI built, and the unit definitions from the same checkout.
+#
+# These are the only two inputs. There is no clone, no pnpm install, no build:
+# this host is a deploy target, not a builder. That is what removes the
+# checkout, node_modules, tsx and the whole toolchain from the production host —
+# and with them the failure where the bundle running in production was compiled
+# against whatever happened to be in the lockfile at the moment, rather than
+# against the tree the gate verified.
+ARTIFACT_DIR="${ARTIFACT_DIR:?set ARTIFACT_DIR to the directory CI uploaded}"
+SYSTEMD_DIR="${SYSTEMD_DIR:-/tmp/mcpedia-systemd}"
 
 # ── Release layout ──────────────────────────────────────────────────────────
 # /opt/mcpedia-<svc>/releases/<sha>/ holds the payload for one SHA and `current`
@@ -52,69 +57,91 @@ UNITS=(mcpedia-api mcpedia-mcp mcpedia-worker mcpedia-web)
 release_dir()  { printf '%s/mcpedia-%s/releases/%s' "$ROOT" "$1" "$SHA"; }
 current_link() { printf '%s/mcpedia-%s/current' "$ROOT" "$1"; }
 
-cd "$REPO"
+# ── 1. Assert the payload before touching anything ──────────────────────────
+# Every failure below aborts while the previous release is still live and still
+# serving, so this is the cheapest possible place to catch a truncated upload or
+# a stale artifact.
+for required in \
+  "$ARTIFACT_DIR/api/index.js" \
+  "$ARTIFACT_DIR/api/migrate.js" \
+  "$ARTIFACT_DIR/mcp/http.js" \
+  "$ARTIFACT_DIR/worker/index.js" \
+  "$ARTIFACT_DIR/web/serve.mjs" \
+  "$ARTIFACT_DIR/web/index.html"
+do
+  [ -s "$required" ] || { echo "payload incomplete: $required" >&2; exit 1; }
+done
 
-# ── 1. Land the code ────────────────────────────────────────────────────────
-git fetch --quiet "$REMOTE_URL" "$SHA"
-git reset --hard --quiet FETCH_HEAD
-echo "checked out $(git rev-parse --short HEAD)"
+# The migration journal travels with the migrate bundle because drizzle reads it
+# from disk relative to that bundle. Its absence is NOT loud: the migrator finds
+# an empty folder and reports success while changing nothing, so the schema
+# silently stops tracking the code. Asserted here for that reason specifically.
+shopt -s nullglob
+migrations=("$ARTIFACT_DIR/api/drizzle/"*.sql)
+shopt -u nullglob
+[ "${#migrations[@]}" -gt 0 ] \
+  || { echo "payload has no migrations in api/drizzle — the schema would silently stop tracking the code" >&2; exit 1; }
+echo "payload ok: $(find "$ARTIFACT_DIR" -type f | wc -l) files, ${#migrations[@]} migration(s)"
 
-# ── 2. Dependencies ────────────────────────────────────────────────────────
-# Server-side install: node_modules must match the lockfile CI verified with
-# --frozen-lockfile, otherwise the bundle built here differs from the one the
-# gates saw.
-"$PNPM" install --frozen-lockfile
-
-# ── 3. Build everything BEFORE anything live is touched ─────────────────────
-# A failed build must leave the running services on their current payload.
-node scripts/build-bundles.mjs
-(cd apps/web && ./node_modules/.bin/vite build)
-
-# ── 3b. Apply pending migrations ────────────────────────────────────────────
-# The deploy path never ran migrations, so a schema change shipped the code
-# that reads a column the database does not have. The failure lands on the
-# first request that touches the new column, which is after the restart, which
-# is after the health probe that still passes — so the deploy reports success
-# and the site is broken until someone notices.
+# ── 2. Apply pending migrations ────────────────────────────────────────────
+# Before the swap, and as its own process, so a schema that cannot be migrated
+# aborts the deploy with the previous release still live.
 #
-# Running it HERE, between the build and the swap, means a migration that cannot
-# be applied aborts the deploy while the running services are still on the
-# previous payload. `set -e` does the aborting: a genuine failure exits non-zero
-# and the script stops before the swap in step 6.
-"$PNPM" --filter @mcpedia/db db:migrate
-
+# It used to run via `tsx apps/api/src/migrate.ts`, which needed a checkout, a
+# node_modules and tsx — the last reason this host had to be a build host. It is
+# now a bundle like every other service.
+#
+# DATABASE_URL comes from bws-exec exactly as the units get it, so the migrator
+# and the API can never be pointed at different databases.
+# bws-exec, not a hand-rolled `VAR=$(bws-env ...) node ...`.
+#
+# The units already run through bws-exec, and reusing it here means the migrator
+# and the API cannot be pointed at different databases by a typo in a shell
+# pipeline. It also keeps DATABASE_URL out of this script's own environment: the
+# value exists only inside the migrator's process, exactly like in production.
+echo "=== migrations ==="
+( cd "$ARTIFACT_DIR/api" && sudo /usr/local/bin/bws-exec mcpedia node migrate.js ) || {
+  echo "migration failed (exit $?) — previous release untouched" >&2
+  exit 1
+}
 echo "migrations applied"
 
-# ── 4. Assemble the release ────────────────────────────────────────────────
+# ── 3. Assemble the release ────────────────────────────────────────────────
 # Staged into releases/<sha>/ with nothing live touched, so any failure here
 # leaves production on the previous release and the half-built directory is not
 # reachable from `current`.
 for svc in "${SERVICES[@]}"; do
   rel="$(release_dir "$svc")"
-  rm -rf "$rel"
-  mkdir -p "$rel/dist"
+  sudo rm -rf "$rel"
+  sudo mkdir -p "$rel/dist"
 
   case "$svc" in
-    api)    src="$REPO/apps/api/dist/index.js" ;;
-    mcp)    src="$REPO/apps/mcp/dist/http.js" ;;
-    worker) src="$REPO/apps/worker/dist/index.js" ;;
-    web)    src="$REPO/apps/web/dist" ;;
+    api)    src="$ARTIFACT_DIR/api" ;;
+    mcp)    src="$ARTIFACT_DIR/mcp" ;;
+    worker) src="$ARTIFACT_DIR/worker" ;;
+    web)    src="$ARTIFACT_DIR/web" ;;
   esac
 
-  if [ -d "$src" ]; then
-    cp -a "$src/." "$rel/dist/"
+  # The artifact folder for a service holds exactly what that service runs. For
+  # api/mcp/worker that is a single bundle, which lands at dist/<file> because
+  # the launcher execs `node dist/<file>`.
+  #
+  # web is the exception and the copy is deliberately split. serve.mjs resolves
+  # its root as `./dist` relative to its OWN module URL (apps/web/serve.mjs:37),
+  # so the script has to sit at the release ROOT with dist/ beside it. Copying
+  # the whole web folder into dist/ puts the script one level too deep and the
+  # service answers 500 with "no build found at .../dist/dist"; putting it at the
+  # root and serving from cwd-relative dist is the shape serve.mjs was written for.
+  if [ "$svc" = "web" ]; then
+    sudo cp -a "$src/." "$rel/dist/"
+    sudo mv "$rel/dist/serve.mjs" "$rel/serve.mjs"
   else
-    install -m 0644 "$src" "$rel/dist/$(basename "$src")"
+    sudo cp -a "$src/." "$rel/dist/"
   fi
   echo "assembled $rel"
 done
 
-# The web service serves its dist through a stdlib static server that does not
-# live in node_modules, so it ships with the release. Kept out of the launcher so
-# the launcher stays a bare exec with no file to keep in sync.
-install -m 0644 "$REPO/apps/web/serve.mjs" "$(release_dir web)/serve.mjs"
-
-# ── 5. Install the unit definitions ─────────────────────────────────────────
+# ── 4. Install the unit definitions ─────────────────────────────────────────
 # The units used to live only on the host, and they pointed WorkingDirectory at
 # /home/code/mcpedia — a checkout that has since been deleted. Nothing about the
 # running process revealed it: nothing restarts a running process, so
@@ -126,21 +153,26 @@ install -m 0644 "$REPO/apps/web/serve.mjs" "$(release_dir web)/serve.mjs"
 # definition a service runs under is reviewable, diffable and rolled back with
 # the code, instead of being host state that survives every deploy unchanged. A
 # unit fix that lives only in /etc cannot be reviewed and will be lost.
-for unit in "${UNITS[@]}"; do
-  src="$REPO/deploy/systemd/$unit.service"
+for unit in mcpedia-api mcpedia-mcp mcpedia-worker mcpedia-web; do
+  src="$SYSTEMD_DIR/$unit.service"
   if [ ! -f "$src" ]; then
     echo "missing $src — refusing to deploy against unknown unit definitions" >&2
     exit 1
   fi
   sudo install -m 0644 "$src" "/etc/systemd/system/$unit.service"
 done
-# The launcher is the executable ExecStart actually invokes. It was shipped in
-# the repo and installed on the host by hand while the script only ever restarted
-# it, so a checkout that changed a launcher deployed "successfully" and ran the
-# old one indefinitely with nothing in the output to suggest otherwise. The unit
-# says "run this binary"; the binary is half the contract.
+
+# The launcher is the executable ExecStart actually invokes. It was installed on
+# the host by hand while the script only ever restarted it, so a checkout that
+# changed a launcher deployed "successfully" and ran the old one indefinitely with
+# nothing in the output to suggest otherwise. The unit says "run this binary";
+# the binary is half the contract.
+#
+# It lives in the repo, not in the artifact, because it is not a build output —
+# and it is scp'd alongside deploy/systemd so the host still never checks out
+# anything.
 for svc in "${SERVICES[@]}"; do
-  src="$REPO/.launcher-mcpedia-$svc.sh"
+  src="$SYSTEMD_DIR/.launcher-mcpedia-$svc.sh"
   if [ ! -f "$src" ]; then
     echo "missing $src — refusing to deploy without its launcher" >&2
     exit 1
@@ -150,20 +182,31 @@ done
 
 sudo systemctl daemon-reload
 
-# ── 6. Preflight, then flip ────────────────────────────────────────────────
-# Every unit must exec through current/. A unit still naming a concrete share/
-# directory would keep running the OLD payload while this script reported
-# success — the same failure mode as a unit left over from the previous release,
-# which is why it is checked rather than assumed.
+# ── 5. Preflight, then flip ────────────────────────────────────────────────
+# The unit must exec the launcher at /opt/mcpedia-<svc>/bin/, and that launcher
+# must resolve `current` rather than a concrete release.
+#
+# Checking the ExecStart line for "current/" would be wrong: ExecStart names the
+# launcher, and it is the launcher that cds. What actually matters is that the
+# path between them is intact, so both halves are checked where each one lives.
+# A unit still pointing into the old share/ tree would keep serving the previous
+# payload while this script reported success — the same failure mode as a unit
+# left over from the previous release.
 for svc in "${SERVICES[@]}"; do
   exec_path="$(sudo systemctl show "mcpedia-$svc" -p ExecStart --value)"
   case "$exec_path" in
-    */mcpedia-$svc/current*) ;;
+    *"/opt/mcpedia-$svc/bin/mcpedia-$svc"*) ;;
     *)
-      echo "unit mcpedia-$svc does not exec through current/: ${exec_path:-<unknown>}" >&2
+      echo "unit mcpedia-$svc does not exec its launcher: ${exec_path:-<unknown>}" >&2
       exit 1
       ;;
   esac
+  launcher="/opt/mcpedia-$svc/bin/mcpedia-$svc"
+  [ -x "$launcher" ] || { echo "launcher missing: $launcher" >&2; exit 1; }
+  grep -q "cd /opt/mcpedia-$svc/current" "$launcher" \
+    || { echo "launcher $launcher does not resolve current/ — a deploy would restart the old release" >&2; exit 1; }
+  # And the symlink must actually point somewhere real before it is flipped.
+  [ -d "$ROOT/mcpedia-$svc/releases" ] || { echo "no releases/ for $svc" >&2; exit 1; }
 done
 
 for svc in "${SERVICES[@]}"; do
@@ -179,7 +222,7 @@ done
 
 sudo systemctl restart "${UNITS[@]}"
 
-# ── 7. Health ───────────────────────────────────────────────────────────────
+# ── 6. Health ───────────────────────────────────────────────────────────────
 # `systemctl restart` already waited for the units to be up; the HTTP probes
 # pace themselves (curl --retry) rather than sleeping on a guessed delay.
 fail=0
@@ -209,7 +252,7 @@ for unit in "${UNITS[@]}"; do
   [ "$state" = "active" ] || fail=1
 done
 
-# ── 8. Roll back on a failed probe ─────────────────────────────────────────
+# ── 7. Roll back on a failed probe ─────────────────────────────────────────
 # Only the symlinks go back. With releases/ the previous payload is still
 # sitting there untouched, so "roll back" is pointing `current` at it — there is
 # nothing to copy and no state to reconstruct, which is the entire reason for
@@ -237,7 +280,7 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
-# ── 9. Prune ────────────────────────────────────────────────────────────────
+# ── 8. Prune ────────────────────────────────────────────────────────────────
 # The live release is resolved THROUGH `current` rather than compared by name.
 # A name comparison misses the trailing slash that readlink prints, so it would
 # happily prune the release that is currently running — the bug that shipped

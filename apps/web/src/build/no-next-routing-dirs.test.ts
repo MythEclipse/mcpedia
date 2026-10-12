@@ -21,6 +21,31 @@ import { describe, expect, it } from "vitest"
 
 const WEB = join(dirname(new URL(import.meta.url).pathname), "../..")
 
+const deployScript = () => join(REPO, "scripts/deploy-direct.sh")
+
+/**
+ * The deploy script with its comments removed.
+ *
+ * Asserting on the raw text of a shell script that documents itself produces
+ * assertions about the documentation. This script says outright that it does
+ * "no clone, no pnpm install, no build", so a `not.toContain("pnpm install")`
+ * over the file as written fails on the sentence explaining the rule. Stripping
+ * comment lines leaves only what the script actually executes, which is the
+ * thing worth pinning.
+ */
+function executableLines(script: string): string {
+	return script
+		.split("\n")
+		.filter((line) => {
+			const trimmed = line.trim()
+			if (trimmed.startsWith("#")) return false
+			// A `#` inside quotes is data, not a comment; only a `#` that opens
+			// the line (or follows only whitespace) starts a comment.
+			return trimmed.length > 0
+		})
+		.join("\n")
+}
+
 describe("apps/web carries no Next.js residue", () => {
 	it("has no Next app/ tree or next.config", () => {
 		// If this fails, Next came back. Everything below is then advisory.
@@ -131,10 +156,59 @@ describe("the deploy path invokes no Next tooling", () => {
 		// moved to releases/<sha> + a `current` symlink, so the assertion follows
 		// the paths as they are actually referenced now: each is named on its own
 		// rather than as one side of a `src:dst` pair.
-		const deploy = readFileSync(join(REPO, "scripts/deploy-direct.sh"), "utf8")
-		expect(deploy).toContain("apps/web/dist")
-		expect(deploy).toContain("apps/web/serve.mjs")
+		// The deploy no longer names apps/web/dist: CI builds it and the host
+		// receives $ARTIFACT_DIR/web. What still has to hold is that the web
+		// payload is assembled from a web/ folder and that serve.mjs — which the
+		// launcher execs — ships with it.
+		const deploy = executableLines(readFileSync(deployScript(), "utf8"))
+		expect(deploy).toContain("$ARTIFACT_DIR/web")
+		expect(deploy).toContain("serve.mjs")
 		expect(existsSync(join(WEB, "serve.mjs"))).toBe(true)
+	})
+
+	it("keeps the production host out of the build", () => {
+		// The host used to clone the repo, install dependencies and run vite +
+		// esbuild on the VPS, which meant the bundle serving production was
+		// compiled against whatever the lockfile happened to say at deploy time
+		// rather than against the tree the gate verified. CI builds; the host only
+		// receives ARTIFACT_DIR.
+		//
+		// Asserted as a negative because the regression is invisible: a deploy
+		// that starts building again still succeeds, just slower and less
+		// reproducibly, so nothing else would fail.
+		// Comments are stripped: this script spells out what it does NOT do
+		// ("no clone, no pnpm install, no build"), so a raw-text assertion
+		// matches the explanation of the rule instead of the rule itself, and the
+		// negative case fails on the very comment that documents it.
+		const deploy = executableLines(readFileSync(deployScript(), "utf8"))
+		for (const step of [
+			"pnpm install",
+			"vite build",
+			"build-bundles",
+			"git fetch",
+			"git reset",
+			"db:migrate",
+		]) {
+			expect(deploy).not.toContain(step)
+		}
+		expect(deploy).toContain("ARTIFACT_DIR")
+	})
+
+	it("ships the migration journal beside the migrate bundle", () => {
+		// drizzle reads its .sql files from disk relative to the migrator's own
+		// module URL. esbuild inlines JavaScript but leaves every other file type
+		// behind, so a payload without the journal runs, finds an empty folder
+		// and reports SUCCESS while changing no schema at all. Both the bundler
+		// and the deploy script have to carry it explicitly.
+		const builder = readFileSync(
+			join(REPO, "scripts/build-bundles.mjs"),
+			"utf8",
+		)
+		expect(builder).toContain("apps/api/src/migrate.ts")
+		expect(builder).toContain("drizzle")
+
+		const deploy = executableLines(readFileSync(deployScript(), "utf8"))
+		expect(deploy).toContain("api/drizzle/")
 	})
 
 	it("launches the web payload through the current symlink, not a fixed release", () => {

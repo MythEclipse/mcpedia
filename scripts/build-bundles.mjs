@@ -20,6 +20,7 @@
 import { build } from "esbuild"
 import { fileURLToPath } from "node:url"
 import { dirname, resolve } from "node:path"
+import { copyFileSync, mkdirSync, readdirSync, rmSync } from "node:fs"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 
@@ -44,6 +45,21 @@ const BUNDLES = [
 		entry: "apps/worker/src/index.ts",
 		outfile: "apps/worker/dist/index.js",
 	},
+	{
+		// The migration worker, bundled like any other service.
+		//
+		// It used to run via `tsx apps/api/src/migrate.ts` on the host, which
+		// means the deploy needed a checkout AND node_modules AND tsx — the whole
+		// reason this host was still a builder. Bundling it removes the last
+		// source-at-runtime dependency from the deploy path.
+		//
+		// The .sql files are NOT bundled: drizzle reads them from disk at runtime
+		// through `new URL("../drizzle", import.meta.url)`. They are copied next
+		// to the bundle below so that path still resolves once deployed.
+		name: "migrate",
+		entry: "apps/api/src/migrate.ts",
+		outfile: "apps/api/dist/migrate.js",
+	},
 ]
 
 for (const { name, entry, outfile } of BUNDLES) {
@@ -63,3 +79,30 @@ for (const { name, entry, outfile } of BUNDLES) {
 	})
 	console.log(`built ${name} -> ${outfile}`)
 }
+
+// The drizzle migration journal, copied beside the migrate bundle.
+//
+// esbuild inlines JavaScript but leaves every other file type behind, and the
+// migrator resolves its SQL folder relative to its own module URL. Without this
+// copy the bundled migrator runs, finds no folder, and reports "no migrations
+// found" — which is a SUCCESS-shaped failure: the schema silently never
+// changes while the deploy prints "migrations applied".
+const DRIZZLE_SRC = resolve(root, "packages/db/drizzle")
+const DRIZZLE_DEST = resolve(root, "apps/api/dist/drizzle")
+
+rmSync(DRIZZLE_DEST, { recursive: true, force: true })
+mkdirSync(DRIZZLE_DEST, { recursive: true })
+let copied = 0
+for (const file of readdirSync(DRIZZLE_SRC)) {
+	if (!file.endsWith(".sql")) continue
+	copyFileSync(resolve(DRIZZLE_SRC, file), resolve(DRIZZLE_DEST, file))
+	copied += 1
+}
+if (copied === 0) {
+	// Loud, because the failure this prevents is silent.
+	throw new Error(
+		`no .sql files found in ${DRIZZLE_SRC} — the migrator would find an empty ` +
+			`folder and report success while changing nothing`,
+	)
+}
+console.log(`copied ${copied} migration(s) -> apps/api/dist/drizzle`)

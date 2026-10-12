@@ -109,22 +109,87 @@ jobs:
       - name: moon run :check
         run: moon run :check
 
+      # The payload the deploy job ships.
+      #
+      # Everything here is self-contained: the three service bundles plus the
+      # migration worker are esbuild output with every workspace import and
+      # npm dependency resolved in, and the SPA dist is static files. That is
+      # what makes the host able to deploy without a checkout, node_modules or a
+      # toolchain — the build stays here, where the gate just verified it.
+      #
+      # The .sql journal rides along with the migrate bundle because drizzle
+      # reads it from disk relative to the bundle; the assemble step on the host
+      # asserts it is present, because its absence fails as "no migrations
+      # found", which reads like success.
+      - name: Assemble release payload
+        run: |
+          set -euo pipefail
+          rm -rf payload && mkdir -p payload/api payload/mcp payload/worker payload/web
+
+          cp apps/api/dist/index.js    payload/api/index.js
+          cp apps/api/dist/migrate.js  payload/api/migrate.js
+          cp -a apps/api/dist/drizzle  payload/api/drizzle
+          cp apps/mcp/dist/http.js     payload/mcp/http.js
+          cp apps/worker/dist/index.js payload/worker/index.js
+          cp -a apps/web/dist/.        payload/web/
+          cp apps/web/serve.mjs        payload/web/serve.mjs
+
+          echo "payload:"
+          find payload -type f -printf '  %-44p %8s bytes\n' | sort
+
+      - name: Upload release payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcpedia-payload
+          path: payload/
+          retention-days: 7
+          if-no-files-found: error
+
   deploy:
     name: deploy to host
     needs: check
-    # NOT YET ARMED, AND DELIBERATELY SO.
-    #
-    # This machine is the production host, and pushes to main deploy straight
-    # into it. The branch carrying the kana-stack work (phase0-hotfixes) has not
-    # been merged, so the safest state for this workflow is "cannot deploy".
-    #
-    # To arm it, delete the line below. Re-enabling it means main deploys on
-    # every push again.
-    if: false
+    environment: production
+    # Serialised against itself. Two deploys racing on the same host would both
+    # assemble releases/ and flip `current`, and the loser's symlink flip would
+    # land after the winner's — leaving the older release running under a log
+    # that says the newer one shipped.
+    concurrency:
+      group: mcpedia-deploy
+      cancel-in-progress: false
+
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
+      # Checkout is required even though the artifact is built below: the deploy
+      # script and the unit files are scp'd from THIS checkout, never from the
+      # payload. A fix to either could never take effect if the copy that
+      # applies it were the stale one.
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Download release payload
+        uses: actions/download-artifact@v4
+        with:
+          name: mcpedia-payload
+          path: payload
+
+      - name: Assemble the payload
+        run: |
+          set -euo pipefail
+          # The service bundles and the SPA dist are self-contained, so they are
+          # what ships. Nothing else from the checkout is uploaded: node_modules,
+          # .moon and the workspace source stay on the runner, which is the whole
+          # point — the host no longer needs a toolchain to deploy.
+          test -f payload/api/index.js      || { echo "missing api bundle"; exit 1; }
+          test -f payload/mcp/http.js       || { echo "missing mcp bundle"; exit 1; }
+          test -f payload/worker/index.js   || { echo "missing worker bundle"; exit 1; }
+          test -f payload/api/migrate.js    || { echo "missing migrate bundle"; exit 1; }
+          test -f payload/api/drizzle/0000_military_wolfpack.sql \
+            || { echo "missing migration journal"; exit 1; }
+          test -f payload/web/serve.mjs     || { echo "missing SPA server"; exit 1; }
+          test -f payload/web/index.html    || { echo "missing SPA index"; exit 1; }
+          echo "payload:"
+          find payload -type f | sed 's/^/  /'
 
       - name: Setup SSH key
         env:
@@ -139,26 +204,46 @@ jobs:
           ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null 2>&1 || { echo "SSH key invalid"; exit 1; }
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Deploy via scripts/deploy-direct.sh
-        # The script is scp'd from THIS checkout, never run from
-        # /home/code/mcpedia: a fix to the deploy script could never take
-        # effect if the copy that applies it is the stale one.
-        #
-        # It applies pending migrations (step 3b, added in this change) before
-        # swapping any payload, so a schema that cannot be migrated aborts the
-        # deploy with the previous bundles still live.
+      - name: Copy payload and deploy script to host
+        env:
+          SSH_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" 'rm -rf /tmp/mcpedia-payload && mkdir -p /tmp/mcpedia-payload'
+          scp -q -r payload/. "$VPS_USER@$VPS_HOST:/tmp/mcpedia-payload/"
+          scp -q scripts/deploy-direct.sh "$VPS_USER@$VPS_HOST:/tmp/mcpedia-deploy.sh"
+          # The launchers are repo files rather than build output, but they still
+          # have to be on the host: ExecStart invokes them, and the host no longer
+          # checks anything out. They ride in the same directory as the units so
+          # the deploy can refuse to proceed if either is missing.
+          mkdir -p systemd-staging
+          cp -r deploy/systemd/. systemd-staging/
+          cp .launcher-mcpedia-*.sh systemd-staging/
+          scp -q -r systemd-staging "$VPS_USER@$VPS_HOST:/tmp/mcpedia-systemd"
+
+      - name: Deploy
+        env:
+          SSH_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
         run: |
           echo "=== Deploying ${{ github.sha }} to $VPS_HOST ==="
-          scp -q scripts/deploy-direct.sh "$VPS_USER@$VPS_HOST:/tmp/mcpedia-deploy.sh"
           ssh "$VPS_USER@$VPS_HOST" \
-            "sed -i 's/\r$//' /tmp/mcpedia-deploy.sh && bash /tmp/mcpedia-deploy.sh ${{ github.sha }}"
+            "sed -i 's/\r$//' /tmp/mcpedia-deploy.sh && \
+             ARTIFACT_DIR=/tmp/mcpedia-payload SYSTEMD_DIR=/tmp/mcpedia-systemd \
+             BWS_PROJECT_ID=27210268-6134-47b3-9a68-b4980079d1ec \
+             bash /tmp/mcpedia-deploy.sh ${{ github.sha }}"
           echo "deploy finished"
 
       - name: Verify services
+        env:
+          SSH_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
         run: |
           ssh "$VPS_USER@$VPS_HOST" \
             "for u in mcpedia-api mcpedia-mcp mcpedia-worker mcpedia-web; do \
                printf '  %-16s -> %s\n' \"\$u\" \"\$(systemctl is-active \$u)\"; \
+             done; \
+             echo '--- releases ---'; \
+             for s in api mcp worker web; do \
+               printf '  %-8s -> %s\n' \"\$s\" \"\$(basename \$(readlink -f /opt/mcpedia-\$s/current))\"; \
              done; \
              echo '--- HTTP ---'; \
              for url in http://127.0.0.1:4020/health http://127.0.0.1:4021/mcp http://127.0.0.1:4016/ https://wiki.asepharyana.my.id/; do \
