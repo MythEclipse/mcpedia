@@ -61,3 +61,9 @@ content/**/*.md
 
 # agent worktrees (created under .claude/worktrees by the Workflow tool)
 .claude/
+
+# pg_dump snapshots taken before a schema migration. A backup is a copy of
+# production data — it must never be committed, and it is deliberately not
+# gitignored silently: the reason is recorded here so the next person does not
+# re-add the path.
+.db-backups/
