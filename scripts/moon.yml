@@ -14,10 +14,8 @@ dependsOn:
   - 'config'
   - 'core'
   - 'db'
-  - 'embeddings'
   - 'parser'
   - 'queue'
-  - 'search'
 
 tasks:
   check:
