@@ -177,23 +177,22 @@ export function useSearchQuery(
 			queryKey: [...qk.search(trimmed, mode), limit],
 			queryFn: async () => {
 				const input = { q: trimmed, limit }
-				// The three procedures return different shapes; normalizeSearchHits
-				// is what turns them into one SearchResult the page renders.
-				if (mode === "keyword") {
-					return normalize(
-						mode,
-						await rpcCall(RPC_BASE, ["search", "keyword"] as const, input),
-					)
-				}
-				if (mode === "semantic") {
-					return normalize(
-						mode,
-						await rpcCall(RPC_BASE, ["search", "semantic"] as const, input),
-					)
-				}
+				// Three procedures still exist and are still called separately, but
+				// they no longer return three shapes: the API maps every mode onto
+				// document hits via hindsight, so one normalizer serves all of them.
+				//
+				// Which procedure is called is kept rather than collapsed into one,
+				// because the mode is part of the query key and of the MCP tool
+				// surface — collapsing it would change which procedure a caller
+				// reaches for, which is a product decision rather than a cleanup.
+				const procedure =
+					mode === "keyword"
+						? "keyword"
+						: mode === "semantic"
+							? "semantic"
+							: "hybrid"
 				return normalize(
-					mode,
-					await rpcCall(RPC_BASE, ["search", "hybrid"] as const, input),
+					await rpcCall(RPC_BASE, ["search", procedure] as const, input),
 				)
 			},
 			enabled: trimmed.length > 0,

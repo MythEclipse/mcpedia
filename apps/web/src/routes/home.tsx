@@ -149,8 +149,8 @@ export function HomePage() {
 					/>
 					<Metric
 						icon={<Search className="w-4 h-4" />}
-						value="RRF"
-						label="FTS + Cosine Vectors"
+						value="Hindsight"
+						label="Keyword + Semantic Recall"
 					/>
 					<Metric
 						icon={<Terminal className="w-4 h-4" />}

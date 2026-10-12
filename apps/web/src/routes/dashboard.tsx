@@ -119,10 +119,10 @@ export function DashboardView({ data }: { data: DashboardData }) {
 						Search
 					</div>
 					<div className="text-2xl font-bold font-mono text-[var(--text-primary)] mt-1">
-						RRF
+						Hindsight
 					</div>
 					<div className="text-[11px] text-[var(--text-dim)] font-mono">
-						FTS + Cosine Vectors
+						Keyword + Semantic Recall
 					</div>
 				</div>
 				<div className="p-4 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-xs">

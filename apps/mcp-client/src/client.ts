@@ -176,7 +176,7 @@ export class McpediaClient {
 		return parseJson<SearchHitSummary[]>(extractText(result), [], "array")
 	}
 
-	/** Hybrid search (FTS + semantic via RRF). */
+	/** Hybrid search over the hindsight bank. */
 	async hybridSearch(query: string, limit = 10): Promise<SearchHitSummary[]> {
 		const result = await this.callTool("hybrid_search", { query, limit })
 		return parseJson<SearchHitSummary[]>(extractText(result), [], "array")

@@ -6,8 +6,8 @@ import { HybridSearchInput, SearchInput, SemanticSearchInput } from "../schemas"
 /**
  * The three search modes. Public — reading is not a privileged operation.
  *
- * Each handler is a thin pass-through to @mcpedia/core; the search logic (FTS
- * tsvector, chunked embeddings, RRF fusion) stays where it is. The mapper is
+ * Each handler is a thin pass-through to @mcpedia/core; the search logic
+ * (hindsight recall, grouping, ranking) stays where it is. The mapper is
  * attached anyway so a typed error thrown from that layer reports its real status
  * rather than a blanket 500.
  */

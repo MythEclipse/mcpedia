@@ -56,8 +56,6 @@ export const SERVER_ONLY = [
 	"@mcpedia/core",
 	"@mcpedia/db",
 	"@mcpedia/queue",
-	"@mcpedia/search",
-	"@mcpedia/embeddings",
 	"@mcpedia/parser",
 ] as const
 

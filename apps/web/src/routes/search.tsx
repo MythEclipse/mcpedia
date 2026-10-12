@@ -114,8 +114,7 @@ export function SearchPage() {
 				</h1>
 				<p className="text-xs sm:text-sm text-[var(--text-muted)] leading-relaxed">
 					Query across knowledge documents and CTF writeups using PostgreSQL
-					Full-Text Search (tsvector), Cosine Vector Embeddings, or Reciprocal
-					Rank Fusion (RRF).
+					hindsight's own chunking, keyword arm, embeddings and reranking.
 				</p>
 			</div>
 

@@ -351,17 +351,28 @@ export function folderContents(
 /** Search modes, matching the three procedures the API exposes. */
 export type SearchMode = "hybrid" | "keyword" | "semantic"
 
+/**
+ * The three modes remain distinct in the API, but they are no longer three
+ * algorithms. All three are hindsight's recall against the same bank; what
+ * differs is the limit and the caller's intent, so the labels say what actually
+ * differs. Claiming "RRF", "tsvector" or "cosine" here was describing a stack
+ * that no longer exists.
+ */
 export const SEARCH_MODES: { id: SearchMode; label: string; desc: string }[] = [
 	{
 		id: "hybrid",
-		label: "Hybrid (RRF)",
-		desc: "Reciprocal Rank Fusion (FTS + Vector)",
+		label: "Hybrid",
+		desc: "hindsight — keyword + semantic, fused score",
 	},
-	{ id: "keyword", label: "Keyword (FTS)", desc: "PostgreSQL GIN tsvector" },
+	{
+		id: "keyword",
+		label: "Keyword",
+		desc: "hindsight — lexical signal weighted",
+	},
 	{
 		id: "semantic",
-		label: "Semantic Vector",
-		desc: "Cosine Similarity Embeddings",
+		label: "Semantic",
+		desc: "hindsight — meaning, not wording",
 	},
 ]
 
@@ -457,42 +468,28 @@ function fromDocumentHit(hit: {
 }
 
 /**
- * The semantic shape: a chunk hit, which carries no document record.
+ * Normalise a raw search response.
  *
- * Title and section are therefore derived from the slug, which is what the old
- * /api/search route did too — a semantic hit on a chunk has no better source.
- */
-function fromChunkHit(hit: {
-	slug: string
-	content: string
-	score: number
-}): SearchResult {
-	const parts = hit.slug.split("/")
-	return {
-		slug: hit.slug,
-		title: parts[parts.length - 1] ?? hit.slug,
-		section: parts[0] ?? "docs",
-		score: hit.score,
-		snippet: sanitizeSnippet(hit.content.slice(0, 160)),
-	}
-}
-
-/**
- * Normalise a raw search response for the mode that produced it.
+ * ## WHY THE MODE BRANCH IS GONE
  *
- * Kept as one function so the page never branches on mode to read fields: the
- * two upstream shapes are genuinely different (a document vs a chunk), and
- * conflating them here means the result list has exactly one shape to render.
+ * There used to be two upstream shapes: a document hit (keyword/hybrid) and a
+ * chunk hit (semantic), where a chunk carried no document record and its title
+ * had to be guessed from the slug. hindsight returns facts, and this adapter maps
+ * every fact back to its document, so all three modes now yield document hits
+ * with a real title and section.
+ *
+ * That means `fromChunkHit` — and with it the "derive the title from the slug"
+ * fallback — is deleted rather than left behind as dead code. Keeping a branch
+ * for a shape the backend no longer produces would invite someone to keep
+ * maintaining a guess that is now wrong for every caller.
+ *
+ * `fromDocumentHit` sanitises the snippet, and hindsight's snippet is a whole
+ * fact rather than a `ts_headline` passage. The `<mark>` highlighting the old
+ * stack produced is therefore gone; the shape and the sanitisation are not.
  */
-export function normalizeSearchHits(
-	mode: SearchMode,
-	hits: unknown,
-): SearchResult[] {
-	if (!Array.isArray(hits)) return []
-	if (mode === "semantic") {
-		return hits.map(fromChunkHit)
-	}
-	return hits.map(fromDocumentHit)
+export function normalizeSearchHits(_hits: unknown): SearchResult[] {
+	if (!Array.isArray(_hits)) return []
+	return _hits.map(fromDocumentHit)
 }
 
 /** Parse a `mode` search param, defaulting to hybrid for anything unrecognised. */

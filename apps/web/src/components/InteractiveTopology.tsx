@@ -93,7 +93,7 @@ const NODES: NodeDetail[] = [
 		metrics: [
 			{ label: "Architecture", value: "Monorepo Package" },
 			{ label: "Validation", value: "Strict Type Safety" },
-			{ label: "Ranking", value: "RRF Hybrid Fusion" },
+			{ label: "Ranking", value: "hindsight Fused Score" },
 		],
 		features: [
 			"Path classification & folder hierarchy",
@@ -105,14 +105,14 @@ const NODES: NodeDetail[] = [
 	{
 		id: "search-engine",
 		title: "Multi-Modal Search Engine",
-		badge: "SEARCH::RRF",
+		badge: "SEARCH::HINDSIGHT",
 		type: "core",
 		icon: Search,
-		desc: "Reciprocal Rank Fusion uniting Postgres Full-Text Search tsvectors with vector embeddings.",
+		desc: "Hindsight memory bank — its own chunking, keyword arm, embeddings and reranking behind one recall API.",
 		metrics: [
-			{ label: "FTS Algorithm", value: "tsvector + GIN" },
-			{ label: "Vector Search", value: "Cosine Similarity" },
-			{ label: "Fusion Constant", value: "k = 60" },
+			{ label: "Chunking", value: "Hindsight Internal" },
+			{ label: "Ranking", value: "Rerank + Fused" },
+			{ label: "Corpus Bank", value: "hindsight bank" },
 		],
 		features: [
 			"Sub-millisecond keyword retrieval",

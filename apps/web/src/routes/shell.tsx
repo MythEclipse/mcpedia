@@ -56,7 +56,7 @@ export function Shell() {
 						</a>
 						<span>·</span>
 						<SearchLink className="hover:text-[var(--text-primary)] transition-colors">
-							RRF Hybrid Search
+							Hybrid Search
 						</SearchLink>
 						<span>·</span>
 						<a

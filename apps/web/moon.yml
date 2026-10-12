@@ -11,8 +11,17 @@
 $schema: 'https://moonrepo.dev/schemas/moon-project.json'
 
 dependsOn:
+  # 'api' is a TYPE-ONLY edge: lib/orpc-client.ts imports `AppRouter` from
+  # @mcpedia/api. A type-only import still has to typecheck, so web cannot be
+  # checked before api is. It was missing here, which meant web:typecheck could
+  # pass against a stale or absent api.
+  - 'api'
   - 'config'
   - 'core'
+  # 'db' is declared because build/no-server-imports.ts and its test NAME
+  # @mcpedia/db as a package the browser bundle must never resolve. The
+  # dependency is what lets that test assert against the real package name.
+  - 'db'
   - 'queue'
   - 'types'
 

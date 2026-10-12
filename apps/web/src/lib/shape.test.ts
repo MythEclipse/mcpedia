@@ -345,8 +345,14 @@ describe("parseSearchMode", () => {
 })
 
 describe("normalizeSearchHits", () => {
-	test("keyword hits carry a document, so read the doc fields", () => {
-		const [hit] = normalizeSearchHits("keyword", [
+	// The signature lost its `mode` argument. There used to be two upstream
+	// shapes — a document hit for keyword/hybrid, a chunk hit for semantic —
+	// and the mode decided which normalizer ran. hindsight returns facts and the
+	// API maps every one of them back to its document, so there is one shape now
+	// and one normalizer for it. These tests therefore assert that every mode's
+	// payload takes the SAME path, which is the property that replaced the branch.
+	test("a document hit reads its fields off `doc`", () => {
+		const [hit] = normalizeSearchHits([
 			{
 				doc: { slug: "docs/a", title: "A", section: "docs" },
 				rank: 0.5,
@@ -362,43 +368,52 @@ describe("normalizeSearchHits", () => {
 		})
 	})
 
-	test("hybrid hits use the same document shape as keyword", () => {
-		const [hit] = normalizeSearchHits("hybrid", [
+	test("rank maps to score unchanged", () => {
+		const [hit] = normalizeSearchHits([
 			{
 				doc: { slug: "ctf/b", title: "B", section: "ctf" },
 				rank: 0.9,
 				snippet: "s",
 			},
 		])
-		// `hit` is possibly undefined under `noUncheckedIndexedAccess`. The assertions
-		// below compare against `undefined` when it is, and fail — which is the
-		// same signal the previous code gave by throwing.
+		// `hit` is possibly undefined under `noUncheckedIndexedAccess`. Comparing
+		// against `undefined` when it is, and failing, is the same signal the
+		// previous code gave by throwing.
 		expect(hit?.score).toBe(0.9)
 		expect(hit?.slug).toBe("ctf/b")
 	})
 
-	test("semantic hits are chunks, so title and section come from the slug", () => {
-		const [hit] = normalizeSearchHits("semantic", [
-			{ slug: "ctf/heap/pwn", content: "x".repeat(400), score: 0.7 },
+	test("a fact whose slug was resolved server-side keeps the real title", () => {
+		// The OLD semantic path derived the title from the slug ("pwn" from
+		// "ctf/heap/pwn") because a chunk carried no document record. hindsight
+		// hands back a fact and the API joins it to its document, so the real
+		// title arrives. This pins that the fallback is genuinely gone: a hit
+		// whose slug is "ctf/heap/pwn" and whose title is "Heap Exploitation"
+		// must report the latter.
+		const [hit] = normalizeSearchHits([
+			{
+				doc: {
+					slug: "ctf/heap/pwn",
+					title: "Heap Exploitation",
+					section: "ctf",
+				},
+				rank: 0.7,
+				snippet: "a whole fact, not a headline passage",
+			},
 		])
-		expect(hit).toEqual({
-			slug: "ctf/heap/pwn",
-			title: "pwn",
-			section: "ctf",
-			score: 0.7,
-			// Truncated, matching the old /api/search route's slice(0, 160).
-			snippet: "x".repeat(160),
-		})
+		expect(hit?.title).toBe("Heap Exploitation")
+		expect(hit?.section).toBe("ctf")
+		expect(hit?.snippet).toBe("a whole fact, not a headline passage")
 	})
 
 	test("a non-array response yields no hits instead of throwing", () => {
-		expect(normalizeSearchHits("hybrid", null)).toEqual([])
-		expect(normalizeSearchHits("hybrid", undefined)).toEqual([])
-		expect(normalizeSearchHits("semantic", { error: "boom" })).toEqual([])
+		expect(normalizeSearchHits(null)).toEqual([])
+		expect(normalizeSearchHits(undefined)).toEqual([])
+		expect(normalizeSearchHits({ error: "boom" })).toEqual([])
 	})
 
 	test("an empty array yields an empty array", () => {
-		expect(normalizeSearchHits("keyword", [])).toEqual([])
+		expect(normalizeSearchHits([])).toEqual([])
 	})
 })
 
