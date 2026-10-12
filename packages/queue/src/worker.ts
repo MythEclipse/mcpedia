@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq"
 import { getConnection, BULLMQ_PREFIX } from "./client"
 import { INDEX_QUEUE } from "./queue"
-import { indexContentFile, runFullIndex } from "@mcpedia/core"
+import { consolidate, indexContentFile, runFullIndex } from "@mcpedia/core"
 
 export function createWorker(): Worker {
 	const worker = new Worker(
@@ -20,7 +20,33 @@ export function createWorker(): Worker {
 				case "index-all": {
 					const { reason } = job.data as { reason: string }
 					await job.log(`full index (${reason})`)
-					return await runFullIndex(reason)
+					const result = await runFullIndex(reason)
+
+					// Consolidate ONCE, here, and only after every document landed.
+					// Retain writes per-document facts; nothing else creates the
+					// cross-document observations that reflect reasons over. This is
+					// the one moment the corpus is known complete, so it is the only
+					// moment a corpus-wide pass is worth paying for — a single-document
+					// edit must not trigger it.
+					//
+					// Failures are logged, not thrown: a consolidation failure leaves
+					// search working on facts alone, which is degraded but correct.
+					// Failing the job instead would mark a perfectly successful reindex
+					// as failed and re-run the entire corpus on retry.
+					try {
+						const { operationId } = await consolidate()
+						await job.log(`consolidation queued (${operationId || "sync"})`)
+					} catch (err) {
+						console.error(
+							`[worker] consolidation failed after ${reason}:`,
+							err instanceof Error ? err.message : err,
+						)
+						await job.log(
+							`consolidation FAILED: ${err instanceof Error ? err.message : String(err)}`,
+						)
+					}
+
+					return result
 				}
 				default:
 					throw new Error(`unknown job type: ${job.name}`)
