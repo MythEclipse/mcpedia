@@ -1,0 +1,115 @@
+# syntax=docker/dockerfile:1
+#
+# MCPedia MCP server — production image (HTTP transport).
+#
+# Build from the REPO ROOT, because the service resolves @mcpedia/* through the
+# pnpm workspace and a context of apps/mcp would not contain them:
+#
+#   docker build -f apps/mcp/Dockerfile -t mcpedia-mcp .
+#
+# WHY THIS BUILDS A BUNDLE INSTEAD OF RUNNING THE TYPESCRIPT
+# apps/mcp/src/http.ts imports sibling workspace packages by bare specifier
+# (@mcpedia/core, @mcpedia/types), which those packages resolve to TypeScript
+# source. Node cannot load that unaided. scripts/build-bundles.mjs already solves
+# it and is what CI ships, so this image and the systemd deploy run the SAME
+# artifact and any difference between them is a difference in packaging only.
+#
+# The runtime stage therefore needs no node_modules at all, only node itself.
+#
+# `serve:http` is the entrypoint, NOT `start`. `start` is `tsx src/index.ts` —
+# the stdio transport, which is what an editor launches, not what a container
+# should serve. Running it in a container gives a process that reads stdin,
+# answers nothing, and looks healthy.
+
+# --- build -------------------------------------------------------------------
+FROM node:22-alpine AS build
+
+ENV CI=1
+
+# pnpm is pinned to the exact version in package.json's packageManager field: a
+# floating "latest pnpm" resolves workspace links and the lockfile differently
+# from the version CI's gate verified, and --frozen-lockfile reports that as a
+# confusing "lockfile is not up to date" rather than a version mismatch.
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+WORKDIR /w
+
+# Manifests BEFORE source: this is the layer that makes dependency installs
+# cacheable, so editing a .ts file invalidates nothing above it. The list must be
+# COMPLETE — a workspace member's package.json is an input to dependency
+# resolution, so copying only the root manifest resolves @mcpedia/* against
+# nothing.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json ./
+COPY apps/api/package.json      apps/api/
+COPY apps/mcp/package.json      apps/mcp/
+COPY apps/mcp-client/package.json apps/mcp-client/
+COPY apps/web/package.json     apps/web/
+COPY apps/worker/package.json  apps/worker/
+COPY packages/config/package.json packages/config/
+COPY packages/core/package.json   packages/core/
+COPY packages/db/package.json     packages/db/
+COPY packages/parser/package.json packages/parser/
+COPY packages/queue/package.json  packages/queue/
+COPY packages/types/package.json  packages/types/
+COPY scripts/package.json     scripts/
+
+# --frozen-lockfile is the point: fail here, at build time, if the manifests and
+# pnpm-lock.yaml disagree. Letting the lockfile float would ship an image whose
+# dependency graph no CI run ever verified.
+RUN pnpm install --frozen-lockfile
+
+COPY scripts/build-bundles.mjs scripts/
+
+# ALL app sources: build-bundles.mjs builds api, mcp and worker in one esbuild
+# pass and fails the whole build if any entry point is missing, naming only the
+# absent file. Copying just apps/mcp gives:
+#   [ERROR] Could not resolve "/w/apps/worker/src/index.ts"
+COPY apps/    apps/
+COPY packages/ packages/
+
+RUN pnpm run build:bundles
+
+# Assert the artifact landed. A green esbuild run that wrote nothing is the
+# failure this catches.
+RUN test -s apps/mcp/dist/http.js
+
+# --- runtime -----------------------------------------------------------------
+FROM node:22-alpine AS runtime
+
+WORKDIR /app
+
+COPY --from=build --chown=node:node /w/apps/mcp/dist/ /app/dist/
+
+# node (uid 1000) ships in the base image. Nothing in the payload needs root, and
+# a world-writable /app is how a container escape becomes a foothold on the host.
+# The bundle only reads.
+USER node
+
+ENV NODE_ENV=production \
+    MCP_PORT=4021
+
+EXPOSE 4021
+
+# EXEC form, deliberately. In the shell form (/bin/sh -c "...") every ${...} is
+# POSIX parameter expansion performed before node sees the string, so a ${MCP_PORT}
+# there would expand to the shell's idea of the variable — empty — and the probe
+# would silently test nothing. As an argv array there is no shell to expand it.
+#
+# The port is written out for the same reason, and because HEALTHCHECK cannot
+# interpolate ENV either.
+# There is NO /health route. apps/mcp/src/http.ts serves exactly one path, /mcp,
+# and 404s everything else — so a probe on /health would fail forever against a
+# perfectly healthy server. (GET /mcp returns 406 "Not Acceptable" for the same
+# reason: the transport requires a POST with an MCP Accept header.)
+#
+# So the probe asks for /mcp WITHOUT that header and treats 406 as alive. It is a
+# liveness check, not a readiness check: it proves the listener is up and
+# answering, and deliberately does not touch Postgres or Redis. A probe that fails
+# on a slow database restarts a healthy process, turning a degradation into an
+# outage.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:4021/mcp',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.status===406||r.ok?0:1)).catch(()=>process.exit(1))"]
+
+# `node` directly, not the base image's docker-entrypoint.sh: no init, no root,
+# no wrapper between the container's PID 1 and the service.
+CMD ["node", "dist/http.js"]

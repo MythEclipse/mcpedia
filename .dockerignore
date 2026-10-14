@@ -1,0 +1,67 @@
+# Build context exclusions for the four service images (apps/{api,worker,web,mcp}).
+#
+# This lives at the REPO ROOT on purpose. Every Dockerfile is built with the
+# repo root as the context and `-f apps/<svc>/Dockerfile`, and buildx requires a
+# .dockerignore in the CONTEXT — a per-app one would be ignored entirely.
+#
+# WHAT MUST NOT BE LISTED HERE
+#   package.json, pnpm-lock.yaml, pnpm-workspace.yaml, .npmrc, tsconfig.base.json
+#     The workspace install resolves @mcpedia/* through these. Excluding any of
+#     them makes `pnpm install --frozen-lockfile` either fail outright or
+#     silently produce a different dependency graph than the one CI's gate
+#     verified against pnpm-lock.yaml.
+#   apps/*/package.json, packages/*/package.json
+#     Same reason: pnpm links workspace packages from these manifests.
+#   packages/db/drizzle/
+#     The migrator reads the .sql journal off disk at runtime via
+#     `new URL("../drizzle", import.meta.url)`. esbuild inlines only JS, so
+#     dropping the journal makes the migrator find an empty folder and report
+#     SUCCESS while changing nothing — the one build failure here that is silent.
+#   apps/web/serve.mjs
+#     Not a build output. It IS the web server, and it is stdlib-only on purpose.
+
+# --- VCS / CI -----------------------------------------------------------------
+.git
+.github
+.gitignore
+
+# --- Local state, never part of a build ---------------------------------------
+.hermes
+.moon/cache
+node_modules
+**/node_modules
+
+# --- Build outputs: rebuilt inside the image, and copying the host's would
+#     smuggle in stale or architecture-specific artifacts ------------------
+**/dist
+.moon
+
+# --- Secrets and local env -----------------------------------------------------
+# The services take their configuration from the environment at RUNTIME (see
+# deploy/*.service EnvironmentFile). Baking a .env into a layer would leak
+# DATABASE_URL and BETTER_AUTH_SECRET into the image history forever, since a
+# later layer cannot un-write an earlier one.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Editor / OS noise ----------------------------------------------------------
+.DS_Store
+*.swp
+.idea
+.vscode
+
+# --- Nix leftovers: the host no longer builds through Nix (deploy-direct.sh) --
+flake.nix
+flake.lock
+web.nix
+result
+result-*
+
+# --- Docs and agent metadata ----------------------------------------------------
+*.md
+!apps/*/README.md
+AGENTS.md
+CLAUDE.md
