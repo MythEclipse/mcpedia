@@ -1,6 +1,5 @@
 ## [1.0.2](https://github.com/asepharyana/mcpedia/compare/v1.0.1...v1.0.2) (2026-10-14)
 
-
 ### Bug Fixes
 
 * auto-fix code quality [skip ci] ([da8f5f0](https://github.com/asepharyana/mcpedia/commit/da8f5f0e237c24ebd4272089c0a0373e6757c234))
