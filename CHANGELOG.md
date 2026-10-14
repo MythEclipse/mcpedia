@@ -1,3 +1,14 @@
+## [1.0.2](https://github.com/asepharyana/mcpedia/compare/v1.0.1...v1.0.2) (2026-10-14)
+
+
+### Bug Fixes
+
+* auto-fix code quality [skip ci] ([da8f5f0](https://github.com/asepharyana/mcpedia/commit/da8f5f0e237c24ebd4272089c0a0373e6757c234))
+* auto-fix code quality [skip ci] ([3480b85](https://github.com/asepharyana/mcpedia/commit/3480b85ca02b94333e9418c44a7762fbb38b461a))
+* auto-fix code quality [skip ci] ([e759c6e](https://github.com/asepharyana/mcpedia/commit/e759c6e6d1c139795c4a34e1890be793cd80f0f9))
+* auto-fix code quality [skip ci] ([9b47ce7](https://github.com/asepharyana/mcpedia/commit/9b47ce70b2f55088a0ebd84064fec11ed9154d4f))
+* auto-fix code quality [skip ci] ([eccf279](https://github.com/asepharyana/mcpedia/commit/eccf27966e4921e6a37b7f79d00e02c17c1d1288))
+
 ## [1.0.1](https://github.com/asepharyana/mcpedia/compare/v1.0.0...v1.0.1) (2026-10-14)
 
 # 1.0.0 (2026-10-14)
