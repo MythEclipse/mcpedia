@@ -1,0 +1,24 @@
+{
+  "images": [
+    {
+      "package": "mcpedia-api",
+      "context": ".",
+      "file": "apps/api/Dockerfile"
+    },
+    {
+      "package": "mcpedia-mcp",
+      "context": ".",
+      "file": "apps/mcp/Dockerfile"
+    },
+    {
+      "package": "mcpedia-worker",
+      "context": ".",
+      "file": "apps/worker/Dockerfile"
+    },
+    {
+      "package": "mcpedia-web",
+      "context": ".",
+      "file": "apps/web/Dockerfile"
+    }
+  ]
+}
