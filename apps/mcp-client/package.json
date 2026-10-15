@@ -10,6 +10,7 @@
 		"start": "tsx src/index.ts",
 		"chat": "tsx src/index.ts",
 		"ask": "tsx src/ask.ts",
+		"client": "tsx src/index.ts",
 		"lint": "biome lint .",
 		"typecheck": "tsc --noEmit",
 		"build": "esbuild src/index.ts --outdir=dist --platform=node --format=esm",
