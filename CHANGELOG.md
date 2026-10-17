@@ -1,3 +1,10 @@
+## [1.2.3](https://github.com/asepharyana/mcpedia/compare/v1.2.2...v1.2.3) (2026-10-17)
+
+
+### Bug Fixes
+
+* **migrate:** bundling ran two migrators, breaking every deploy ([ed2bbfd](https://github.com/asepharyana/mcpedia/commit/ed2bbfd310d648993e4da510783ebf75ce0864f7))
+
 ## [1.2.2](https://github.com/asepharyana/mcpedia/compare/v1.2.1...v1.2.2) (2026-10-17)
 
 
