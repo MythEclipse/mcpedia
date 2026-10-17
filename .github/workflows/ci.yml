@@ -186,9 +186,9 @@ jobs:
   deploy:
     name: deploy to host
     needs: check
-    # GATED ON A MAIN PUSH ON PURPOSE — a `pull_request` run must NOT deploy.
+    # GATED ON THE MAIN REF ON PURPOSE — a `pull_request` run must NOT deploy.
     #
-    # `needs: check` only ORDERS the jobs; it does not restrict which events reach
+    # `needs: check` only ORDERS the jobs; it does not restrict which EVENTS reach
     # them. So a Dependabot PR used to run this whole job and die in "Setup SSH
     # key", because GitHub hands a Dependabot-triggered run the DEPENDABOT secret
     # store (empty here) rather than the repository one. `SSH_DEPLOY_KEY` arrived
@@ -203,14 +203,26 @@ jobs:
     # WORKFLOW, not in the bump. Verified: `gh api .../dependabot/secrets` lists
     # nothing while the repo store holds all five.
     #
+    # `github.ref` is the check, NOT `event_name`. On a PR it is
+    # `refs/pull/<n>/merge`, so PRs are excluded — and this is the exact trap that
+    # makes `event_name` the wrong tool:
+    #
+    #   A manual `workflow_dispatch` runs the workflow file FROM THE DISPATCHED
+    #   REF, and a manual dispatch DOES receive the repository secrets. So an
+    #   `event_name == 'push'` gate still let a dispatch against a PR branch
+    #   deploy unreviewed code here — which is what happened on 2026-10-17
+    #   (a dispatch against `dependabot/npm_and_yarn/production-5ea6f72007`
+    #   flipped every `current` symlink to that branch's SHA).
+    #
+    # Keying on the ref covers push-to-main and dispatch-on-main while excluding
+    # both PRs and dispatches against any other branch, so the manual deploy path
+    # stays available and cannot be pointed at a branch.
+    #
     # Two properties matter and neither is cosmetic:
     #   - a PR must never deploy (it would publish unreviewed code to the host);
     #   - a PR must not RUN the deploy job, or every Dependabot PR wears a
     #     permanent red X and the worker chases it forever.
-    #
-    # `github.event_name == 'push'` covers both: a push to main is the only way
-    # here, and the branch filter below keeps forks and feature branches out.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    if: ${{ github.ref == 'refs/heads/main' }}
     # Serialised against itself. Two deploys racing on the same host would both
     # assemble releases/ and flip `current`, and the loser's symlink flip would
     # land after the winner's — leaving the older release running under a log
