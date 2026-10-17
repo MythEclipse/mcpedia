@@ -489,6 +489,36 @@ describe("hindsight adapter", () => {
 		})
 	})
 
+	describe("recallDocumentFacts", () => {
+		it("reads the chunks of a document this deployment owns", async () => {
+			const calls = stubFetch(
+				{ tags: [adapter.NAMESPACE_TAG] },
+				{
+					items: [
+						{ chunk_index: 1, chunk_text: "b" },
+						{ chunk_index: 0, chunk_text: "a" },
+					],
+				},
+			)
+
+			const facts = await adapter.recallDocumentFacts("docs/a")
+
+			// Sorted by chunk index, because the caller renders them in order.
+			expect(facts.map((f) => f.text)).toEqual(["a", "b"])
+			expect(calls.some((c) => c.url.includes("/chunks"))).toBe(true)
+		})
+
+		it("returns nothing for a document that is not ours", async () => {
+			// The lookup is by id in a shared id space; without this guard a
+			// collision serves another writer's body through this deployment's
+			// MCP resource, and nothing errors.
+			const calls = stubFetch({ tags: ["host:orange"] })
+
+			expect(await adapter.recallDocumentFacts("someone-elses-doc")).toEqual([])
+			expect(calls.some((c) => c.url.includes("/chunks"))).toBe(false)
+		})
+	})
+
 	describe("forgetDocument", () => {
 		it("deletes a document that carries this deployment's namespace tag", async () => {
 			const calls = stubFetch(

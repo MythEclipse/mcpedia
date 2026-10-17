@@ -678,16 +678,33 @@ export async function consolidate(): Promise<{ operationId: string }> {
  *  - `metadata` is NOT a RecallRequest field. Sending it returns 200 with an
  *    EMPTY result set — worse than ignoring it, because it looks like "this
  *    document has no facts" rather than "you asked wrong".
- *  - `tags` is a real field but was verified NOT to narrow by an arbitrary tag:
- *    both documents came back regardless.
+ *  - Even a `tags` filter cannot express "this one document", because the recall
+ *    result carries no document id to match on — it returns FACTS, and the slug
+ *    only survives inside `metadata`, which is not filterable. (`tags` DOES
+ *    narrow the result set; an earlier note here claimed otherwise and was
+ *    wrong. What it cannot do is select a single document out of a corpus whose
+ *    documents all share the namespace tag.)
  *
  * Recall would also run an LLM over the whole bank to answer a question about
  * one known document. The chunks endpoint is an exact lookup by document id and
  * costs nothing, which is what an agent asking about a specific slug deserves.
+ *
+ * ## WHY IT CHECKS OWNERSHIP
+ *
+ * That exact lookup is by id, in an id space the whole shared bank shares. A
+ * collision would serve another writer's document body through this
+ * deployment's MCP resource: the caller gets a document that is not the one it
+ * asked for, and nothing errors. The bank's own record of the document's tags
+ * decides, not the slug the caller passed — an untagged or foreign document
+ * reads as "no facts", which that resource already handles, because the
+ * document's row in Postgres is the authority for its body.
  */
 export async function recallDocumentFacts(
 	slug: string,
 ): Promise<{ index: number; text: string; characters: number }[]> {
+	const tags = await documentTags(slug)
+	if (tags === null || !tags.includes(NAMESPACE_TAG)) return []
+
 	const response = await call<{
 		items?: { chunk_index: number; chunk_text: string }[]
 	}>(
