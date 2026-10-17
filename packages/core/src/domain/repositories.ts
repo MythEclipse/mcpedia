@@ -177,6 +177,18 @@ export interface IndexingPort {
 
 	/** Rebuild chunks from a slug's CURRENT stored body. Returns chunk count. */
 	rebuild(slug: string): Promise<number>
+
+	/**
+	 * Drop a document's indexed facts.
+	 *
+	 * An indexing port that can add facts and change them, but not remove them,
+	 * cannot express "this document no longer exists" — so a deleted document
+	 * stays searchable at its old content and the search page links to a slug
+	 * that 404s. It lives on THIS port rather than on the document repository
+	 * because the index is where the facts are; the row and the index are two
+	 * different stores and only one of them is deleted by `documents.remove`.
+	 */
+	forget(slug: string): Promise<void>
 }
 
 /**

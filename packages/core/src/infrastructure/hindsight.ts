@@ -38,6 +38,23 @@
  *     forever, which is the "search disagrees with the page" bug in its purest
  *     form.
  *
+ *  4. **Tag filtering DOES narrow a shared bank.** Probed on 0.10.2, because
+ *     the opposite was believed here once: `tags_match: "any_strict"` returning
+ *     zero results is real for rows retained before tags were in use, but it is
+ *     a property of THOSE rows, not of the filter. Against tagged rows the
+ *     filter is exact — `["app:mcpedia"]` returned the one document carrying
+ *     that tag, and `["<nonexistent>"]` returned nothing at all. So one bank can
+ *     hold several applications' corpora and each can read only its own slice,
+ *     which is what `NAMESPACE_TAG` below is for. `"all_strict"` (not `"all"`)
+ *     is the mode to use: it is the one that EXCLUDES untagged rows, so a
+ *     document some other writer retained without tags cannot leak in.
+ *
+ *  5. **`PUT /banks/{id} {}` creates a missing bank and otherwise writes
+ *     nothing.** Verified against the engine's `update_bank`: with no name, no
+ *     mission and no config overrides there is no UPDATE statement at all. That
+ *     matters only now that the bank is shared — the body used to name the bank,
+ *     which is a write to a row three other applications also depend on.
+ *
  * ## WHY RETAIN IS ASYNC
  *
  * A synchronous retain costs ~5,500 LLM tokens and several seconds per document
@@ -95,12 +112,46 @@ function baseUrl(): string {
 }
 
 /**
- * The bank is namespaced per deployment so two environments pointed at one
- * hindsight cannot read each other's corpus.
+ * Which bank to read and write.
+ *
+ * Defaults to a bank of this deployment's own. Production names a SHARED bank
+ * instead (`hermes-gemini`, which the Hermes agents on orangevps, imrnes and
+ * omarchy also write to), and `NAMESPACE_TAG` is what keeps this corpus
+ * separable inside it — see finding 4 at the top of this file.
  */
 function bankId(): string {
 	return process.env.HINDSIGHT_BANK_ID ?? "mcpedia"
 }
+
+/**
+ * The tag that marks every fact this deployment owns.
+ *
+ * ## WHY THIS EXISTS
+ *
+ * The bank may be shared with unrelated writers, and `recall` is not scoped by
+ * the bank — it ranks whatever the bank holds. Pointed at a shared bank without
+ * this tag, a document search competes for its result budget against every
+ * other tenant's memories, and the hits it does return are interleaved with
+ * facts that carry no `metadata.slug` and are therefore dropped. The failure is
+ * a search that quietly returns fewer, worse results — or none — rather than an
+ * error, which is the kind of thing nobody notices until a document they WROTE
+ * cannot be found.
+ *
+ * So the tag does three jobs, and all three are load-bearing:
+ *
+ *   1. every retain carries it, so the corpus is marked as belonging here;
+ *   2. every recall and reflect filters on it, so nothing else is in the result
+ *      set to spend budget on;
+ *   3. consolidation is scoped to it, so a full reindex does not run a
+ *      corpus-wide pass over another tenant's memories.
+ *
+ * It is a CONSTANT rather than an environment variable on purpose. Writes and
+ * reads must agree on it, and a value that can be set on one side and not the
+ * other is a corpus that splits silently in half. Changing it orphans everything
+ * retained under the old value; there is no migration for it, because the
+ * documents are re-retained by a reindex.
+ */
+export const NAMESPACE_TAG = "app:mcpedia"
 
 /**
  * One request, with the two failure modes every caller must handle made explicit.
@@ -157,21 +208,41 @@ interface RecallResponse {
  * swallowed on purpose: a read-only replica or a transient outage must not stop
  * the app from booting, and the real operation will report the true problem if
  * the bank is genuinely unusable.
+ *
+ * The body is EMPTY, and that is the point. `PUT /banks/{id}` is
+ * create-or-update, and the bank may now be shared with other applications whose
+ * configuration lives in that same row — so this sends nothing it does not own.
+ * Verified against the engine (`update_bank`): with no name, mission or config
+ * overrides there is no UPDATE statement at all, so an existing bank is left
+ * exactly as found and a missing one is created with defaults. Naming the bank
+ * here, as this used to, would rewrite a shared row on every process start.
  */
 let bankEnsured: Promise<void> | null = null
 function ensureBank(): Promise<void> {
 	bankEnsured ??= call(
 		`/v1/default/banks/${bankId()}`,
-		{
-			method: "PUT",
-			body: JSON.stringify({ name: bankId() }),
-		},
+		{ method: "PUT", body: JSON.stringify({}) },
 		10_000,
 	).then(
 		() => undefined,
 		() => undefined,
 	)
 	return bankEnsured
+}
+
+/**
+ * The tags a retained document carries.
+ *
+ * The document's OWN tags come first (they are what a search for "aes-gcm"
+ * should be able to reach), and the namespace tag is appended because it is the
+ * one thing that makes the corpus findable again inside a shared bank. Without
+ * it the document is write-only: retained, invisible, and nothing reports an
+ * error. Deduplicated because a document may legitimately already carry it if
+ * someone tags a doc `app:mcpedia` by hand, and hindsight would store the tag
+ * twice.
+ */
+function tagsFor(docTags: string[] | null): string[] {
+	return [...new Set([...(docTags ?? []), NAMESPACE_TAG])]
 }
 
 /**
@@ -242,7 +313,18 @@ export const hindsightIndex: IndexingPort = {
 							content: contentFor(meta.title, body),
 							document_id: slug,
 							metadata: { slug, title: meta.title },
-							tags: meta.tags ?? [],
+							tags: tagsFor(meta.tags),
+							// Every document in this corpus consolidates into ONE
+							// observation scope, spelled out rather than left to
+							// the bank's default. A shared bank's default is
+							// `combined`, which would mix these facts into
+							// whichever scope the other tenants consolidate, and
+							// the scope has to be a single shared one (not
+							// `per_tag`) because these are documents in one
+							// knowledge base: an observation linking two of them
+							// is the point, and `per_tag` would wall off every
+							// document's own tags from each other.
+							observation_scopes: [[NAMESPACE_TAG]],
 							update_mode: "replace",
 						},
 					],
@@ -262,6 +344,18 @@ export const hindsightIndex: IndexingPort = {
 		const doc = await loadDocument(slug)
 		if (!doc) return 0
 		return hindsightIndex.chunkAndEmbed(slug, doc.body)
+	},
+
+	/**
+	 * The port's view of `forgetDocument`, so a delete can clean the index
+	 * through the same collaborator the write path uses.
+	 *
+	 * Delegates rather than reimplementing: the ownership guard and the DELETE
+	 * live in one place, and a second copy here would be the copy that misses
+	 * the guard.
+	 */
+	async forget(slug: string): Promise<void> {
+		await forgetDocument(slug)
 	},
 }
 
@@ -304,10 +398,21 @@ async function recall(q: string, limit: number): Promise<SearchHit[]> {
 		`/v1/default/banks/${bankId()}/memories/recall`,
 		{
 			method: "POST",
-			// `types: ["world"]` is load-bearing, not a convenience filter: without
-			// it the top hits are observations, which carry no metadata and
-			// therefore cannot be linked. See finding 2 at the top of this file.
-			body: JSON.stringify({ query, types: ["world"] }),
+			body: JSON.stringify({
+				query,
+				// `types: ["world"]` is load-bearing, not a convenience filter:
+				// without it the top hits are observations, which carry no
+				// metadata and therefore cannot be linked. See finding 2.
+				types: ["world"],
+				// `all_strict`, not the `any` default: this bank may be shared,
+				// and `any` also matches UNTAGGED rows. The document tags below
+				// the namespace tag are per-document and differ everywhere, so
+				// the only tag common to the whole corpus is the namespace one,
+				// and it has to exclude untagged rows to keep another writer's
+				// facts out of the ranking. See finding 4.
+				tags: [NAMESPACE_TAG],
+				tags_match: "all_strict",
+			}),
 		},
 		RECALL_TIMEOUT_MS,
 	)
@@ -384,12 +489,55 @@ export async function semanticSearch(
 }
 
 /**
+ * A document's own record in the bank, or null when the bank has none.
+ *
+ * Exists to answer one question before a DELETE: is this document OURS? On a
+ * bank this deployment shares, a document id is not proof of ownership — the id
+ * space is the whole bank's, and `delete_document` cascades to every fact and
+ * link derived from the document, permanently. So the ownership check reads the
+ * document's tags from the bank itself rather than trusting the caller's slug,
+ * because the caller is by definition the code that already decided to delete.
+ *
+ * 404 is a legitimate answer and not an error: a document that was never
+ * retained (or was already forgotten) has nothing to delete, and the caller's
+ * delete should proceed rather than fail on the cleanup step.
+ */
+async function documentTags(slug: string): Promise<string[] | null> {
+	try {
+		const doc = await call<{ tags?: string[] }>(
+			`/v1/default/banks/${bankId()}/documents/${encodeURIComponent(slug)}`,
+			{ method: "GET" },
+			RECALL_TIMEOUT_MS,
+		)
+		return doc.tags ?? []
+	} catch {
+		// Includes the 404 above. Nothing to guard against.
+		return null
+	}
+}
+
+/**
  * Remove a document's facts from hindsight.
  *
  * Called when a document is deleted. Without it the deleted body stays
  * searchable, and the search page links to a slug that 404s.
+ *
+ * ## WHY IT VERIFIES OWNERSHIP FIRST
+ *
+ * `DELETE .../documents/{id}` is not scoped by this adapter's namespace tag — the
+ * endpoint takes an id and cascades to every fact and link under it, with no
+ * undo. That was harmless while the bank held only this corpus and is not now:
+ * a bug that passed another tenant's document id here would delete their
+ * memories, silently and irreversibly, and report success.
+ *
+ * The check is skip-not-delete: a document carrying no `NAMESPACE_TAG` is not
+ * this deployment's to remove. Verified against the bank rather than assumed
+ * from the slug, because a slug only proves the caller typed it.
  */
 export async function forgetDocument(slug: string): Promise<void> {
+	const tags = await documentTags(slug)
+	if (tags === null) return
+	if (!tags.includes(NAMESPACE_TAG)) return
 	await call(
 		`/v1/default/banks/${bankId()}/documents/${encodeURIComponent(slug)}`,
 		{
@@ -422,6 +570,12 @@ export async function forgetDocument(slug: string): Promise<void> {
  * that decides it needs synthesis pays for it once, on purpose.
  *
  * `{ query }` alone is a valid body — verified, no other field required.
+ *
+ * `tags` + `tags_match` ARE sent, unlike the query-only body this started as:
+ * on a shared bank an unscoped reflect retrieves every tenant's memories into
+ * the context and answers about them, which on this corpus meant paying for a
+ * synthesis of the wrong material. `all_strict` is the same exclusion of
+ * untagged rows the recall uses, for the same reason.
  */
 export async function reflect(
 	q: string,
@@ -437,6 +591,8 @@ export async function reflect(
 			method: "POST",
 			body: JSON.stringify({
 				query: q,
+				tags: [NAMESPACE_TAG],
+				tags_match: "all_strict",
 				...(options.budget ? { budget: options.budget } : {}),
 				...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
 			}),
@@ -474,6 +630,21 @@ export async function reflect(
  *
  * The server runs it asynchronously and returns an operation id, so this
  * returns as soon as the work is queued rather than waiting for the LLM.
+ *
+ * ## WHY IT NAMES A SCOPE NOW
+ *
+ * Unscoped, the endpoint consolidates every unconsolidated memory in the BANK.
+ * That was correct while the bank held only this corpus and is a defect now that
+ * it is shared: a full reindex here would drag another tenant's fresh facts into
+ * this deployment's observation pass, at this deployment's token cost, and
+ * rewrite their observations' grounding. `observation_scopes` narrows it to
+ * memories whose tags contain all of `[NAMESPACE_TAG]`, which is exactly the set
+ * this adapter retains — the same tag the retain declares as its scope, so the
+ * scopes line up by construction rather than by coincidence.
+ *
+ * The shape is a list of tag-lists (one pass per inner list), not the
+ * `"per_tag"` string: this corpus is one knowledge base, so its documents belong
+ * in ONE scope together.
  */
 export async function consolidate(): Promise<{ operationId: string }> {
 	await ensureBank()
@@ -482,7 +653,10 @@ export async function consolidate(): Promise<{ operationId: string }> {
 		deduplicated?: boolean
 	}>(
 		`/v1/default/banks/${bankId()}/consolidate`,
-		{ method: "POST", body: JSON.stringify({}) },
+		{
+			method: "POST",
+			body: JSON.stringify({ observation_scopes: [[NAMESPACE_TAG]] }),
+		},
 		RECALL_TIMEOUT_MS,
 	)
 	return { operationId: response.operation_id ?? "" }

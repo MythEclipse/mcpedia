@@ -12,6 +12,7 @@
     "format:check": "biome format .",
     "typecheck": "moon run :typecheck",
     "index": "tsx scripts/indexer.ts",
+    "reindex:hindsight": "tsx scripts/reindex-hindsight.ts",
     "enqueue": "tsx scripts/enqueue.ts",
     "worker": "tsx apps/worker/src/index.ts",
     "mcp": "tsx apps/mcp/src/index.ts",

@@ -39,6 +39,7 @@ import {
 	makeListSections,
 	makeRestoreRevision,
 	makeRunFullIndex,
+	makeReindexFromStore,
 	makeSnapshotRevision,
 	makeUpdateDocument,
 } from "../application"
@@ -163,6 +164,12 @@ export function indexingUseCases(actor?: AuditActor) {
 	return {
 		indexFile: makeIndexContentFile(deps),
 		runFullIndex: makeRunFullIndex(deps),
+		// Reads bodies from Postgres rather than CONTENT_ROOT. The two exist
+		// side by side because they answer different questions: `runFullIndex`
+		// ingests a checkout's files, this one repairs the INDEX of documents
+		// the database already holds — which is the only thing that can fix a
+		// deploy host whose bank was repointed, since its mirror may be absent.
+		reindexFromStore: makeReindexFromStore(deps),
 	}
 }
 

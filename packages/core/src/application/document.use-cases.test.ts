@@ -70,6 +70,7 @@ function fakeDeps() {
 		index: {
 			chunkAndEmbed: vi.fn(async () => 2),
 			rebuild: vi.fn(async () => 2),
+			forget: vi.fn(async () => {}),
 		},
 		mirror: {
 			write: vi.fn(async () => {}),

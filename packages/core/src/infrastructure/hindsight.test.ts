@@ -130,6 +130,55 @@ describe("hindsight adapter", () => {
 			expect(String(item?.content)).toContain("body text")
 		})
 
+		it("tags every retain with the namespace tag the reads filter on", async () => {
+			// Without this the document is written but unfindable: every recall
+			// filters on NAMESPACE_TAG, so a retain that omits it stores something
+			// nothing will ever read back. The document's own tags must survive
+			// alongside it, since they are what a topical search reaches.
+			dbMock.select.mockReturnValue(
+				selectReturning([{ title: "T", tags: ["pwn", "heap"] }]),
+			)
+			const calls = stubFetch({}, { success: true })
+
+			await adapter.hindsightIndex.chunkAndEmbed("docs/a", "b")
+
+			const item = (bodyOf(calls, 1) as { items: { tags: string[] }[] })
+				.items[0]
+			expect(item?.tags).toEqual(["pwn", "heap", adapter.NAMESPACE_TAG])
+		})
+
+		it("does not double a namespace tag the document already carries", async () => {
+			// A document may be tagged by hand. Storing the tag twice is what
+			// hindsight would do with a naive append, and it is the sort of thing
+			// that only shows up as a duplicate row in a tag listing.
+			dbMock.select.mockReturnValue(
+				selectReturning([{ title: "T", tags: [adapter.NAMESPACE_TAG] }]),
+			)
+			const calls = stubFetch({}, { success: true })
+
+			await adapter.hindsightIndex.chunkAndEmbed("docs/a", "b")
+
+			const item = (bodyOf(calls, 1) as { items: { tags: string[] }[] })
+				.items[0]
+			expect(item?.tags).toEqual([adapter.NAMESPACE_TAG])
+		})
+
+		it("declares one shared observation scope so the corpus consolidates together", async () => {
+			// A shared bank's default is `combined`, which would fold these facts
+			// into whatever scope the other tenant consolidates. The scope must be
+			// a single shared one rather than `per_tag`: these are documents in ONE
+			// knowledge base, and an observation linking two of them is the point.
+			dbMock.select.mockReturnValue(selectReturning([{ title: "T", tags: [] }]))
+			const calls = stubFetch({}, { success: true })
+
+			await adapter.hindsightIndex.chunkAndEmbed("docs/a", "b")
+
+			const item = (
+				bodyOf(calls, 1) as { items: { observation_scopes: string[][] }[] }
+			).items[0]
+			expect(item?.observation_scopes).toEqual([[adapter.NAMESPACE_TAG]])
+		})
+
 		it("retains asynchronously so a write is not billed for fact extraction", async () => {
 			dbMock.select.mockReturnValue(selectReturning([{ title: "T", tags: [] }]))
 			const calls = stubFetch({}, { success: true })
@@ -181,6 +230,28 @@ describe("hindsight adapter", () => {
 			const recallBody = bodyOf(calls, 1) as { query: string; types?: string[] }
 			expect(recallBody.types).toEqual(["world"])
 			expect(recallBody.query).toBe("query")
+		})
+
+		it("restricts the result set to this deployment's namespace tag", async () => {
+			// The bank may be shared. Unfiltered, the top hits are other tenants'
+			// memories — which carry no `metadata.slug`, so they are dropped after
+			// consuming the result budget, and a document search quietly returns
+			// fewer or zero hits instead of erroring.
+			dbMock.select.mockReturnValue(
+				selectReturning([{ slug: "docs/a", status: "published" }]),
+			)
+			const calls = stubFetch({}, { results: [] })
+
+			await adapter.hybridSearch("query")
+
+			const recallBody = bodyOf(calls, 1) as {
+				tags?: string[]
+				tags_match?: string
+			}
+			expect(recallBody.tags).toEqual([adapter.NAMESPACE_TAG])
+			// `all_strict`, not `any`: `any` also matches UNTAGGED rows, which is
+			// exactly the leak the tag exists to prevent.
+			expect(recallBody.tags_match).toBe("all_strict")
 		})
 
 		it("groups several facts from one document into a single hit", async () => {
@@ -367,7 +438,29 @@ describe("hindsight adapter", () => {
 
 			// Sending an explicit default would pin the server's current default
 			// into this code, so an upstream change to it would be invisible here.
-			expect(Object.keys(bodyOf(calls, 1) as object)).toEqual(["query"])
+			// The tag filter IS sent regardless — it is not a default, it is what
+			// keeps the synthesis to this deployment's own corpus.
+			expect(Object.keys(bodyOf(calls, 1) as object).sort()).toEqual([
+				"query",
+				"tags",
+				"tags_match",
+			])
+		})
+
+		it("scopes reflect to this deployment's corpus", async () => {
+			// An unscoped reflect retrieves EVERY tenant's memories into the
+			// context and answers about them — on a shared bank that is a paid
+			// synthesis of the wrong material.
+			const calls = stubFetch({}, { text: "x" })
+
+			await adapter.reflect("q")
+
+			const body = bodyOf(calls, 1) as {
+				tags?: string[]
+				tags_match?: string
+			}
+			expect(body.tags).toEqual([adapter.NAMESPACE_TAG])
+			expect(body.tags_match).toBe("all_strict")
 		})
 	})
 
@@ -378,18 +471,64 @@ describe("hindsight adapter", () => {
 			const result = await adapter.consolidate()
 
 			expect(calls[1]?.url).toContain("/consolidate")
-			// An empty JSON body is what the server accepts; the operation id is
-			// how the caller knows the pass was actually queued.
+			// The operation id is how the caller knows the pass was queued.
 			expect(result.operationId).toBe("op-1")
+		})
+
+		it("names a scope so the pass cannot reach another tenant's facts", async () => {
+			// Unscoped, the endpoint consolidates every unconsolidated memory in
+			// the BANK. A full reindex here would then drag another tenant's fresh
+			// facts into this deployment's observation pass, at its token cost,
+			// and rewrite their observations' grounding.
+			const calls = stubFetch({}, { operation_id: "op-1" })
+
+			await adapter.consolidate()
+
+			const body = bodyOf(calls, 1) as { observation_scopes?: string[][] }
+			expect(body.observation_scopes).toEqual([[adapter.NAMESPACE_TAG]])
 		})
 	})
 
-	it("forgetDocument deletes by document id", async () => {
-		const calls = stubFetch({ success: true })
+	describe("forgetDocument", () => {
+		it("deletes a document that carries this deployment's namespace tag", async () => {
+			const calls = stubFetch(
+				{ tags: [adapter.NAMESPACE_TAG, "pwn"] },
+				{ success: true },
+			)
 
-		await adapter.forgetDocument("docs/gone")
+			await adapter.forgetDocument("docs/gone")
 
-		expect(calls[0]?.init.method).toBe("DELETE")
-		expect(calls[0]?.url).toContain("/documents/docs%2Fgone")
+			const del = calls.find((c) => c.init.method === "DELETE")
+			expect(del?.url).toContain("/documents/docs%2Fgone")
+		})
+
+		it("refuses to delete a document that is not ours", async () => {
+			// DELETE cascades to every fact and link under the document, with no
+			// undo. On a shared bank, a wrong id here deletes another tenant's
+			// memories and reports success.
+			const calls = stubFetch({}, { tags: ["host:orange"] })
+
+			await adapter.forgetDocument("someone-elses-doc")
+
+			expect(calls.some((c) => c.init.method === "DELETE")).toBe(false)
+		})
+
+		it("is a no-op when the bank has no such document", async () => {
+			// The delete already committed; a document that was never retained has
+			// nothing to clean up and must not make the caller's delete look failed.
+			vi.stubGlobal(
+				"fetch",
+				vi.fn(async () => ({
+					ok: false,
+					status: 404,
+					json: async () => ({ detail: "Document not found" }),
+					text: async () => "Document not found",
+				})),
+			)
+
+			await expect(
+				adapter.forgetDocument("docs/never-indexed"),
+			).resolves.toBeUndefined()
+		})
 	})
 })

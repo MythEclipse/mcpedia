@@ -8,7 +8,11 @@
  * says what it is for.
  */
 import { describe, expect, test, vi } from "vitest"
-import { makeIndexContentFile, makeRunFullIndex } from "./index.use-cases"
+import {
+	makeIndexContentFile,
+	makeReindexFromStore,
+	makeRunFullIndex,
+} from "./index.use-cases"
 import type { DocumentMeta } from "../domain"
 
 function doc(over: Partial<DocumentMeta> = {}): DocumentMeta {
@@ -112,6 +116,85 @@ describe("makeIndexContentFile", () => {
 		expect(deps.revisions.insert).toHaveBeenCalledWith(
 			expect.objectContaining({ reason: "index" }),
 		)
+	})
+})
+
+describe("makeReindexFromStore", () => {
+	// `Document` is deliberately NOT imported here: the DOM's global `Document`
+	// shadows it in a tsconfig that includes the web lib, and the collision
+	// surfaces as "string is not assignable to HTMLElement" rather than as a
+	// missing import. The deps type is derived from the factory instead.
+	type Deps = Parameters<typeof makeReindexFromStore>[0]
+
+	/**
+	 * The real ports are wide — `listForExport` returns full `Document`s and
+	 * `IndexingPort` has three methods — while this use case touches one method
+	 * of each. The stub is typed as the PORT so a change to either interface
+	 * fails here rather than in production.
+	 */
+	function storeDeps(rows: { slug: string; body: string }[]): Deps {
+		return {
+			documents: {
+				listForExport: vi.fn(async () => rows),
+			},
+			index: {
+				chunkAndEmbed: vi.fn(async (slug: string) =>
+					rows.some((r) => r.slug === slug) ? 1 : 0,
+				),
+			},
+			log: vi.fn(),
+		} as unknown as Deps
+	}
+
+	test("re-retains every row it is given, reading bodies from the store", async () => {
+		const deps = storeDeps([
+			{ slug: "docs/a", body: "A" },
+			{ slug: "docs/b", body: "B" },
+		])
+
+		const res = await makeReindexFromStore(deps)()
+
+		expect(res).toEqual({ retained: 2, missing: 0, failed: 0 })
+		// The BODY comes from the row, not a disk read: that is the whole point
+		// of this path existing next to runFullIndex.
+		expect(deps.index.chunkAndEmbed).toHaveBeenCalledWith("docs/a", "A")
+	})
+
+	test("one unretainable document does not stop the rest", async () => {
+		// The realistic failure: hindsight is up, one retain 500s. Aborting would
+		// leave the corpus half-indexed with no record of where it stopped.
+		const deps = storeDeps([
+			{ slug: "docs/a", body: "A" },
+			{ slug: "docs/b", body: "B" },
+			{ slug: "docs/c", body: "C" },
+		])
+		vi.mocked(deps.index.chunkAndEmbed).mockImplementation(
+			async (slug: string) => {
+				if (slug === "docs/b") throw new Error("503 upstream")
+				return 1
+			},
+		)
+
+		const res = await makeReindexFromStore(deps)()
+
+		expect(res).toEqual({ retained: 2, missing: 0, failed: 1 })
+	})
+
+	test("a slug with no row is MISS, not a silent success", async () => {
+		// `chunkAndEmbed` does its own lookup and returns 0 when no row matches.
+		// Counting that as retained is how a reindex reports success while having
+		// indexed nothing — the exact silent-empty failure this path repairs.
+		const deps = storeDeps([{ slug: "docs/ghost", body: "G" }])
+		vi.mocked(deps.index.chunkAndEmbed).mockResolvedValue(0)
+
+		const res = await makeReindexFromStore(deps)()
+
+		expect(res).toEqual({ retained: 0, missing: 1, failed: 0 })
+		const logged = vi
+			.mocked(deps.log as (m: string) => void)
+			.mock.calls.map((c) => String(c[0]))
+			.join("\n")
+		expect(logged).toContain("MISS docs/ghost")
 	})
 })
 

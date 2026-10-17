@@ -28,7 +28,7 @@ MCPedia is a content-first knowledge base where documents are stored in **Postgr
 - **Run tests**: `bun run test`
 - **Typecheck**: `bun run typecheck`
 - **Build monorepo**: `bunx turbo run build`
-- **Index content**: `bun run index`
+- **Index content**: `pnpm run index` (walks `content/` on disk; use `pnpm run reindex:hindsight` on a deploy host, where the mirror may be absent — it reads bodies from Postgres)
 - **Start dev servers**: `bun run dev`
 
 <!-- BEGIN:turborepo-agent-rules -->

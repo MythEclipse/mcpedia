@@ -143,6 +143,75 @@ export function makeIndexContentFile(deps: IndexingDeps) {
 }
 
 /**
+ * Re-retain every stored document into the current hindsight bank, reading the
+ * bodies from the DATABASE.
+ *
+ * ## WHY THIS IS NOT `runFullIndex`
+ *
+ * `runFullIndex` walks CONTENT_ROOT on disk and parses each file. That is the
+ * right shape for a checkout — the files ARE the input — and the wrong shape for
+ * a deploy host, where the mirror is a gitignored backup that may be absent or
+ * stale (`content/` is written as a side effect, never guaranteed). Postgres is
+ * the source of truth, so a reindex that can only see the disk index cannot
+ * repair a host whose bank was repointed.
+ *
+ * What this is FOR: `HINDSIGHT_BANK_ID` names the bank a document's facts live
+ * in, so changing it — as production did when it moved onto a shared bank —
+ * leaves every document present in the table and absent from the index. Search
+ * then returns nothing, silently, because nothing is broken enough to error.
+ * This re-retains the stored bodies, and it is idempotent on the hindsight side
+ * (`document_id` + `update_mode: "replace"`), so a re-run repairs a partial one.
+ *
+ * Sequential on purpose, matching `runFullIndex`: each retain spends a real LLM
+ * extraction upstream and hindsight throttles embedding concurrency against a
+ * quota, so parallelism converts a slow success into a partial failure.
+ */
+export function makeReindexFromStore(
+	deps: Pick<IndexingDeps, "documents" | "index"> & {
+		log?: (message: string) => void
+	},
+) {
+	const log = deps.log ?? ((m: string) => console.log(m))
+
+	return async function reindexFromStore(
+		opts: { slugs?: string[]; status?: string } = {},
+	): Promise<{ retained: number; missing: number; failed: number }> {
+		const rows = await deps.documents.listForExport(
+			opts.slugs ? { slugs: opts.slugs } : { status: opts.status },
+		)
+
+		let retained = 0
+		let missing = 0
+		let failed = 0
+
+		for (const doc of rows) {
+			try {
+				const n = await deps.index.chunkAndEmbed(doc.slug, doc.body)
+				if (n === 0) {
+					// No row matched the slug. Counted separately from a failure
+					// because the cause is different and so is the fix — the slug
+					// the caller asked for is not the slug the table holds.
+					missing++
+					log(`  MISS ${doc.slug} (no row for this slug)`)
+					continue
+				}
+				retained++
+				log(`  retained ${doc.slug}`)
+			} catch (err) {
+				failed++
+				log(
+					`  FAILED ${doc.slug}: ${
+						err instanceof Error ? err.message : String(err)
+					}`,
+				)
+			}
+		}
+
+		return { retained, missing, failed }
+	}
+}
+
+/**
  * Walk the entire content tree and index every file. Returns aggregate counts.
  *
  * Files are processed SEQUENTIALLY, not concurrently. Concurrency here would

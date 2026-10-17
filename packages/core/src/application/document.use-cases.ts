@@ -276,10 +276,10 @@ export function makeUpdateDocument(deps: DocumentUseCaseDeps) {
 export function makeDeleteDocument(
 	deps: Pick<
 		DocumentUseCaseDeps,
-		"documents" | "mirror" | "activity" | "actor"
+		"documents" | "index" | "mirror" | "activity" | "actor"
 	>,
 ) {
-	const { documents, mirror } = deps
+	const { documents, index, mirror } = deps
 	const audit = makeAuditor(deps.activity ?? null)
 
 	return async function deleteDocument(
@@ -304,6 +304,21 @@ export function makeDeleteDocument(
 				{ title: doc.title, section: doc.section },
 			),
 		})
+
+		// The row and the index are two stores, and `documents.remove` only
+		// emptied one of them. Without this the deleted body stays searchable and
+		// every hit links to a slug that 404s — the document is gone from the
+		// site and still the top result for its own subject.
+		//
+		// Non-fatal, like the other side effects: the delete has already been
+		// committed, and failing here would report a delete that DID happen as an
+		// error the caller would retry. A stale index entry is recoverable by a
+		// reindex; a caller that believes its delete failed is not.
+		try {
+			await index.forget(slug)
+		} catch {
+			// Same policy as the mirror below: the committed write stands.
+		}
 
 		try {
 			await mirror.remove(doc.path)
