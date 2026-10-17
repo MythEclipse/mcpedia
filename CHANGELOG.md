@@ -1,3 +1,10 @@
+## [1.1.4](https://github.com/asepharyana/mcpedia/compare/v1.1.3...v1.1.4) (2026-10-17)
+
+
+### Bug Fixes
+
+* **web:** render the matched route — document URLs showed the section index ([0628324](https://github.com/asepharyana/mcpedia/commit/0628324660856280f9edb88dd2dc30e484c0fce7))
+
 ## [1.1.3](https://github.com/asepharyana/mcpedia/compare/v1.1.2...v1.1.3) (2026-10-17)
 
 
