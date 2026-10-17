@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/asepharyana/mcpedia/compare/v1.1.5...v1.2.0) (2026-10-17)
+
+
+### Features
+
+* **sections:** move section metadata from hardcoded tables into the database ([b179000](https://github.com/asepharyana/mcpedia/commit/b1790001c838c034ea19595bc261deabd319e03b))
+
 ## [1.1.5](https://github.com/asepharyana/mcpedia/compare/v1.1.4...v1.1.5) (2026-10-17)
 
 
