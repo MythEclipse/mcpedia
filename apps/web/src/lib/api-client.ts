@@ -159,20 +159,20 @@ export function fetchFolderInfo(
 	)
 }
 
-/** The default section list DocForm offers when the API has none yet. */
-export const DEFAULT_SECTION_LIST = [
-	"docs",
-	"writeups",
-	"research",
-	"notes",
-	"guides",
-	"tutorials",
-	"ctf",
-	"api",
-	"projects",
-]
-
-/** The default document-type list DocForm offers. */
+/**
+ * The default document-type list DocForm offers.
+ *
+ * Section ids do NOT have a counterpart here any more. They used to — a
+ * DEFAULT_SECTION_LIST mirroring the nine seeded ids — and the create form
+ * merged it into the datalist because an install with no documents had no
+ * sections to offer. Section ids now come from documents.sections alone, which
+ * lists every REGISTERED section including ones holding no documents yet, so the
+ * merged list was a second copy of the same nine names waiting to drift.
+ *
+ * Document TYPES are a different thing: they are a fixed vocabulary this app
+ * defines (documentation/writeup/research/note), not content an operator edits,
+ * so they stay.
+ */
 export const DEFAULT_TYPE_LIST = [
 	"documentation",
 	"writeup",

@@ -8,12 +8,12 @@
  * says what it is for.
  */
 import { describe, expect, test, vi } from "vitest"
+import type { DocumentMeta } from "../domain"
 import {
 	makeIndexContentFile,
 	makeReindexFromStore,
 	makeRunFullIndex,
 } from "./index.use-cases"
-import type { DocumentMeta } from "../domain"
 
 function doc(over: Partial<DocumentMeta> = {}): DocumentMeta {
 	return {

@@ -14,15 +14,18 @@
  * Every test here supplies an object of `vi.fn()`s, so the suite runs in
  * milliseconds with no database, no Redis and no filesystem.
  */
-import { describe, expect, test, vi, beforeEach } from "vitest"
+import { beforeEach, describe, expect, test, vi } from "vitest"
+import type {
+	DocumentMeta,
+	DocumentRepository,
+	RevisionRepository,
+} from "../domain"
 import {
 	makeCreateDocument,
-	makeUpdateDocument,
 	makeDeleteDocument,
+	makeUpdateDocument,
 } from "./document.use-cases"
 import { makeGetDocument } from "./read.use-cases"
-import type { DocumentRepository, RevisionRepository } from "../domain"
-import type { DocumentMeta } from "../domain"
 
 /** A stored document, as a repository would return it. */
 function doc(over: Partial<DocumentMeta> = {}): DocumentMeta {

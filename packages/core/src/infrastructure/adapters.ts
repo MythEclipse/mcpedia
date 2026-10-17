@@ -10,10 +10,11 @@
  * chunks and embeds internally, so `IndexingPort` is now implemented in
  * `hindsight.ts`. The deletion took `@mcpedia/embeddings` with it.
  */
-import { CONTENT_ROOT } from "@mcpedia/config"
-import { stringifyFile, parseFile } from "@mcpedia/parser"
-import { existsSync, unlinkSync, readFileSync } from "node:fs"
+
+import { existsSync, readFileSync, unlinkSync } from "node:fs"
 import { join } from "node:path"
+import { CONTENT_ROOT } from "@mcpedia/config"
+import { parseFile, stringifyFile } from "@mcpedia/parser"
 import type { ContentMirror, ContentParser } from "../domain"
 
 /**

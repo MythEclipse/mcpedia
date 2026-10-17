@@ -23,8 +23,9 @@ import type {
 	DocumentMeta,
 	ExportData,
 	ExportQueryOptions,
-	SectionInfo,
 	SearchHit,
+	SectionInfo,
+	SectionRecord,
 } from "@mcpedia/types"
 
 export type {
@@ -32,8 +33,9 @@ export type {
 	DocumentMeta,
 	ExportData,
 	ExportQueryOptions,
-	SectionInfo,
 	SearchHit,
+	SectionInfo,
+	SectionRecord,
 }
 
 /** A single revision's metadata, as returned by the revision history. */

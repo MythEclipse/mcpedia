@@ -21,8 +21,9 @@
  * That mapping is a contract between the two, it has a name, and pinning it here
  * means a change to either side fails in one place.
  */
-import { classifyPath, extractFoldersForSection } from "../domain"
+
 import type { FolderInfo } from "../domain"
+import { classifyPath, extractFoldersForSection } from "../domain"
 
 /**
  * Build the folder view for one path within a section.

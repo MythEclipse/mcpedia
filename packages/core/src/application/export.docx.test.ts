@@ -1,10 +1,10 @@
+import type { ExportData } from "@mcpedia/types"
 import { describe, expect, it } from "vitest"
 import {
-	parseInlineMarkdown,
 	convertMarkdownToDocx,
 	generateExportDocx,
+	parseInlineMarkdown,
 } from "./export.docx"
-import type { ExportData } from "@mcpedia/types"
 
 describe("DOCX Export Generator", () => {
 	it("parseInlineMarkdown: formats plain, bold, italic, inline code, and links", () => {

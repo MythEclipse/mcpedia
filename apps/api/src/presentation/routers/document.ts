@@ -1,4 +1,3 @@
-import { os } from "@orpc/server"
 import {
 	classifyPath,
 	documentUseCases,
@@ -7,17 +6,21 @@ import {
 	getExportDocuments,
 	getRelated,
 	listDocuments,
+	sectionUseCases,
 } from "@mcpedia/core"
-import { mapAppErrors, requireWriteAuthOrSession } from "../middleware"
+import { os } from "@orpc/server"
 import { auditActorOf, resolveSession } from "../context"
+import { mapAppErrors, requireWriteAuthOrSession } from "../middleware"
 import {
 	CreateDocumentInput,
 	ExportInput,
 	FolderInfoInput,
 	ListDocumentsInput,
 	RelatedInput,
+	RemoveSectionInput,
 	SlugInput,
 	UpdateDocumentInput,
+	UpsertSectionInput,
 } from "../schemas"
 
 /**
@@ -83,6 +86,44 @@ export const documentRouter = os.router({
 		.handler(({ input }) => listDocuments(input ?? {})),
 
 	sections: os.use(mapAppErrors).handler(() => documentUseCases().sections()),
+
+	/**
+	 * The full section registry, hidden rows included.
+	 *
+	 * Distinct from `documents.sections` above, which is the NAV-FACING read:
+	 * that one drops hidden sections and attaches document counts. This is the
+	 * admin view — an operator editing the registry must be able to see the
+	 * section they hid, or they cannot unhide it.
+	 */
+	sectionsRegistry: os
+		.use(mapAppErrors)
+		.handler(() => sectionUseCases().list()),
+
+	/**
+	 * Register a section or update one.
+	 *
+	 * Write-gated like the document CRUD. Section metadata used to be a constant
+	 * in @mcpedia/config, so changing a section's name required a deploy; this is
+	 * the endpoint that makes it content.
+	 */
+	upsertSection: os
+		.use(requireWriteAuthOrSession)
+		.use(mapAppErrors)
+		.input(UpsertSectionInput)
+		.handler(async ({ input }) => sectionUseCases().upsert(input)),
+
+	/**
+	 * Unregister a section — its metadata row only, never its documents.
+	 *
+	 * `documents.section` is a plain string, so the documents remain readable at
+	 * their URLs with a derived label. Deleting content is a separate,
+	 * per-document operation (documents.remove).
+	 */
+	removeSection: os
+		.use(requireWriteAuthOrSession)
+		.use(mapAppErrors)
+		.input(RemoveSectionInput)
+		.handler(async ({ input }) => sectionUseCases().remove(input.id)),
 
 	related: os
 		.use(mapAppErrors)

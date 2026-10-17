@@ -14,7 +14,6 @@ import {
 } from "lucide-react"
 import { useRef, useState } from "react"
 import {
-	DEFAULT_SECTION_LIST,
 	DEFAULT_TYPE_LIST,
 	OrpcCallError,
 	PRESET_FIELDS,
@@ -106,9 +105,13 @@ export default function DocForm({
 
 	const sectionOptions = Array.from(
 		new Set(
-			[...(existingSections ?? []), ...DEFAULT_SECTION_LIST, section].filter(
-				Boolean,
-			),
+			// The live section list is the whole option set: documents.sections
+			// returns every registered section including ones with no documents
+			// yet, so a freshly registered section is immediately selectable.
+			// `section` is appended because an edit may be viewing a document
+			// whose section has no registry row (unregistered through the API),
+			// and dropping it would silently reassign the document.
+			[...(existingSections ?? []), section].filter(Boolean),
 		),
 	)
 

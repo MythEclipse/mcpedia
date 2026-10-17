@@ -1,6 +1,6 @@
+import { DATABASE_URL } from "@mcpedia/config"
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
-import { DATABASE_URL } from "@mcpedia/config"
 import * as schema from "./schema"
 
 // PgBouncer (imrnes :6432) uses transaction pooling, which rejects protocol
@@ -12,4 +12,4 @@ const client = postgres(DATABASE_URL, {
 })
 
 export const db = drizzle(client, { schema })
-export { schema, client }
+export { client, schema }

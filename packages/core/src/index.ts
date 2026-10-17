@@ -37,15 +37,60 @@
  * application/.
  */
 
-// --- domain: pure logic and ports ---
+export type {
+	DocSection,
+	DocStatus,
+	DocType,
+	Document,
+	DocumentMeta,
+	ExportCategorySummary,
+	ExportData,
+	ExportQueryOptions,
+	ExportSortOption,
+	ExportSummary,
+	SearchHit,
+	SectionInfo,
+} from "@mcpedia/types"
+// --- application: use cases ---
 export {
-	validateSlug,
-	slugToRelPath,
-	extractFoldersForSection,
-	classifyPath,
-	shouldCreateRevision,
-} from "./domain"
-
+	makeAuditor,
+	makeCreateDocument,
+	makeDeleteDocument,
+	makeFolderInfo,
+	makeGetDocument,
+	makeGetExportDocuments,
+	makeGetRelated,
+	makeGetRevision,
+	makeIndexContentFile,
+	makeListDocuments,
+	makeListRevisions,
+	makeListSections,
+	makeRestoreRevision,
+	makeRunFullIndex,
+	makeSnapshotRevision,
+	makeUpdateDocument,
+	metadataFor,
+	SYSTEM_ACTOR,
+} from "./application"
+export type { DocxExportOptions } from "./application/export.docx"
+export {
+	convertMarkdownToDocx,
+	generateExportDocx,
+	parseInlineMarkdown,
+} from "./application/export.docx"
+// --- export helpers: reused as-is, and browser-safe via ./export-helpers ---
+export {
+	buildExportSummary,
+	CTF_CATEGORY_PRIORITY,
+	compileExportMarkdown,
+	extractDocCategory,
+	extractDocDifficulty,
+	extractDocPoints,
+	extractDocSolved,
+	formatScopeTitle,
+	getCategoryPriority,
+	sortExportDocuments,
+} from "./application/export.helpers"
 // The audit trail's types are part of the public surface because the
 // PRESENTATION layer builds one: `auditActorOf` in apps/api translates a
 // request session into an AuditActor. Keeping these type-only (the port and the
@@ -54,88 +99,66 @@ export {
 export type {
 	ActivityRecord,
 	ActivityRepository,
+	AppErrorCode,
 	AuditAction,
 	AuditActor,
 	AuditEntry,
+	ContentFile,
+	ContentMirror,
+	ContentParser,
+	CreateDocInput,
+	DocumentRepository,
+	ExportOptions,
+	FolderInfo,
+	IndexFileResult,
+	IndexingPort,
+	IndexResult,
+	RestoreResult,
+	RevisionDetail,
+	RevisionRepository,
+	RevisionSummary,
+	UpdateDocInput,
 } from "./domain"
-
-// --- the flat, dependency-bound surface apps/mcp, the worker and scripts/ use ---
+// --- domain: pure logic and ports ---
+// Typed errors. The API's presentation layer maps AppErrorCode to a status, so
+// these are part of the package's public surface, not just an internal detail.
 export {
-	listSections,
-	listDocuments,
-	getDocument,
-	getRelated,
-	getExportDocuments,
-	createDocument,
-	updateDocument,
-	deleteDocument,
-	listRevisions,
-	getRevision,
-	restoreRevision,
-	indexContentFile,
-	runFullIndex,
-} from "./legacy"
-
-// --- export helpers: reused as-is, and browser-safe via ./export-helpers ---
-export {
-	extractDocCategory,
-	extractDocPoints,
-	extractDocDifficulty,
-	extractDocSolved,
-	getCategoryPriority,
-	sortExportDocuments,
-	formatScopeTitle,
-	buildExportSummary,
-	compileExportMarkdown,
-	CTF_CATEGORY_PRIORITY,
-} from "./application/export.helpers"
-
-export {
-	parseInlineMarkdown,
-	convertMarkdownToDocx,
-	generateExportDocx,
-} from "./application/export.docx"
-export type { DocxExportOptions } from "./application/export.docx"
-
-// --- application: use cases ---
-export {
-	makeCreateDocument,
-	makeUpdateDocument,
-	makeDeleteDocument,
-	makeGetDocument,
-	makeListDocuments,
-	makeGetRelated,
-	makeListSections,
-	makeFolderInfo,
-	makeGetExportDocuments,
-	makeIndexContentFile,
-	makeRunFullIndex,
-	makeSnapshotRevision,
-	makeListRevisions,
-	makeGetRevision,
-	makeRestoreRevision,
-	makeAuditor,
-	metadataFor,
-	SYSTEM_ACTOR,
-} from "./application"
-
+	AppError,
+	asAppError,
+	badRequest,
+	classifyPath,
+	conflict,
+	extractFoldersForSection,
+	forbidden,
+	internal,
+	notFound,
+	shouldCreateRevision,
+	slugToRelPath,
+	unauthorized,
+	validateSlug,
+} from "./domain"
 // --- infrastructure: wiring, repositories, adapters ---
 export {
-	getDocumentRepository,
-	getRevisionRepository,
-	getActivityRepository,
-	documentUseCases,
-	revisionUseCases,
-	indexingUseCases,
 	activityUseCases,
-	withAudit,
 	contentMirror,
 	contentParser,
+	createActivityRepository,
 	createDocumentRepository,
 	createRevisionRepository,
-	createActivityRepository,
+	documentUseCases,
+	getActivityRepository,
+	getDocumentRepository,
+	getRevisionRepository,
+	indexingUseCases,
+	revisionUseCases,
+	sectionUseCases,
+	withAudit,
 } from "./infrastructure"
-
+// --- content files on disk ---
+export {
+	listContentFiles,
+	readContentFile,
+} from "./infrastructure/content.service"
 // --- search: hindsight-backed ---
 // `toTsQuery` and `cosine` are GONE with the stack they belonged to: the first
 // built a Postgres tsquery, the second compared two float arrays by hand.
@@ -144,69 +167,28 @@ export {
 // `ChunkHit` went with them — hindsight returns facts, not chunks, and every
 // mode now yields document-level hits.
 export {
-	keywordSearch,
-	semanticSearch,
-	hybridSearch,
 	consolidate,
 	forgetDocument,
+	hybridSearch,
+	keywordSearch,
 	recallDocumentFacts,
 	reflect,
+	semanticSearch,
 } from "./infrastructure/search.service"
-
-// --- content files on disk ---
+// --- the flat, dependency-bound surface apps/mcp, the worker and scripts/ use ---
 export {
-	listContentFiles,
-	readContentFile,
-} from "./infrastructure/content.service"
-
+	createDocument,
+	deleteDocument,
+	getDocument,
+	getExportDocuments,
+	getRelated,
+	getRevision,
+	indexContentFile,
+	listDocuments,
+	listRevisions,
+	listSections,
+	restoreRevision,
+	runFullIndex,
+	updateDocument,
+} from "./legacy"
 export { toMeta } from "./row-map"
-
-export type {
-	DocumentRepository,
-	RevisionRepository,
-	IndexingPort,
-	ContentMirror,
-	ContentParser,
-} from "./domain"
-
-// Typed errors. The API's presentation layer maps AppErrorCode to a status, so
-// these are part of the package's public surface, not just an internal detail.
-export {
-	AppError,
-	asAppError,
-	badRequest,
-	conflict,
-	forbidden,
-	internal,
-	notFound,
-	unauthorized,
-} from "./domain"
-export type { AppErrorCode } from "./domain"
-
-export type {
-	RevisionSummary,
-	RevisionDetail,
-	RestoreResult,
-	IndexResult,
-	IndexFileResult,
-	FolderInfo,
-	CreateDocInput,
-	UpdateDocInput,
-	ExportOptions,
-	ContentFile,
-} from "./domain"
-
-export type {
-	DocSection,
-	DocStatus,
-	DocType,
-	Document,
-	DocumentMeta,
-	SearchHit,
-	SectionInfo,
-	ExportSortOption,
-	ExportCategorySummary,
-	ExportSummary,
-	ExportData,
-	ExportQueryOptions,
-} from "@mcpedia/types"

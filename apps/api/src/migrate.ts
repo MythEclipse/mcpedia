@@ -37,7 +37,7 @@
  * ENTRYPOINT: it owns process exit codes and the operator-facing output, which
  * is the part that has to be different from a library call.
  */
-import { db, client } from "@mcpedia/db"
+import { client, db } from "@mcpedia/db"
 import { runMigrations } from "@mcpedia/db/migrate"
 
 /**

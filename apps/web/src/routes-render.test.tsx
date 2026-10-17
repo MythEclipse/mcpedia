@@ -33,7 +33,7 @@
  * exercised here have no loaders, so no async work is involved.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { RouterProvider, createMemoryHistory } from "@tanstack/react-router"
+import { createMemoryHistory, RouterProvider } from "@tanstack/react-router"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 import { qk } from "#/lib/queries"

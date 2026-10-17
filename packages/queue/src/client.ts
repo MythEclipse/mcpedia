@@ -1,4 +1,4 @@
-import { REDIS_URL, REDIS_PASSWORD, QUEUE_PREFIX } from "@mcpedia/config"
+import { QUEUE_PREFIX, REDIS_PASSWORD, REDIS_URL } from "@mcpedia/config"
 import IORedis, { type RedisOptions } from "ioredis"
 
 /**

@@ -53,6 +53,23 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
 					],
 				})
 			}
+			if (name === "list_sections") {
+				// A registry an operator has edited: five ids, only two of which
+				// the CLI's old hardcoded tuple would have accepted. That
+				// asymmetry is the point of the test that reads this.
+				return Promise.resolve({
+					content: [
+						{
+							type: "text",
+							text: JSON.stringify([
+								{ id: "docs", label: "Documentation", docCount: 12 },
+								{ id: "writeups", label: "Writeups", docCount: 29 },
+								{ id: "threat-intel", label: "Threat Intel", docCount: 3 },
+							]),
+						},
+					],
+				})
+			}
 			return Promise.resolve({ content: [{ type: "text", text: "[]" }] })
 		}
 		listResources() {
@@ -109,6 +126,19 @@ describe("McpediaClient", () => {
 		const res = await client.deleteDocument("docs/test")
 		expect(res.ok).toBe(true)
 		expect(res.deleted).toBe(true)
+		await client.disconnect()
+	})
+
+	it("listSections reads the live registry, not a built-in id list", async () => {
+		// The registry holds an id this client's old hardcoded tuple
+		// (["docs","writeups","research","notes"]) did not contain. Reading the
+		// server is what makes that section usable; a local list cannot.
+		const client = await McpediaClient.connect("http://localhost:0/mcp")
+		const sections = await client.listSections()
+
+		expect(sections.map((s) => s.id)).toContain("threat-intel")
+		expect(sections.map((s) => s.id)).not.toContain("research")
+		expect(sections).toHaveLength(3)
 		await client.disconnect()
 	})
 

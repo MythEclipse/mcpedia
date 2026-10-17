@@ -2,8 +2,9 @@
 // Delegates to the testable factory in app.ts so the HTTP surface can be unit-
 // tested without a live process. start() fail-fasts on missing WEBHOOK_SECRET.
 import { createApp, start } from "./app"
-export { createApp, start }
+
 export type { ApiDeps, QueueLike } from "./app"
+export type { AppRole, Session } from "./presentation/context"
 
 // --- Type-only public surface -----------------------------------------------
 //
@@ -16,7 +17,7 @@ export type { ApiDeps, QueueLike } from "./app"
 // (the router object) whose type is also called AppRouter, and re-exporting it
 // as a value would make the barrel import the whole server.
 export type { AppRouter } from "./presentation/routers"
-export type { AppRole, Session } from "./presentation/context"
+export { createApp, start }
 
 // The client-side view of AppRouter: exactly what `createRouterClient` (from
 // @orpc/client) returns for a link pointing at this router. Derived here so the

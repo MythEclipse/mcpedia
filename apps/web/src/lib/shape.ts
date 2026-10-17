@@ -184,104 +184,77 @@ export function countBySection(docs: DocSummary[]): Map<string, number> {
 /**
  * The section list to show when the API returns nothing.
  *
- * The API's documents.sections reflects sections that actually have published
- * documents. On a cold or empty database that is an empty list, which would
- * render a header with no navigation at all — so fall back to the static
- * registry, exactly as the Next header did.
+ * ## WHY THIS IS NOW EMPTY RATHER THAN A HARDCODED REGISTRY
+ *
+ * It used to fall back to a re-declared copy of @mcpedia/config/sections — four
+ * sections with hardcoded labels and icons. That copy existed because the
+ * browser bundle may not import the config barrel, and it was the second of TWO
+ * places the same nine names lived (the other being SECTION_PRESETS in that same
+ * config module, itself mirrored here). A rename was a two-file edit and the
+ * only thing keeping them equal was a test that policed the duplication.
+ *
+ * Section names are content and live in the `sections` table now, read through
+ * the API. The real fallback for "no API response yet" is not a guess at the
+ * names — it is an empty list, which renders a header with no section nav until
+ * the request lands. That is honest: showing four section tiles before we know
+ * which sections exist is how a fresh deployment came to advertise sections no
+ * document could belong to.
+ *
+ * `live` is returned as-is even when empty, and callers that need at least one
+ * entry for layout reasons should handle that case explicitly rather than
+ * receive invented data.
  */
 export function sectionsOrDefaults(
 	live: SectionInfo[] | undefined,
 ): SectionInfo[] {
-	return live && live.length > 0 ? live : DEFAULT_SECTIONS_FALLBACK
+	return live ?? []
 }
 
 /**
- * Mirrors DEFAULT_SECTIONS from @mcpedia/config/sections, re-declared rather
- * than imported so this module keeps its dependency on TYPES only.
+ * Label/icon/desc for a section id with NO entry in the live list.
  *
- * The duplication is deliberate and pinned: shape.test.ts compares this list
- * against the real export by id, label and icon. That test earns its keep — it
- * caught this list drifting to nine entries when the registry only defines four,
- * which would have rendered five section tiles that no document could ever
- * belong to.
- */
-export const DEFAULT_SECTIONS_FALLBACK: SectionInfo[] = [
-	{ id: "docs", label: "Documentation", icon: "📄", desc: "", docCount: 0 },
-	{ id: "writeups", label: "Writeups", icon: "📝", desc: "", docCount: 0 },
-	{ id: "research", label: "Research", icon: "🔬", desc: "", docCount: 0 },
-	{ id: "notes", label: "Notes", icon: "📌", desc: "", docCount: 0 },
-]
-
-/**
- * Every preset, not just the four in DEFAULT_SECTIONS.
+ * The section page, breadcrumbs and PDF cover need a heading for any section id
+ * that appears in a document — including one created in an ad-hoc section via
+ * MCP, or one whose registry row was deleted. Title-casing the id is the same
+ * rule the server applies (deriveSectionMeta in @mcpedia/core), so the two
+ * agree without either importing the other.
  *
- * The section list and the section page both need a label for any section id
- * that appears in a document, and a knowledge base can legitimately hold
- * documents under "ctf" or "guides" even though those are not in the four-entry
- * default header nav. Mirrors SECTION_PRESETS in @mcpedia/config/sections —
- * shape.test.ts asserts this matches it entry for entry.
+ * This is a DERIVATION from the id, not a lookup table: no names are hardcoded
+ * here any more, which is the point. A curated label always comes from the
+ * database.
  */
-export const SECTION_PRESETS: Record<
-	string,
-	{ label: string; icon: string; desc: string }
-> = {
-	docs: {
-		label: "Documentation",
-		icon: "📄",
-		desc: "Setup guides, API references, and protocol specs.",
-	},
-	writeups: {
-		label: "Writeups",
-		icon: "📝",
-		desc: "Post-mortems, CTF writeups, debugging stories, and case studies.",
-	},
-	research: {
-		label: "Research",
-		icon: "🔬",
-		desc: "Deep-dive analysis, architecture notes, and experiments.",
-	},
-	notes: {
-		label: "Notes",
-		icon: "📌",
-		desc: "Quick references, patterns, and cheat-sheets.",
-	},
-	guides: {
-		label: "Guides",
-		icon: "🧭",
-		desc: "Step-by-step guides and implementation walkthroughs.",
-	},
-	tutorials: {
-		label: "Tutorials",
-		icon: "🎓",
-		desc: "Educational lessons and practical tutorials.",
-	},
-	ctf: {
-		label: "CTF",
-		icon: "🚩",
-		desc: "Capture The Flag challenge writeups and exploit solutions.",
-	},
-	api: {
-		label: "API",
-		icon: "⚡",
-		desc: "API documentation and endpoint definitions.",
-	},
-	projects: {
-		label: "Projects",
-		icon: "🚀",
-		desc: "Project overviews and technical architecture roadmaps.",
-	},
+function deriveSection(section: string): SectionInfo {
+	const id = (section || "docs").toLowerCase().trim()
+	const label = id
+		.split(/[-_]/)
+		.filter(Boolean)
+		.map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+		.join(" ")
+	return {
+		id,
+		label: label || "Custom Section",
+		icon: "📁",
+		desc: `Documents in the ${label || id} section.`,
+		docCount: 0,
+	}
 }
 
 /**
- * The section's own label/icon/desc, from the live list or the presets.
+ * The section's own label/icon/desc, from the live list or derived from the id.
  *
  * `live` is optional because most call sites are cards deep in a component tree
- * with no section list to hand; they get the preset table, which is the same
- * source the Next components used via getSectionMeta.
+ * with no section list to hand. Those callers used to get a hardcoded
+ * SECTION_PRESETS table; now they get the id title-cased, which is exactly what
+ * the server returns for a section with no registry row. The consequence to be
+ * aware of: a component that renders `sectionMeta(id)` with no live list shows
+ * the DERIVED name, so a curated label ("Documentation" for `docs`) only appears
+ * where the section list has been fetched. Call sites that show a section
+ * heading as part of the page chrome pass the live list (see SectionPage and the
+ * document view); decorative ones tolerate the derived name.
  *
- * Unknown ids are title-cased rather than dropped, matching getSectionMeta: the
- * API accepts any section string, so a document in an unregistered section still
- * has to render a heading.
+ * Unknown ids are title-cased rather than dropped, matching the server's
+ * deriveSectionMeta: the API accepts any section string, so a document in an
+ * unregistered section still has to render a heading.
  */
 export function sectionMeta(
 	section: string,
@@ -290,15 +263,7 @@ export function sectionMeta(
 	const id = (section || "docs").toLowerCase().trim()
 	const found = (live ?? []).find((s) => s.id.toLowerCase() === id)
 	if (found) return found
-	const preset = SECTION_PRESETS[id]
-	if (preset) return { id, ...preset, docCount: 0 }
-	return {
-		id,
-		label: slugToTitle(id) || "Custom Section",
-		icon: "📁",
-		desc: `Documents in the ${slugToTitle(id) || id} section.`,
-		docCount: 0,
-	}
+	return deriveSection(id)
 }
 
 /**

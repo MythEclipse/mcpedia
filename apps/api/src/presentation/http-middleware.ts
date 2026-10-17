@@ -28,11 +28,12 @@
  * the 401 and 403 the auth gates produce — the requests most worth having a
  * line for.
  */
+
+import type { MiddlewareHandler } from "hono"
 import { cors } from "hono/cors"
 import { logger } from "hono/logger"
 import { requestId } from "hono/request-id"
 import { secureHeaders } from "hono/secure-headers"
-import type { MiddlewareHandler } from "hono"
 
 /**
  * Options that depend on deployment shape rather than on code.

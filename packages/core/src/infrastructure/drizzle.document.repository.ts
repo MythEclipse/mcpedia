@@ -27,14 +27,15 @@ import {
 	documentChunks,
 	documentRevisions,
 	documents,
+	sections,
 } from "@mcpedia/db/schema"
-import { toMeta } from "../row-map.ts"
-import { and, desc, eq, like, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, like, or, sql } from "drizzle-orm"
 import type {
 	CreateDocInput,
 	DocumentMeta,
 	DocumentRepository,
 } from "../domain"
+import { toMeta, toSectionRecord } from "../row-map.ts"
 
 export function createDocumentRepository(
 	client: typeof db = db,
@@ -109,6 +110,56 @@ export function createDocumentRepository(
 				count: r.count,
 				latestUpdate: r.latestUpdate,
 			}))
+		},
+
+		async listRegistry() {
+			const rows = await client
+				.select()
+				.from(sections)
+				.orderBy(asc(sections.sortOrder), asc(sections.id))
+			return rows.map(toSectionRecord)
+		},
+
+		async upsertSection(input) {
+			const [row] = await client
+				.insert(sections)
+				.values({
+					id: input.id,
+					label: input.label,
+					icon: input.icon,
+					desc: input.desc,
+					sortOrder: input.sortOrder,
+					hidden: input.hidden,
+				})
+				.onConflictDoUpdate({
+					target: sections.id,
+					set: {
+						label: input.label,
+						icon: input.icon,
+						desc: input.desc,
+						sortOrder: input.sortOrder,
+						hidden: input.hidden,
+						// Explicit rather than defaultNow(): the column default
+						// only applies to an INSERT, so without this an update
+						// would keep the original timestamp and "when was this
+						// section last renamed" would read as the row's birthday.
+						updatedAt: new Date(),
+					},
+				})
+				.returning()
+			// `returning()` on a single-row insert always yields one row; the
+			// guard turns a driver-level surprise into a named error rather than
+			// an `undefined` that fails later at a property read.
+			if (!row) throw new Error(`section upsert returned no row: ${input.id}`)
+			return toSectionRecord(row)
+		},
+
+		async removeSection(id) {
+			const rows = await client
+				.delete(sections)
+				.where(eq(sections.id, id))
+				.returning({ id: sections.id })
+			return { deleted: rows.length > 0 }
 		},
 
 		async insert(input: CreateDocInput & { path: string; meta: DocumentMeta }) {

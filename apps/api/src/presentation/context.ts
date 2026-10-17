@@ -1,5 +1,5 @@
+import { type AuditActor, forbidden, unauthorized } from "@mcpedia/core"
 import type { db as Db } from "@mcpedia/db"
-import { forbidden, type AuditActor, unauthorized } from "@mcpedia/core"
 import { match } from "ts-pattern"
 import { safeSecretEqual } from "../secret"
 

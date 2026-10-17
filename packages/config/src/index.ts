@@ -1,6 +1,6 @@
-import { fileURLToPath } from "node:url"
-import { dirname, resolve } from "node:path"
 import { existsSync, readFileSync } from "node:fs"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 import { z } from "zod"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -225,15 +225,16 @@ export function requireEnv(name: string, value: string): string {
 	return value
 }
 
-// Dynamic Section registry & helpers — re-exported from a Node-free module.
+// Section id helpers — re-exported from a Node-free module.
+//
+// The LABELS no longer live here: section metadata is content and is read from
+// the `sections` table. What is left is the pure id derivation and the id lists.
 export {
-	SECTIONS,
-	SECTIONS_BY_ID,
-	SECTION_IDS,
-	DEFAULT_SECTIONS,
-	SECTION_PRESETS,
+	DEFAULT_SECTION_IDS,
 	getSectionMeta,
+	SECTION_IDS,
 	type SectionConfig,
+	titleCaseSection,
 } from "./sections"
 
 // NOTE: we deliberately do NOT throw here if DATABASE_URL is empty.

@@ -31,15 +31,16 @@
  * grants admin unconditionally, and no endpoint that promotes: to add an admin
  * later, UPDATE the row directly (README, "Promoting a user to admin").
  */
-import { betterAuth } from "better-auth"
-import { drizzleAdapter } from "better-auth/adapters/drizzle"
-import { sql } from "drizzle-orm"
-import { db, schema } from "@mcpedia/db"
+
 import {
 	BETTER_AUTH_SECRET,
 	BETTER_AUTH_URL,
 	requireEnv,
 } from "@mcpedia/config"
+import { db, schema } from "@mcpedia/db"
+import { betterAuth } from "better-auth"
+import { drizzleAdapter } from "better-auth/adapters/drizzle"
+import { sql } from "drizzle-orm"
 
 /**
  * betterAuth is generic over its options, so the concrete type depends on the

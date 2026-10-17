@@ -1,4 +1,3 @@
-import { getSectionMeta } from "@mcpedia/config/sections"
 import type {
 	Document,
 	DocumentMeta,
@@ -7,6 +6,27 @@ import type {
 	ExportSortOption,
 	ExportSummary,
 } from "@mcpedia/types"
+
+/**
+ * Title-case a section id for display: "ctf-writeups" -> "Ctf Writeups".
+ *
+ * A local copy rather than an import from @mcpedia/config/sections, because that
+ * module's registry is now only a seed for the `sections` table and this module
+ * must not depend on a list that is no longer authoritative. The reader in
+ * read.use-cases.ts derives the same label for an unregistered section; both are
+ * three lines of pure string work and neither is worth a shared dependency that
+ * would re-establish the coupling this change removed.
+ */
+function titleCaseSection(id: string): string {
+	const label = (id || "docs")
+		.toLowerCase()
+		.trim()
+		.split(/[-_]/)
+		.filter(Boolean)
+		.map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+		.join(" ")
+	return label || "Custom Section"
+}
 
 export type {
 	Document,
@@ -318,17 +338,23 @@ export function formatScopeTitle(pathOrSection: string): string {
 
 /**
  * Compile export summary statistics.
+ *
+ * `sectionLabel` is passed IN rather than looked up here. This module is
+ * imported directly by the browser (the /export/pdf page renders from it), so it
+ * cannot reach the database — and section names now live in the `sections`
+ * table. When the caller omits it, the label falls back to the title-cased
+ * section id, which is what a section with no registry row renders as
+ * everywhere else.
  */
 export function buildExportSummary(
 	docs: Document[],
 	scopePath?: string,
 	section?: string,
+	sectionLabel?: string,
 ): ExportSummary {
 	const effectiveSection = section || (docs[0]?.section ?? "docs")
-	const sectionMeta = getSectionMeta(effectiveSection)
-	const scopeTitle = scopePath
-		? formatScopeTitle(scopePath)
-		: `${sectionMeta.label} Export`
+	const label = sectionLabel?.trim() || titleCaseSection(effectiveSection)
+	const scopeTitle = scopePath ? formatScopeTitle(scopePath) : `${label} Export`
 
 	let totalPoints = 0
 	const categoryMap = new Map<string, { count: number; points: number }>()
@@ -361,6 +387,7 @@ export function buildExportSummary(
 		title: scopeTitle,
 		scope: scopePath || effectiveSection,
 		section: effectiveSection,
+		sectionLabel: label,
 		totalDocuments: docs.length,
 		totalPoints,
 		categories,

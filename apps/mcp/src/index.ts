@@ -13,6 +13,7 @@ import {
 	recallDocumentFacts,
 	reflect,
 	restoreRevision,
+	sectionUseCases,
 	semanticSearch,
 	updateDocument,
 } from "@mcpedia/core"
@@ -117,6 +118,100 @@ export function createMcpServer(authSecret?: string): McpServer {
 			const sections = await listSections()
 			return {
 				content: [{ type: "text", text: JSON.stringify(sections, null, 2) }],
+			}
+		},
+	)
+
+	server.registerTool(
+		"list_section_registry",
+		{
+			description:
+				"The full section registry: label, icon, description, order and hidden flag for every registered section. Includes hidden sections, which list_sections omits. Reads from the sections table.",
+			inputSchema: z.object({}),
+		},
+		async () => {
+			const rows = await sectionUseCases().list()
+			return {
+				content: [{ type: "text", text: JSON.stringify(rows, null, 2) }],
+			}
+		},
+	)
+
+	server.registerTool(
+		"upsert_section",
+		{
+			description:
+				"Register a section or update one that exists (this is where a section's name, icon and description live — previously hardcoded in the app). Requires the x-webhook-secret header. Omitted fields keep their defaults: label derives from the id, icon becomes 📁, hidden becomes false. Setting hidden omits the section from navigation without touching its documents.",
+			inputSchema: z.object({
+				id: z
+					.string()
+					.describe(
+						"Section id — the first segment of every document slug in it (e.g. 'writeups'). Letters, digits, '-' and '_' only.",
+					),
+				label: z
+					.string()
+					.optional()
+					.describe(
+						"Display name (e.g. 'Writeups'). Defaults to the title-cased id.",
+					),
+				icon: z.string().optional().describe("An emoji or short glyph."),
+				desc: z
+					.string()
+					.optional()
+					.describe("One-line blurb shown on the home page."),
+				sortOrder: z
+					.number()
+					.int()
+					.optional()
+					.describe("Navigation order; lower sorts first."),
+				hidden: z
+					.boolean()
+					.optional()
+					.describe("Unlist from navigation (URL and documents still work)."),
+			}),
+		},
+		async ({ id, label, icon, desc, sortOrder, hidden }) => {
+			requireMcpAuth(authSecret)
+			const row = await sectionUseCases().upsert({
+				id,
+				label,
+				icon,
+				desc,
+				sortOrder,
+				hidden,
+			})
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Section upserted:\n${JSON.stringify(row, null, 2)}`,
+					},
+				],
+			}
+		},
+	)
+
+	server.registerTool(
+		"delete_section",
+		{
+			description:
+				"Unregister a section: removes its registry row (name, icon, description) and NOTHING else. Documents in that section are untouched and remain readable at their URLs, rendering with a title-cased label. To delete documents, delete them individually. Requires the x-webhook-secret header.",
+			inputSchema: z.object({
+				id: z.string().describe("The section id to unregister."),
+			}),
+		},
+		async ({ id }) => {
+			requireMcpAuth(authSecret)
+			const result = await sectionUseCases().remove(id)
+			return {
+				content: [
+					{
+						type: "text",
+						text: result.deleted
+							? `Section "${id}" unregistered. Its documents were not touched.`
+							: `No registry row for "${id}" — nothing to remove. Documents in that section, if any, are unaffected.`,
+					},
+				],
 			}
 		},
 	)

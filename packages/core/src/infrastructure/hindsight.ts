@@ -67,10 +67,10 @@
  */
 import { db } from "@mcpedia/db"
 import { documents } from "@mcpedia/db/schema"
-import { and, eq, inArray } from "drizzle-orm"
 import type { DocumentMeta, SearchHit } from "@mcpedia/types"
-import { toMeta } from "../row-map.ts"
+import { and, eq, inArray } from "drizzle-orm"
 import type { IndexingPort } from "../domain/index.js"
+import { toMeta } from "../row-map.ts"
 
 /**
  * The loopback address the systemd unit binds. Overridable so a containerised

@@ -27,7 +27,7 @@
  * a reader of the trail would need to special-case every action. Deriving it in
  * one place is what makes the table queryable.
  */
-import type { AuditAction, AuditActor, ActivityRepository } from "../domain"
+import type { ActivityRepository, AuditAction, AuditActor } from "../domain"
 
 /** The actor for a write with no authenticated principal behind it. */
 export const SYSTEM_ACTOR: AuditActor = Object.freeze({ via: "system" })

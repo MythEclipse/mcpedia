@@ -1,4 +1,4 @@
-import { isAdminRequest, getSessionForRequest } from "../auth"
+import { getSessionForRequest, isAdminRequest } from "../auth"
 import type { AppRole, Session } from "./context"
 
 /**

@@ -14,27 +14,57 @@ import { McpediaClient } from "./client"
 
 const MCP_URL = process.env.MCP_URL ?? "https://mcp.asepharyana.my.id/mcp"
 
-/** The sections `createDocument` accepts. */
-const DOC_SECTIONS = ["docs", "writeups", "research", "notes"] as const
-type DocSection = (typeof DOC_SECTIONS)[number]
+/** The section `createDocument` falls back to when none is given. */
+const DEFAULT_DOC_SECTION = "docs"
 
 /**
- * Narrow a free-text `--section=` argument to a valid section.
+ * Narrow a free-text `--section=` argument to a section the server knows.
  *
- * The CLI takes an arbitrary string, so this validates rather than asserting:
- * an unrecognised value is rejected loudly instead of being forwarded to the
- * server as a section that does not exist. Defaults to "docs", matching the
- * previous `opts.section || "docs"`.
+ * ## WHY THIS ASKS THE SERVER RATHER THAN CHECKING A LOCAL LIST
+ *
+ * This used to validate against a hardcoded `["docs","writeups","research",
+ * "notes"]`. Those four were the whole section vocabulary when the CLI was
+ * written; sections are registry CONTENT now, held in the `sections` table and
+ * editable through MCP, so that tuple was a second source of truth that silently
+ * rejected every section an operator added — `ask create --section=threat-intel`
+ * failed on a section the server would have accepted, and the error named four
+ * names that were no longer the complete set. create_document itself takes
+ * `z.string()`, so the CLI was stricter than the API it wraps.
+ *
+ * The registry is read over the same connection the write will use, so a section
+ * that validates here is a section that exists there. An unreachable server is
+ * reported as an unreachable server; it is NOT treated as an empty registry,
+ * which would make every section look unknown.
+ *
+ * A section with no registry row is still legal to write to — unregistering a
+ * section deliberately leaves its documents in place — so the check is a guard
+ * against typos, and `--force` is the escape hatch for a deliberately
+ * unregistered section.
  */
-function toDocSection(raw: string | undefined): DocSection {
-	if (raw === undefined || raw === "") return "docs"
-	const match = DOC_SECTIONS.find((s) => s === raw)
-	if (!match) {
+async function toDocSection(
+	client: McpediaClient,
+	raw: string | undefined,
+	force: boolean,
+): Promise<string> {
+	if (raw === undefined || raw === "") return DEFAULT_DOC_SECTION
+	if (force) return raw
+
+	const sections = await client.listSections()
+	if (sections.length === 0) {
 		throw new Error(
-			`Unknown section "${raw}". Expected one of: ${DOC_SECTIONS.join(", ")}`,
+			`The server reported no sections at all, so "${raw}" cannot be validated. ` +
+				`Pass --force to write to it anyway.`,
 		)
 	}
-	return match
+	const ids = sections.map((s) => s.id)
+	if (!ids.includes(raw)) {
+		throw new Error(
+			`Unknown section "${raw}". The registry has: ${ids.join(", ")}. ` +
+				`Register it with upsert_section, or pass --force to write to an ` +
+				`unregistered section.`,
+		)
+	}
+	return raw
 }
 
 async function main() {
@@ -118,7 +148,11 @@ async function main() {
 				const res = await client.createDocument({
 					slug: opts.slug || "",
 					title: opts.title || "Untitled",
-					section: toDocSection(opts.section),
+					section: await toDocSection(
+						client,
+						opts.section,
+						opts.force === "true",
+					),
 					body: opts.body || "",
 					tags: opts.tags ? opts.tags.split(",") : [],
 					author: opts.author,

@@ -1,6 +1,6 @@
-import { ORPCError } from "@orpc/client"
-import type { ORPCErrorCode } from "@orpc/client"
 import type { AppError, AppErrorCode } from "@mcpedia/core"
+import type { ORPCErrorCode } from "@orpc/client"
+import { ORPCError } from "@orpc/client"
 
 /**
  * The one place that decides what a failure means on the wire.

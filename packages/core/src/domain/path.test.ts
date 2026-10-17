@@ -9,10 +9,10 @@
  */
 import { describe, expect, test } from "vitest"
 import {
-	validateSlug,
-	slugToRelPath,
-	extractFoldersForSection,
 	classifyPath,
+	extractFoldersForSection,
+	slugToRelPath,
+	validateSlug,
 } from "./path"
 
 describe("validateSlug", () => {

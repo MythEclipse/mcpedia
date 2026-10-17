@@ -12,7 +12,8 @@
  */
 export * from "./audit"
 export * from "./document.use-cases"
-export * from "./read.use-cases"
-export * from "./index.use-cases"
-export * from "./revision.use-cases"
 export * from "./export.use-cases"
+export * from "./index.use-cases"
+export * from "./read.use-cases"
+export * from "./revision.use-cases"
+export * from "./section.use-cases"

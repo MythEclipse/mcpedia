@@ -1,7 +1,7 @@
-import { Worker, type Job } from "bullmq"
-import { getConnection, BULLMQ_PREFIX } from "./client"
-import { INDEX_QUEUE } from "./queue"
 import { consolidate, indexContentFile, runFullIndex } from "@mcpedia/core"
+import { type Job, Worker } from "bullmq"
+import { BULLMQ_PREFIX, getConnection } from "./client"
+import { INDEX_QUEUE } from "./queue"
 
 export function createWorker(): Worker {
 	const worker = new Worker(

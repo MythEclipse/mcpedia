@@ -1,5 +1,5 @@
-import { Queue, type Job } from "bullmq"
-import { getConnection, BULLMQ_PREFIX } from "./client"
+import { type Job, Queue } from "bullmq"
+import { BULLMQ_PREFIX, getConnection } from "./client"
 
 export const INDEX_QUEUE = "mcpedia-index"
 

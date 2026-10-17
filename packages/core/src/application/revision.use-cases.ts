@@ -21,7 +21,6 @@
  * call it rather than passing a number they invented.
  */
 import {
-	shouldCreateRevision,
 	type ActivityRepository,
 	type AuditActor,
 	type DocumentMeta,
@@ -30,6 +29,7 @@ import {
 	type RevisionDetail,
 	type RevisionRepository,
 	type RevisionSummary,
+	shouldCreateRevision,
 } from "../domain"
 import { makeAuditor, metadataFor, SYSTEM_ACTOR } from "./audit"
 

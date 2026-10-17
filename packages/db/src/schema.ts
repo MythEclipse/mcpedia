@@ -142,6 +142,71 @@ export type DocumentRevisionRow = typeof documentRevisions.$inferSelect
 export type NewDocumentRevisionRow = typeof documentRevisions.$inferInsert
 
 /**
+ * The section registry: label, icon and blurb for each section id.
+ *
+ * ## WHY THIS IS A TABLE AND NOT A CONSTANT
+ *
+ * Section metadata used to live in `SECTION_PRESETS` / `DEFAULT_SECTIONS`
+ * (@mcpedia/config/sections) AND in a re-declared copy in apps/web/src/lib/shape.ts,
+ * because the browser bundle may not import the config barrel. Two copies of the
+ * same nine labels means every rename is a two-file edit, and the only thing
+ * keeping them equal was a test whose entire job was policing that duplication
+ * (apps/web/src/lib/shape.test.ts "every preset matches @mcpedia/config/sections").
+ *
+ * That also contradicts this repo's first principle: the database is the source
+ * of truth and code reads from it (AGENTS.md #2). "What is the writeups section
+ * called" is content, not code — renaming it should not require a deploy.
+ *
+ * The old constants survive as the SEED for this table (packages/db/src/seed-sections.ts),
+ * applied once at migration time. They are not a runtime fallback any more: an
+ * id with no row simply has no metadata and renders title-cased, which is the
+ * behaviour a document created in an ad-hoc section already had.
+ *
+ * `id` is the section string documents.section holds — NOT a foreign key. A
+ * document may reference a section before its row exists (or with no row at
+ * all), and that is legal: the reader falls back to a derived label rather than
+ * failing the read. Only the metadata is missing, never the document.
+ */
+export const sections = pgTable(
+	"sections",
+	{
+		id: text("id").primaryKey(),
+		label: text("label").notNull(),
+		// An emoji or short glyph, rendered as-is. Not an icon name: the UI
+		// prints this string directly, and it is part of the seed data.
+		icon: text("icon").notNull().default("📁"),
+		// The TS key is `desc` (that is the public field on SectionInfo, used
+		// throughout the web app) but the COLUMN is `description`. `desc` is a
+		// reserved word in SQL — `order by x desc` — so a column literally named
+		// "desc" has to be double-quoted in every hand-written statement, and a
+		// single missed quote is a syntax error at runtime rather than at build
+		// time. Observed for real here: the generated DDL quoted it correctly
+		// while the seed's raw INSERT did not, and the failure only appeared when
+		// the migration ran against a live database.
+		desc: text("description").notNull().default(""),
+		// Controls the header nav order. Sections with no row sort after these,
+		// alphabetically, so a new one is always reachable.
+		sortOrder: integer("sort_order").notNull().default(1000),
+		// Hidden sections are omitted from the header nav but still render at
+		// their own URL and still hold documents — the difference between
+		// "unlisted" and "deleted", which is why it is a flag and not a delete.
+		hidden: boolean("hidden").notNull().default(false),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+	},
+	(t) => ({
+		orderIdx: index("sections_sort_order_idx").on(t.sortOrder),
+	}),
+)
+
+export type SectionRow = typeof sections.$inferSelect
+export type NewSectionRow = typeof sections.$inferInsert
+
+/**
  * The audit trail: who changed what, when, and through which credential.
  *
  * ## WHY THIS IS A TABLE AND NOT A LOG LINE

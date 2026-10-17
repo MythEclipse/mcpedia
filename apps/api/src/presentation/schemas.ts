@@ -33,6 +33,34 @@ export const ListDocumentsInput = z
 
 export const SlugInput = z.object({ slug: z.string() })
 
+/**
+ * Registering or updating a section.
+ *
+ * `id` is checked against the same character class the core use case enforces
+ * (section.use-cases.ts) — a section id becomes the first segment of every
+ * document slug in it. It is validated in BOTH places on purpose: this schema
+ * gives the HTTP caller a 400 with a field-shaped message, while the use case
+ * guards the MCP entry point, which never sees this zod object. A rule that
+ * lives only at one of two entry points is a rule the other one does not have.
+ */
+export const UpsertSectionInput = z.object({
+	id: z
+		.string()
+		.min(1)
+		.regex(
+			/^[A-Za-z0-9][A-Za-z0-9-_]*$/,
+			"Section ids become URL path segments: use letters, digits, '-' and '_' only.",
+		),
+	label: z.string().optional(),
+	icon: z.string().optional(),
+	desc: z.string().optional(),
+	sortOrder: z.number().int().optional(),
+	hidden: z.boolean().optional(),
+})
+
+/** Unregistering a section takes only its id. */
+export const RemoveSectionInput = z.object({ id: z.string().min(1) })
+
 export const RevisionListInput = z.object({
 	slug: z.string(),
 	limit: z.number().int().min(1).max(50).default(20),

@@ -27,11 +27,7 @@
  * importing the package stays free of side effects; only calling into the data
  * path connects, which is what the caller was going to do anyway.
  */
-import {
-	documentUseCases,
-	indexingUseCases,
-	revisionUseCases,
-} from "./infrastructure/compose"
+
 import type {
 	AuditActor,
 	CreateDocInput,
@@ -47,6 +43,11 @@ import type {
 	SectionInfo,
 	UpdateDocInput,
 } from "./domain"
+import {
+	documentUseCases,
+	indexingUseCases,
+	revisionUseCases,
+} from "./infrastructure/compose"
 
 /** Document reads. */
 export const listSections = (): Promise<SectionInfo[]> =>

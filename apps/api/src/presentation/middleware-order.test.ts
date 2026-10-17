@@ -7,13 +7,14 @@
  * what makes that claim checkable: the alternative is a refactor that reorders
  * two `.use()` calls and silently changes which layer sees a thrown AppError.
  */
-import { describe, expect, it } from "vitest"
-import { Hono } from "hono"
+
+import { AppError } from "@mcpedia/core"
+import { ORPCError } from "@orpc/client"
 import { os } from "@orpc/server"
 import { RPCHandler } from "@orpc/server/fetch"
-import { AppError } from "@mcpedia/core"
+import { Hono } from "hono"
+import { describe, expect, it } from "vitest"
 import { z } from "zod"
-import { ORPCError } from "@orpc/client"
 
 /** Records the order the chain ran in. */
 const trace: string[] = []

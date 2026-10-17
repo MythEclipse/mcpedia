@@ -1,9 +1,9 @@
-export { getConnection, BULLMQ_PREFIX } from "./client"
+export { BULLMQ_PREFIX, getConnection } from "./client"
+export type { IndexAllJobData, IndexDocJobData, JobType } from "./queue"
 export {
-	getQueue,
-	enqueueIndexDoc,
 	enqueueFullIndex,
+	enqueueIndexDoc,
+	getQueue,
 	INDEX_QUEUE,
 } from "./queue"
-export type { IndexDocJobData, IndexAllJobData, JobType } from "./queue"
 export { createWorker, startWorker } from "./worker"

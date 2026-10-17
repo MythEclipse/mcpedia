@@ -6,13 +6,14 @@
  * choose between rendering, listing and 404ing.
  */
 import { describe, expect, test, vi } from "vitest"
+import type { DocumentMeta, SectionRecord } from "../domain"
 import {
 	makeFolderInfo,
+	makeGetRelated,
 	makeListDocuments,
 	makeListSections,
-	makeGetRelated,
+	type SectionReadDeps,
 } from "./read.use-cases"
-import type { DocumentMeta } from "../domain"
 
 function doc(slug: string): DocumentMeta {
 	return {
@@ -32,13 +33,35 @@ function doc(slug: string): DocumentMeta {
 }
 
 function fakeRepo(slugs: string[] = []) {
+	const documents = {
+		list: vi.fn(async () => slugs.map(doc)),
+		getBySlug: vi.fn(async () => null),
+		getRelated: vi.fn(async () => [] as DocumentMeta[]),
+		listSections: vi.fn(
+			async (): Promise<
+				Array<{ section: string; count: number; latestUpdate: string }>
+			> => [],
+		),
+		// Empty by default: a database with no registry rows is exactly the
+		// state the old hardcoded fallback was hiding, so most tests below
+		// exercise the unregistered path. Tests that need curation set it.
+		listRegistry: vi.fn(async () => [] as SectionRecord[]),
+	}
+	// Typed against the port so a fake that drifts from the real repository
+	// fails to compile here rather than silently satisfying a narrower shape.
+	return { documents } satisfies SectionReadDeps
+}
+
+/** A registry row, with the fields the reader does not care about defaulted. */
+function record(id: string, over: Partial<SectionRecord> = {}): SectionRecord {
 	return {
-		documents: {
-			list: vi.fn(async () => slugs.map(doc)),
-			getBySlug: vi.fn(async () => null),
-			getRelated: vi.fn(async () => []),
-			listSections: vi.fn(async () => []),
-		},
+		id,
+		label: id,
+		icon: "📁",
+		desc: "",
+		sortOrder: 1000,
+		hidden: false,
+		...over,
 	}
 }
 
@@ -82,24 +105,96 @@ describe("makeFolderInfo", () => {
 })
 
 describe("makeListSections", () => {
-	test("an empty corpus falls back to the preset sections at zero", async () => {
-		// A fresh install must still be navigable: the API answers with the
-		// presets so a section that does not exist yet can be visited.
+	test("an EMPTY registry yields nothing — sections come from the table, not code", async () => {
+		// This is the behaviour change. It used to answer with four hardcoded
+		// sections so a fresh install looked navigable, which meant the header
+		// advertised sections no document could belong to and could not reflect
+		// a rename. Section metadata is content now: with no rows, there are no
+		// sections, and the seed (not this use case) is what populates a fresh
+		// database.
 		const deps = fakeRepo()
 		const sections = await makeListSections(deps)()
-		expect(sections.length).toBeGreaterThan(0)
-		expect(sections.every((s) => s.docCount === 0)).toBe(true)
+		expect(sections).toEqual([])
 	})
 
-	test("a populated corpus reports real counts", async () => {
+	test("reports a registered section at zero documents", async () => {
+		// The property the old fallback existed for, now served from the table:
+		// a configured-but-empty section is listed with docCount 0, so it is
+		// visitable before anyone writes to it.
+		const deps = fakeRepo()
+		deps.documents.listRegistry.mockResolvedValue([
+			record("docs", { label: "Documentation", icon: "📄", sortOrder: 0 }),
+		])
+		const sections = await makeListSections(deps)()
+		expect(sections).toHaveLength(1)
+		expect(sections[0]).toMatchObject({
+			id: "docs",
+			label: "Documentation",
+			icon: "📄",
+			docCount: 0,
+		})
+	})
+
+	test("uses the registered label, not a derived one", async () => {
+		// The whole point of the table: a curated name wins over title-casing.
+		const deps = fakeRepo()
+		deps.documents.listSections.mockResolvedValue([
+			{ section: "writeups", count: 3, latestUpdate: "2026-02-01T00:00:00Z" },
+		])
+		deps.documents.listRegistry.mockResolvedValue([
+			record("writeups", { label: "Post-Mortems", sortOrder: 1 }),
+		])
+		const sections = await makeListSections(deps)()
+		expect(sections[0]?.label).toBe("Post-Mortems")
+		expect(sections[0]?.docCount).toBe(3)
+		expect(sections[0]?.updatedAt).toBe("2026-02-01T00:00:00Z")
+	})
+
+	test("keeps a section that has documents but no registry row", async () => {
+		// A document created through MCP in an ad-hoc section must stay
+		// reachable. Dropping it from the list would hide the document from the
+		// only navigation that exists.
 		const deps = fakeRepo()
 		deps.documents.listSections.mockResolvedValue([
 			{ section: "ctf", count: 12, latestUpdate: "2026-02-01T00:00:00Z" },
 		])
 		const sections = await makeListSections(deps)()
-		expect(sections[0]?.docCount).toBe(12)
+		expect(sections).toHaveLength(1)
 		expect(sections[0]?.id).toBe("ctf")
-		expect(sections[0]?.updatedAt).toBe("2026-02-01T00:00:00Z")
+		expect(sections[0]?.label).toBe("Ctf")
+		expect(sections[0]?.docCount).toBe(12)
+	})
+
+	test("orders by registry position, then unregistered ids alphabetically", async () => {
+		// Registry order is an editorial decision; the tail is sorted so the nav
+		// does not visibly reshuffle between reads.
+		const deps = fakeRepo()
+		deps.documents.listSections.mockResolvedValue([
+			{ section: "zeta", count: 1, latestUpdate: "" },
+			{ section: "alpha", count: 1, latestUpdate: "" },
+			{ section: "docs", count: 5, latestUpdate: "" },
+		])
+		deps.documents.listRegistry.mockResolvedValue([
+			record("docs", { label: "Documentation", sortOrder: 0 }),
+		])
+		const sections = await makeListSections(deps)()
+		expect(sections.map((s) => s.id)).toEqual(["docs", "alpha", "zeta"])
+	})
+
+	test("omits hidden sections from the list but leaves their documents alone", async () => {
+		// Hidden is "unlisted", not "deleted": the header nav drops it, and the
+		// documents are still readable at their own URL.
+		const deps = fakeRepo()
+		deps.documents.listSections.mockResolvedValue([
+			{ section: "docs", count: 2, latestUpdate: "" },
+			{ section: "secret", count: 7, latestUpdate: "" },
+		])
+		deps.documents.listRegistry.mockResolvedValue([
+			record("docs", { sortOrder: 0 }),
+			record("secret", { sortOrder: 1, hidden: true }),
+		])
+		const sections = await makeListSections(deps)()
+		expect(sections.map((s) => s.id)).toEqual(["docs"])
 	})
 })
 

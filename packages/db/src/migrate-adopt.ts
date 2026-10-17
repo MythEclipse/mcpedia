@@ -31,10 +31,10 @@
  * adopt → migrate path working end to end.
  */
 import { createHash } from "node:crypto"
-import { readFile, readdir } from "node:fs/promises"
+import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { sql } from "drizzle-orm"
-import { db, client } from "./client"
+import { client, db } from "./client"
 import { readMigrationJournal } from "./migrate-guard"
 
 const migrationsFolder = new URL("../drizzle", import.meta.url).pathname

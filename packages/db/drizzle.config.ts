@@ -1,5 +1,5 @@
-import { defineConfig } from "drizzle-kit"
 import { DATABASE_URL } from "@mcpedia/config"
+import { defineConfig } from "drizzle-kit"
 
 export default defineConfig({
 	dialect: "postgresql",

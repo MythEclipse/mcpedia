@@ -22,7 +22,6 @@
  * migration; wiring it to the API is a separate piece of work.
  */
 
-import { getSectionMeta } from "@mcpedia/config/sections"
 import {
 	compileExportMarkdown,
 	type Document,
@@ -135,7 +134,11 @@ export default function PdfExportView({
 	const [selectedCategory, setSelectedCategory] = useState<string>("all")
 	const [copiedMd, setCopiedMd] = useState(false)
 
-	const sectionMeta = getSectionMeta(summary.section)
+	// The section name arrives on the summary, resolved server-side from the
+	// `sections` table. It used to come from a hardcoded getSectionMeta() here,
+	// which could not reflect a rename — the browser has no access to the
+	// registry, which is why the label is part of the payload.
+	const sectionMeta = { label: summary.sectionLabel }
 
 	const allCategories = useMemo(() => {
 		const set = new Set<string>()

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { createReadStream } from "node:fs"
+import { stat } from "node:fs/promises"
 /**
  * The static file server for the MCPedia web SPA on :4016.
  *
@@ -29,8 +31,6 @@
  * not worth a runtime dependency.
  */
 import { createServer } from "node:http"
-import { createReadStream } from "node:fs"
-import { stat } from "node:fs/promises"
 import { extname, join, normalize, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 

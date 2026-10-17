@@ -1,7 +1,4 @@
-import {
-	DEFAULT_SECTIONS,
-	SECTION_PRESETS as SECTION_PRESETS_REAL,
-} from "@mcpedia/config/sections"
+import { titleCaseSection } from "@mcpedia/config/sections"
 import { describe, expect, test } from "vitest"
 import type { DocSummary } from "./shape"
 import {
@@ -10,7 +7,6 @@ import {
 	countBySection,
 	customFieldEntries,
 	customFieldLabel,
-	DEFAULT_SECTIONS_FALLBACK,
 	docsInSection,
 	exportTargetSlug,
 	extractToc,
@@ -21,7 +17,6 @@ import {
 	normalizeSearchHits,
 	parseSearchMode,
 	readingTime,
-	SECTION_PRESETS,
 	sectionMeta,
 	sectionsOrDefaults,
 	slugToTitle,
@@ -458,41 +453,13 @@ describe("sectionsOrDefaults", () => {
 		expect(sectionsOrDefaults(live)[0]?.label).toBe("Live")
 	})
 
-	test("falls back to the static registry when the API returns nothing", () => {
-		expect(sectionsOrDefaults([])).toBe(DEFAULT_SECTIONS_FALLBACK)
-		expect(sectionsOrDefaults(undefined)).toBe(DEFAULT_SECTIONS_FALLBACK)
-	})
-
-	test("the fallback matches @mcpedia/config/sections", () => {
-		// Guards the re-declared copy against drifting from the real registry.
-		expect(DEFAULT_SECTIONS_FALLBACK.map((s) => s.id)).toEqual(
-			DEFAULT_SECTIONS.map((s) => s.id),
-		)
-		for (const fallback of DEFAULT_SECTIONS_FALLBACK) {
-			const real = DEFAULT_SECTIONS.find((s) => s.id === fallback.id)!
-			expect(fallback.label).toBe(real.label)
-			expect(fallback.icon).toBe(real.icon)
-		}
-	})
-
-	test("every preset matches @mcpedia/config/sections", () => {
-		// sectionMeta covers sections outside the four-entry default nav, so
-		// this copy must track the whole registry, not just DEFAULT_SECTIONS.
-		expect(Object.keys(SECTION_PRESETS).sort()).toEqual(
-			Object.keys(SECTION_PRESETS_REAL).sort(),
-		)
-		for (const [id, preset] of Object.entries(SECTION_PRESETS)) {
-			// `Record<string, T>` indexed by a runtime key is `T | undefined`
-			// under `noUncheckedIndexedAccess`. A throw keeps the loop honest:
-			// optional-chaining here would compare `undefined` to a real value and
-			// fail, but the throw names the offending id instead of reporting three
-			// confusing mismatches.
-			const real = SECTION_PRESETS_REAL[id]
-			if (!real) throw new Error(`section preset missing for ${id}`)
-			expect(preset.label, `label for ${id}`).toBe(real.label)
-			expect(preset.icon, `icon for ${id}`).toBe(real.icon)
-			expect(preset.desc, `desc for ${id}`).toBe(real.desc)
-		}
+	test("returns an EMPTY list when the API has not answered yet", () => {
+		// This used to return a hardcoded four-section registry, which meant the
+		// header advertised sections no document could belong to and disagreed
+		// with the database. Section names are content now, so the honest answer
+		// to "we do not know yet" is nothing — not an invented guess.
+		expect(sectionsOrDefaults([])).toEqual([])
+		expect(sectionsOrDefaults(undefined)).toEqual([])
 	})
 })
 
@@ -504,25 +471,46 @@ describe("sectionMeta", () => {
 		expect(sectionMeta("docs", live).label).toBe("Live Docs")
 	})
 
-	test("falls back to the static registry", () => {
-		expect(sectionMeta("ctf").label).toBe("CTF")
+	test("derives the label when there is no live entry", () => {
+		// It used to find "CTF" in a hardcoded preset table. That table is gone:
+		// the curated label lives in the `sections` table and arrives via the
+		// live list, so without it the id is title-cased.
+		expect(sectionMeta("ctf").label).toBe("Ctf")
+		expect(
+			sectionMeta("ctf", [
+				{ id: "ctf", label: "CTF", icon: "🚩", desc: "", docCount: 0 },
+			]).label,
+		).toBe("CTF")
 	})
 
 	test("an unknown section still renders rather than throwing", () => {
-		// Mirrors getSectionMeta: an unregistered id keeps its slug but gets a
-		// humanised label and the folder icon, not a blank tile.
+		// Mirrors the server's deriveSectionMeta: an unregistered id keeps its
+		// slug but gets a humanised label and the folder icon, not a blank tile.
 		const info = sectionMeta("brand-new-section")
 		expect(info.id).toBe("brand-new-section")
 		expect(info.label).toBe("Brand New Section")
 		expect(info.icon).toBe("📁")
 	})
 
-	test("matches case-insensitively, like the Next pages", () => {
-		expect(sectionMeta("DOCS").label).toBe("Documentation")
+	test("matches case-insensitively against the live list", () => {
+		const live = [
+			{ id: "docs", label: "Documentation", icon: "📄", desc: "", docCount: 2 },
+		]
+		expect(sectionMeta("DOCS", live).label).toBe("Documentation")
 	})
 
 	test("a blank section falls back to docs", () => {
 		expect(sectionMeta("").id).toBe("docs")
+	})
+
+	test("the derivation agrees with @mcpedia/config/sections", () => {
+		// Both sides must title-case identically, otherwise the API and the
+		// browser would render different headings for the same unregistered
+		// section — which is the drift the removed duplication used to cause.
+		expect(sectionMeta("ctf-writeups").label).toBe(
+			titleCaseSection("ctf-writeups"),
+		)
+		expect(sectionMeta("docs").icon).toBe("📁")
 	})
 })
 

@@ -35,25 +35,28 @@ import {
 	makeGetRevision,
 	makeIndexContentFile,
 	makeListDocuments,
+	makeListRegistry,
 	makeListRevisions,
 	makeListSections,
+	makeReindexFromStore,
+	makeRemoveSection,
 	makeRestoreRevision,
 	makeRunFullIndex,
-	makeReindexFromStore,
 	makeSnapshotRevision,
 	makeUpdateDocument,
+	makeUpsertSection,
 } from "../application"
-import { createActivityRepository } from "./drizzle.activity.repository"
-import { createDocumentRepository } from "./drizzle.document.repository"
-import { createRevisionRepository } from "./drizzle.revision.repository"
-import { contentMirror, contentParser } from "./adapters"
-import { hindsightIndex } from "./hindsight.ts"
 import type {
 	ActivityRepository,
 	AuditActor,
 	DocumentRepository,
 	RevisionRepository,
 } from "../domain"
+import { contentMirror, contentParser } from "./adapters"
+import { createActivityRepository } from "./drizzle.activity.repository"
+import { createDocumentRepository } from "./drizzle.document.repository"
+import { createRevisionRepository } from "./drizzle.revision.repository"
+import { hindsightIndex } from "./hindsight.ts"
 
 let documents: DocumentRepository | null = null
 let revisions: RevisionRepository | null = null
@@ -125,6 +128,16 @@ export function documentUseCases(actor?: AuditActor) {
 			documents: getDocumentRepository(),
 			mirror: contentMirror,
 		}),
+	}
+}
+
+/** The wired section-registry use cases. */
+export function sectionUseCases() {
+	const deps = { documents: getDocumentRepository() }
+	return {
+		list: makeListRegistry(deps),
+		upsert: makeUpsertSection(deps),
+		remove: makeRemoveSection(deps),
 	}
 }
 

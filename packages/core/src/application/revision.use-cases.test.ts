@@ -8,13 +8,13 @@
  * be restored.
  */
 import { describe, expect, test, vi } from "vitest"
-import {
-	makeSnapshotRevision,
-	makeRestoreRevision,
-	makeListRevisions,
-	makeGetRevision,
-} from "./revision.use-cases"
 import type { DocumentMeta } from "../domain"
+import {
+	makeGetRevision,
+	makeListRevisions,
+	makeRestoreRevision,
+	makeSnapshotRevision,
+} from "./revision.use-cases"
 
 function doc(over: Partial<DocumentMeta> = {}): DocumentMeta {
 	return {

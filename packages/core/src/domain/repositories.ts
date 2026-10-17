@@ -44,6 +44,7 @@ import type {
 	RevisionDetail,
 	RevisionMeta,
 	RevisionSummary,
+	SectionRecord,
 } from "./entities"
 
 /**
@@ -74,10 +75,41 @@ export interface DocumentRepository {
 
 	getRelated(slug: string, limit: number): Promise<DocumentMeta[]>
 
-	/** Section ids with their document counts, newest activity included. */
+	/**
+	 * Section ids with their document counts, newest activity included.
+	 *
+	 * Counts only — no label, icon or blurb. Metadata lives in `sections` and is
+	 * read by `listRegistry()` below, so that a section with zero documents
+	 * still has a name while this stays a pure aggregate over documents.
+	 */
 	listSections(): Promise<
 		Array<{ section: string; count: number; latestUpdate: string }>
 	>
+
+	/**
+	 * The section REGISTRY: every row of the `sections` table.
+	 *
+	 * Separate from `listSections` because the two answer different questions
+	 * from different tables. `listSections` is a GROUP BY over documents and can
+	 * only name sections that HAVE documents; this is the metadata table, which
+	 * also names sections that are configured but still empty. The use case
+	 * joins them, and that join is why an empty wiki is navigable.
+	 */
+	listRegistry(): Promise<SectionRecord[]>
+
+	/** Insert or update one section's metadata. */
+	upsertSection(input: SectionRecord): Promise<SectionRecord>
+
+	/**
+	 * Delete a section's metadata row.
+	 *
+	 * Returns false when there was nothing to delete. Deleting a registry row
+	 * NEVER deletes documents: `documents.section` is a plain string, not a
+	 * foreign key, so a section can be unregistered while its documents stay
+	 * readable (at their URL, with a derived label). That asymmetry is
+	 * deliberate — see the note on the `sections` table in @mcpedia/db/schema.
+	 */
+	removeSection(id: string): Promise<{ deleted: boolean }>
 
 	insert(
 		input: CreateDocInput & { path: string; meta: DocumentMeta },

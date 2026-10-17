@@ -14,31 +14,24 @@
  * needs to choose between rendering, listing and 404ing.
  */
 import {
-	classifyPath,
-	extractFoldersForSection,
 	type ContentMirror,
+	classifyPath,
 	type Document,
 	type DocumentMeta,
 	type DocumentRepository,
+	extractFoldersForSection,
 	type FolderInfo,
 	type RevisionRepository,
 	type SectionInfo,
 } from "../domain"
 /**
- * `@mcpedia/config/sections`, NOT the bare `@mcpedia/config` barrel.
- *
- * Both symbols used here live in the subpath, and the subpath has ZERO imports
- * (packages/config/src/sections.ts). The barrel is a different story: it reads
- * and parses the repo .env at import time and pulls in node:fs and zod, so
- * importing it here would drag filesystem access into a module that otherwise
- * has none — and would make this file unimportable in any environment without a
- * .env, including the unit tests that fake every other collaborator.
- *
- * This is the same distinction src/build/no-server-imports.ts encodes for the
- * browser bundle: the sections registry is safe anywhere, the config barrel is
- * not.
+ * `deriveSectionMeta` is defined in THIS file rather than imported from
+ * @mcpedia/config/sections, because that module's registry is now only a SEED
+ * for the `sections` table (packages/db/src/seed-sections.ts) and is no longer
+ * consulted at runtime. Keeping the fallback here means the application layer
+ * has no compile-time dependency on a list that is no longer the source of
+ * truth — which is what stops it quietly becoming one again.
  */
-import { DEFAULT_SECTIONS, getSectionMeta } from "@mcpedia/config/sections"
 
 export interface ReadDeps {
 	documents: DocumentRepository
@@ -64,24 +57,117 @@ export function makeGetRelated(deps: Pick<ReadDeps, "documents">) {
 /**
  * List active sections with their document counts.
  *
- * An empty corpus is not an error — it is a fresh install, and the API is
- * supposed to answer with the preset sections at zero so a new deployment can
- * navigate to a section that does not exist yet. That fallback lives here, in
- * the application layer, because "what should an empty wiki show" is a policy
- * decision and not a query.
+ * ## WHERE THE METADATA COMES FROM NOW
+ *
+ * This used to decorate each count with `getSectionMeta()` — a hardcoded
+ * registry in @mcpedia/config/sections that had to be duplicated into the
+ * browser bundle. Section names are CONTENT, so they live in the `sections`
+ * table and are read here, alongside the counts.
+ *
+ * The two sources answer different questions and are joined by id:
+ *
+ *   - `documents.listSections()` — a GROUP BY over documents. Only knows
+ *     sections that HAVE documents.
+ *   - `documents.listRegistry()` — the metadata table. Knows sections that are
+ *     configured but still empty, which is why a fresh install is navigable.
+ *
+ * ## ORDERING
+ *
+ * Registry order (sortOrder, then id) wins, because that is an editorial
+ * decision. Counts that have no registry row come after it, alphabetically:
+ * a document created in an ad-hoc section is still reachable, it just cannot
+ * claim a nav position until someone registers it. Hidden sections are dropped
+ * from this list — it is what the header nav renders — but their documents
+ * remain readable at their own URL, which is the difference between unlisted
+ * and deleted.
  */
-export function makeListSections(deps: Pick<ReadDeps, "documents">) {
+/**
+ * What listing sections needs from storage.
+ *
+ * Narrowed to the two reads rather than the whole `DocumentRepository`: the
+ * counting read and the registry read are all this use case touches, and stating
+ * that lets a test supply a two-method fake instead of standing up a full
+ * repository. The real repository satisfies it structurally.
+ */
+export type SectionReadDeps = {
+	documents: Pick<DocumentRepository, "listSections" | "listRegistry">
+}
+
+export function makeListSections(deps: SectionReadDeps) {
 	const { documents } = deps
 	return async function listSections(): Promise<SectionInfo[]> {
-		const rows = await documents.listSections()
-		if (rows.length === 0) {
-			return DEFAULT_SECTIONS.map((s) => ({ ...s, docCount: 0 }))
+		const [counts, registry] = await Promise.all([
+			documents.listSections(),
+			documents.listRegistry(),
+		])
+
+		const countById = new Map(counts.map((c) => [c.section, c]))
+		const seen = new Set<string>()
+		const out: SectionInfo[] = []
+
+		for (const record of registry) {
+			// Recorded as seen BEFORE the hidden check. A hidden section is
+			// REGISTERED — it is just unlisted — and if it were not marked seen
+			// here it would fall through to the unregistered tail below and
+			// reappear in the nav under a derived name, defeating the flag.
+			seen.add(record.id)
+			if (record.hidden) continue
+			const counted = countById.get(record.id)
+			out.push({
+				id: record.id,
+				label: record.label,
+				icon: record.icon,
+				desc: record.desc,
+				docCount: counted?.count ?? 0,
+				...(counted?.latestUpdate ? { updatedAt: counted.latestUpdate } : {}),
+			})
 		}
-		return rows.map((r) => ({
-			...getSectionMeta(r.section, r.count),
-			docCount: r.count,
-			updatedAt: r.latestUpdate,
-		}))
+
+		// Sections holding documents but absent from the registry. Sorted by id
+		// so the tail order is stable across reads — the registry above already
+		// supplied the editorial order, and an unordered tail would make the nav
+		// visibly reshuffle between deploys.
+		const unregistered = counts
+			.filter((c) => !seen.has(c.section))
+			.sort((a, b) => a.section.localeCompare(b.section))
+		for (const c of unregistered) {
+			out.push({
+				...deriveSectionMeta(c.section),
+				docCount: c.count,
+				...(c.latestUpdate ? { updatedAt: c.latestUpdate } : {}),
+			})
+		}
+
+		return out
+	}
+}
+
+/**
+ * Label/icon/desc for a section id with NO registry row.
+ *
+ * A document's section is a plain string, so a document can exist in a section
+ * nobody registered — an MCP `create_document` with an ad-hoc section, or a
+ * registry row deleted after the fact. The document still has to render, so the
+ * id is title-cased rather than the section being dropped from every listing.
+ *
+ * The generic glyph and blurb are deliberately plain: inventing something
+ * section-specific would make an unregistered section indistinguishable from a
+ * curated one, and the whole point of registering is that someone chose those
+ * words.
+ */
+export function deriveSectionMeta(id: string): SectionInfo {
+	const clean = (id || "docs").toLowerCase().trim()
+	const label = clean
+		.split(/[-_]/)
+		.filter(Boolean)
+		.map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+		.join(" ")
+	return {
+		id: clean,
+		label: label || "Custom Section",
+		icon: "📁",
+		desc: `Documents in the ${label || clean} section.`,
+		docCount: 0,
 	}
 }
 

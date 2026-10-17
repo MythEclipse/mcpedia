@@ -1,5 +1,5 @@
-import { os } from "@orpc/server"
 import { hybridSearch, keywordSearch, semanticSearch } from "@mcpedia/core"
+import { os } from "@orpc/server"
 import { mapAppErrors } from "../middleware"
 import { HybridSearchInput, SearchInput, SemanticSearchInput } from "../schemas"
 

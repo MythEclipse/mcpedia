@@ -11,6 +11,27 @@ export interface SectionInfo {
 	updatedAt?: string
 }
 
+/**
+ * A row of the section REGISTRY — the metadata record itself.
+ *
+ * Distinct from SectionInfo, which is a registry row JOINED with live document
+ * counts. Keeping them apart matters because the two have different writers:
+ * SectionRecord is content an operator edits (it is what the MCP
+ * `upsert_section` tool and the API's write path accept), while SectionInfo's
+ * docCount is derived from the documents table on every read and must never be
+ * sent back.
+ */
+export interface SectionRecord {
+	id: string
+	label: string
+	icon: string
+	desc: string
+	/** Header nav order. Lower sorts first. */
+	sortOrder: number
+	/** Omitted from the header nav when true; its URL still resolves. */
+	hidden: boolean
+}
+
 export interface DocumentMeta {
 	id: string // slug
 	slug: string
@@ -58,6 +79,15 @@ export interface ExportSummary {
 	title: string
 	scope: string
 	section: string
+	/**
+	 * The section's display name, resolved server-side from the registry.
+	 *
+	 * Sent rather than looked up in the browser because section names now live
+	 * in the `sections` table; the PDF view used to call a hardcoded
+	 * getSectionMeta() that could not know about a rename. Falls back to the
+	 * title-cased section id when no registry row exists.
+	 */
+	sectionLabel: string
 	totalDocuments: number
 	totalPoints: number
 	categories: ExportCategorySummary[]

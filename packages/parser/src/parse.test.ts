@@ -1,10 +1,10 @@
-import { test, expect, afterEach, beforeEach } from "vitest"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { afterEach, beforeEach, expect, test } from "vitest"
 // parseFile uses node:fs, so we test it by writing a temp file. This keeps the
 // parser package dependency-free while still exercising gray-matter.
 import { parseFile } from "../src/index"
-import { writeFileSync, mkdtempSync, rmSync, mkdirSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
 
 let tmp: string
 beforeEach(() => {

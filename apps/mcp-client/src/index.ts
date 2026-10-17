@@ -215,8 +215,18 @@ async function ask(question: string): Promise<string> {
 
 async function interactiveCreate(client: McpediaClient) {
 	console.log("\n--- Create Document ---")
+	// The prompt lists what the registry actually holds rather than the four
+	// names this CLI was written against. Sections are content now, so a prompt
+	// naming a fixed set would both hide the sections an operator registered and
+	// advertise ones that may have been unregistered. A registry read failure is
+	// not fatal: the field accepts free text and the server validates it.
+	const known = await client.listSections().catch(() => [])
+	const offered = known.map((s) => s.id)
+	const hint = offered.length > 0 ? offered.join("/") : "free text"
 	const section =
-		(await ask("Section (docs/writeups/research/notes) [docs]: ")) || "docs"
+		(await ask(`Section (${hint}) [${offered[0] ?? "docs"}]: `)) ||
+		offered[0] ||
+		"docs"
 	const title = await ask("Title: ")
 	if (!title) throw new Error("Title is required.")
 	const slug =
@@ -236,7 +246,9 @@ async function interactiveCreate(client: McpediaClient) {
 	const res = await client.createDocument({
 		slug: `${section}/${slug}`,
 		title,
-		section: section as "docs" | "writeups" | "research" | "notes",
+		// Not narrowed to a union: createDocument takes the section as a plain
+		// string, because the set of valid sections lives in the database.
+		section,
 		body,
 		tags,
 		author: author || undefined,

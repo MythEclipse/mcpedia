@@ -14,8 +14,8 @@
  * same fields, the same fallbacks, and the same spread of `extraFields` for the
  * dynamic CTF columns.
  */
-import type { DocumentRow } from "@mcpedia/db/schema"
-import type { DocStatus, DocumentMeta } from "@mcpedia/types"
+import type { DocumentRow, SectionRow } from "@mcpedia/db/schema"
+import type { DocStatus, DocumentMeta, SectionRecord } from "@mcpedia/types"
 
 /** Map a Drizzle row onto the domain's `DocumentMeta`. */
 export function toMeta(row: DocumentRow): DocumentMeta {
@@ -44,3 +44,22 @@ export function toMeta(row: DocumentRow): DocumentMeta {
 }
 
 export type { DocumentRow }
+
+/**
+ * Map a `sections` row onto the domain's `SectionRecord`.
+ *
+ * Unlike `toMeta` there are no fallbacks and no extra-field spread: every column
+ * on this table is NOT NULL with a default, and its only free-form column is
+ * `desc` which is legitimately allowed to be the empty string. A mapper that
+ * invented a default here would hide a broken insert rather than surface it.
+ */
+export function toSectionRecord(row: SectionRow): SectionRecord {
+	return {
+		id: row.id,
+		label: row.label,
+		icon: row.icon,
+		desc: row.desc,
+		sortOrder: row.sortOrder,
+		hidden: row.hidden,
+	}
+}

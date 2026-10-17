@@ -1,24 +1,75 @@
 "use client"
 
 import { useNavigate } from "@tanstack/react-router"
-import {
-	ArrowRight,
-	BookOpen,
-	Flag,
-	Plus,
-	Search,
-	Sparkles,
-} from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { ArrowRight, Plus, Search } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { SearchLink } from "#/components/DocLink"
-import { useDebounced, useSearchQuery } from "#/lib/queries"
+import { useDebounced, useSearchQuery, useSectionsQuery } from "#/lib/queries"
+import { paletteSectionsFrom } from "#/lib/sections"
 
+/**
+ * A palette row. Two shapes, because two genuinely different things appear here:
+ *
+ *   - an APP route ("Create New Document", "Search Console"), which is a fixed
+ *     part of the application and carries a lucide icon component;
+ *   - a SECTION, which is content: its label, glyph and subtitle come from the
+ *     `sections` table, so a section registered through MCP shows up here with
+ *     no code change, and a renamed one is renamed here too.
+ *
+ * `glyph` holds the former, `icon` the latter. Keeping them distinct means the
+ * section rows cannot silently fall back to a wrong lucide icon when the
+ * database holds an emoji — which is what the section table holds by design.
+ */
 interface QuickAction {
 	id: string
 	title: string
 	subtitle: string
-	icon: React.ComponentType<{ className?: string }>
-	href?: string
+	href: string
+	icon?: React.ComponentType<{ className?: string }>
+	glyph?: string
+}
+
+/**
+ * The two shortcuts that are application surfaces rather than sections.
+ *
+ * These stay hardcoded on purpose: /create and /search are routes this app
+ * defines, not entries in the knowledge base's section registry. Nothing an
+ * operator does to the registry should remove or rename them.
+ */
+const APP_ACTIONS: QuickAction[] = [
+	{
+		id: "create-doc",
+		title: "Create New Document",
+		subtitle: "Write technical doc, writeup, or note",
+		icon: Plus,
+		href: "/create",
+	},
+	{
+		id: "hybrid-search",
+		title: "Multi-Modal Hybrid Search",
+		subtitle: "Full-text + Semantic vector search console",
+		icon: Search,
+		href: "/search",
+	},
+]
+
+/**
+ * The leading badge on a palette row.
+ *
+ * A section's glyph is an emoji string from the database; an app action's icon
+ * is a lucide component. Rendering the glyph as TEXT is what lets an operator
+ * pick any icon by editing the row — the set is not limited to what this bundle
+ * happens to import. Extracted from the row so the optional `icon` narrows
+ * through early returns rather than through a nested ternary, which TypeScript
+ * cannot narrow.
+ */
+function ActionGlyph({ action }: { action: QuickAction }) {
+	if (action.glyph) {
+		return <span className="text-xs leading-none">{action.glyph}</span>
+	}
+	const Icon = action.icon
+	if (!Icon) return null
+	return <Icon className="w-3.5 h-3.5" />
 }
 
 export default function CommandMenu() {
@@ -34,43 +85,19 @@ export default function CommandMenu() {
 	const results = query.trim() ? (data ?? []) : []
 	const loading = isPending && debouncedQuery.trim().length > 0
 
-	const quickActions: QuickAction[] = [
-		{
-			id: "create-doc",
-			title: "Create New Document",
-			subtitle: "Write technical doc, writeup, or note",
-			icon: Plus,
-			href: "/create",
-		},
-		{
-			id: "hybrid-search",
-			title: "Multi-Modal Hybrid Search",
-			subtitle: "Full-text + Semantic vector search console",
-			icon: Search,
-			href: "/search",
-		},
-		{
-			id: "browse-docs",
-			title: "Documentation Hub",
-			subtitle: "System setup, API references, protocol specs",
-			icon: BookOpen,
-			href: "/docs",
-		},
-		{
-			id: "browse-writeups",
-			title: "CTF & Writeups Directory",
-			subtitle: "Pwn, Reverse, Web, Crypto writeups and solutions",
-			icon: Flag,
-			href: "/writeups",
-		},
-		{
-			id: "browse-research",
-			title: "Research & Benchmarks",
-			subtitle: "Architecture notes, benchmarks, experiments",
-			icon: Sparkles,
-			href: "/research",
-		},
-	]
+	// Section shortcuts come from the live registry, not from a table in this
+	// file. See paletteSectionsFrom for why the literals that used to live here
+	// were removed; `sectionsOrDefaults` is deliberately NOT used, since its
+	// fallback id list would advertise sections the operator deleted.
+	//
+	// No hidden-section filter here: documents.sections already omits hidden
+	// sections server-side (see the reader in @mcpedia/core), and SectionInfo
+	// carries no `hidden` flag for the client to re-check.
+	const { data: liveSections } = useSectionsQuery()
+	const quickActions = useMemo<QuickAction[]>(
+		() => [...APP_ACTIONS, ...paletteSectionsFrom(liveSections)],
+		[liveSections],
+	)
 
 	useEffect(() => {
 		function handleKeyDown(e: KeyboardEvent) {
@@ -191,15 +218,12 @@ export default function CommandMenu() {
 								Quick Shortcuts
 							</div>
 							{quickActions.map((action, idx) => {
-								const Icon = action.icon
 								const isSelected = idx === selectedIndex
 								return (
 									<button
 										type="button"
 										key={action.id}
-										onClick={() =>
-											action.href && handleNavigate({ path: action.href })
-										}
+										onClick={() => handleNavigate({ path: action.href })}
 										onMouseEnter={() => setSelectedIndex(idx)}
 										className={`w-full text-left flex items-center justify-between gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${isSelected ? "bg-[var(--bg-elevated)] text-[var(--text-primary)]" : "hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)]"}`}
 									>
@@ -207,7 +231,7 @@ export default function CommandMenu() {
 											<div
 												className={`p-1.5 rounded ${isSelected ? "bg-[var(--brand)] text-[var(--brand-fg)]" : "bg-[var(--bg-elevated)] text-[var(--text-muted)]"}`}
 											>
-												<Icon className="w-3.5 h-3.5" />
+												<ActionGlyph action={action} />
 											</div>
 											<div>
 												<div className="text-xs font-semibold text-[var(--text-primary)]">

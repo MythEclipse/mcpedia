@@ -14,19 +14,29 @@
  * export covers, filling in bodies that were never indexed, dropping the
  * meta-index pages, and ordering the result.
  */
-import { buildExportSummary, sortExportDocuments } from "./export.helpers"
+
 import type {
 	ContentMirror,
 	Document,
 	ExportData,
 	ExportQueryOptions,
+	SectionRecord,
 } from "../domain"
+import { buildExportSummary, sortExportDocuments } from "./export.helpers"
 
 type ExportOptions = ExportQueryOptions
 
 /** The subset of the document repository an export needs. */
 export interface ExportDocumentSource {
 	listForExport(opts: ExportQueryOptions): Promise<Document[]>
+	/**
+	 * Included so the summary can name the section from the registry rather than
+	 * a hardcoded table. Optional because the export's own tests supply a fake
+	 * that predates the registry; when it is absent the summary falls back to the
+	 * title-cased section id, which is what it renders for an unregistered
+	 * section anyway.
+	 */
+	listRegistry?(): Promise<SectionRecord[]>
 }
 
 export interface ExportDeps {
@@ -91,7 +101,19 @@ export function makeGetExportDocuments(deps: ExportDeps) {
 		}
 
 		const sorted = sortExportDocuments(filtered, sortBy)
-		const summary = buildExportSummary(sorted, opts.path, opts.section)
+
+		// The section's display name comes from the registry here, at the point
+		// that already has database access, and is handed to the pure summary
+		// builder as a string. The browser imports that builder directly, so it
+		// cannot do this lookup itself.
+		const sectionId = opts.section || sorted[0]?.section
+		const registry = documents.listRegistry
+			? await documents.listRegistry()
+			: []
+		const label = sectionId
+			? registry.find((r) => r.id === sectionId)?.label
+			: undefined
+		const summary = buildExportSummary(sorted, opts.path, opts.section, label)
 
 		return { summary, documents: sorted }
 	}

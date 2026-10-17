@@ -16,11 +16,11 @@
  * rename ends up fixing one and missing the other.
  */
 export {
-	hybridSearch,
-	keywordSearch,
-	semanticSearch,
 	consolidate,
 	forgetDocument,
+	hybridSearch,
+	keywordSearch,
 	recallDocumentFacts,
 	reflect,
+	semanticSearch,
 } from "./hindsight.ts"

@@ -16,6 +16,7 @@ import { pathToFileURL } from "node:url"
 import { migrate } from "drizzle-orm/postgres-js/migrator"
 import type { AnyDatabase } from "./migrate-guard"
 import { assertMigrationTargetIsClean } from "./migrate-guard"
+import { seedSections } from "./seed-sections"
 
 const migrationsFolder = new URL("../drizzle", import.meta.url).pathname
 
@@ -32,6 +33,8 @@ export interface MigrationOutcome {
 	readonly ok: boolean
 	/** Journal TAGS applied, in order. Names, not entries — this is for logs. */
 	readonly applied: readonly string[]
+	/** Section ids the seed actually inserted. Empty once they all exist. */
+	readonly seeded: readonly string[]
 	readonly message: string
 }
 
@@ -44,20 +47,43 @@ export async function runMigrations(
 		// for the refusal case — and this IS that case. Falling back to a generic
 		// string keeps the return type non-optional, so a caller can never forget
 		// to handle a missing message.
-		return { ok: false, applied: [], message: guard.message ?? "refused" }
+		return {
+			ok: false,
+			applied: [],
+			seeded: [],
+			message: guard.message ?? "refused",
+		}
 	}
 	if (guard.pending.length === 0) {
+		// The seed still runs on an already-current database. It is the reason a
+		// rename survives a deploy: ON CONFLICT DO NOTHING means an operator's
+		// edited label is never overwritten, while a section that is missing
+		// entirely (a database migrated before this table existed) gets created.
+		const seeded = await seedSections(db)
 		return {
 			ok: true,
 			applied: [],
-			message: "database is already on the current migration chain",
+			seeded,
+			message:
+				seeded.length > 0
+					? `database is already on the current migration chain; seeded ${seeded.length} section(s)`
+					: "database is already on the current migration chain",
 		}
 	}
 	await migrate(db, { migrationsFolder })
+	// After the migration, so the `sections` table exists. On the deploy path
+	// this is what turns the hardcoded labels the site used to carry into rows.
+	const seeded = await seedSections(db)
 	return {
 		ok: true,
 		applied: guard.pending.map((entry) => entry.tag),
-		message: `applied ${guard.pending.length} migration(s)`,
+		seeded,
+		message:
+			`applied ${guard.pending.length} migration(s)` +
+			// Reported here too, not just on the no-op path: a deploy where the
+			// schema moved AND the registry was populated is exactly the one an
+			// operator wants to see both facts for.
+			(seeded.length > 0 ? `; seeded ${seeded.length} section(s)` : ""),
 	}
 }
 

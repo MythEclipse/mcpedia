@@ -12,6 +12,8 @@
  * authoritative — and reversing it silently discards user work.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { ActivityRepository, AuditEntry, DocumentMeta } from "../domain"
+import { metadataFor, SYSTEM_ACTOR } from "./audit.ts"
 import {
 	makeCreateDocument,
 	makeDeleteDocument,
@@ -19,8 +21,6 @@ import {
 } from "./document.use-cases.ts"
 import { makeIndexContentFile } from "./index.use-cases.ts"
 import { makeRestoreRevision } from "./revision.use-cases.ts"
-import { metadataFor, SYSTEM_ACTOR } from "./audit.ts"
-import type { ActivityRepository, AuditEntry, DocumentMeta } from "../domain"
 
 /** Records everything written, so a test can assert on the trail itself. */
 function fakeActivity() {

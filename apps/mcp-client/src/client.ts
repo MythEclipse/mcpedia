@@ -92,6 +92,22 @@ export interface DocumentSummary {
 	[key: string]: unknown
 }
 
+/**
+ * One registered section, as returned by list_sections.
+ *
+ * Only the fields callers here rely on are required; the payload carries more
+ * (see SectionInfo in @mcpedia/types) and the index signature keeps those
+ * reachable without re-declaring the whole shape.
+ */
+export interface SectionSummary {
+	id: string
+	label?: string
+	icon?: string
+	desc?: string
+	docCount?: number
+	[key: string]: unknown
+}
+
 /** One search hit, as returned by the three search tools. */
 export interface SearchHitSummary {
 	slug: string
@@ -158,6 +174,18 @@ export class McpediaClient {
 		return parseJson<DocumentSummary[]>(extractText(result), [], "array")
 	}
 
+	/**
+	 * List the registered sections, with document counts.
+	 *
+	 * Reads the live registry over MCP rather than assuming a fixed set of ids:
+	 * sections live in the `sections` table and an operator can add or rename
+	 * them, so anything validating a section name has to ask the server.
+	 */
+	async listSections(): Promise<SectionSummary[]> {
+		const result = await this.callTool("list_sections")
+		return parseJson<SectionSummary[]>(extractText(result), [], "array")
+	}
+
 	/** Get full markdown body of a document by slug. */
 	async getDocument(slug: string): Promise<string> {
 		const result = await this.callTool("get_document", { slug })
@@ -206,11 +234,19 @@ export class McpediaClient {
 		return parseJson<IndexAck>(extractText(result), {}, "object")
 	}
 
-	/** Create a document (requires x-webhook-secret). */
+	/**
+	 * Create a document (requires x-webhook-secret).
+	 *
+	 * `section` is a plain string, not a union of the four names this file once
+	 * listed: sections are registry content (see the `sections` table and the
+	 * upsert_section tool), so any id the operator registered is valid here. The
+	 * server's own schema takes `z.string()` for the same reason — narrowing it
+	 * at this layer only rejected sections that existed.
+	 */
 	async createDocument(input: {
 		slug: string
 		title: string
-		section: "docs" | "writeups" | "research" | "notes"
+		section: string
 		body: string
 		type?: "documentation" | "writeup" | "research" | "note"
 		status?: "published" | "draft"
