@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/asepharyana/mcpedia/compare/v1.2.1...v1.2.2) (2026-10-17)
+
+
+### Bug Fixes
+
+* **worker:** index jobs must read Postgres, not a disk the deploy host lacks ([b224dda](https://github.com/asepharyana/mcpedia/commit/b224dda81350ef9faff70731c4dca696f869e016))
+
 ## [1.2.1](https://github.com/asepharyana/mcpedia/compare/v1.2.0...v1.2.1) (2026-10-17)
 
 
