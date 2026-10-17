@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/asepharyana/mcpedia/compare/v1.2.0...v1.2.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **sections:** a partial upsert must not blank the fields it omits ([cffcb7e](https://github.com/asepharyana/mcpedia/commit/cffcb7ec6375a5b72f2ac233bb02c50167dfb3b1))
+
 # [1.2.0](https://github.com/asepharyana/mcpedia/compare/v1.1.5...v1.2.0) (2026-10-17)
 
 
