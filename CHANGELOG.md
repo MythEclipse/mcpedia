@@ -1,3 +1,10 @@
+## [1.2.4](https://github.com/asepharyana/mcpedia/compare/v1.2.3...v1.2.4) (2026-10-17)
+
+
+### Bug Fixes
+
+* **web:** restore the deleted stylesheet, and make .docx export run in a real browser ([ac3ca0c](https://github.com/asepharyana/mcpedia/commit/ac3ca0c2ce901fe77a6c4c5fd5f4f52756156c5f)), closes [#18181b](https://github.com/asepharyana/mcpedia/issues/18181b)
+
 ## [1.2.3](https://github.com/asepharyana/mcpedia/compare/v1.2.2...v1.2.3) (2026-10-17)
 
 
