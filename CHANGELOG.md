@@ -1,3 +1,10 @@
+## [1.1.5](https://github.com/asepharyana/mcpedia/compare/v1.1.4...v1.1.5) (2026-10-17)
+
+
+### Bug Fixes
+
+* **web:** stop doubling the section in folder breadcrumbs ([5a000e3](https://github.com/asepharyana/mcpedia/commit/5a000e365743f5b8df6d2866a6cc7bed92fa145d))
+
 ## [1.1.4](https://github.com/asepharyana/mcpedia/compare/v1.1.3...v1.1.4) (2026-10-17)
 
 
