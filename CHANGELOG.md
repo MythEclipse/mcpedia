@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/asepharyana/mcpedia/compare/v1.1.0...v1.1.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **search:** guard the chunks read with the same ownership check as the delete ([7754418](https://github.com/asepharyana/mcpedia/commit/7754418dfdd51373a8651074fc69174dd41b9721))
+
 # [1.1.0](https://github.com/asepharyana/mcpedia/compare/v1.0.7...v1.1.0) (2026-10-17)
 
 
