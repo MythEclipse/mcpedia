@@ -146,7 +146,7 @@ export function createMcpServer(authSecret?: string): McpServer {
 				id: z
 					.string()
 					.describe(
-						"Section id — the first segment of every document slug in it (e.g. 'writeups'). Letters, digits, '-' and '_' only.",
+						"Section id — the first segment of every document slug in it (e.g. 'ctf'). Letters, digits, '-' and '_' only.",
 					),
 				label: z
 					.string()
@@ -224,9 +224,7 @@ export function createMcpServer(authSecret?: string): McpServer {
 				section: z
 					.string()
 					.optional()
-					.describe(
-						"Section name to filter by (e.g. 'docs', 'writeups', 'ctf')",
-					),
+					.describe("Section name to filter by (e.g. 'docs', 'ctf', 'notes')"),
 			}),
 		},
 		async ({ section }) => {
@@ -424,9 +422,7 @@ export function createMcpServer(authSecret?: string): McpServer {
 				title: z.string().describe("Document title"),
 				section: z
 					.string()
-					.describe(
-						"Content section (e.g. 'docs', 'writeups', 'research', 'notes', 'guides', 'ctf')",
-					),
+					.describe("Content section (e.g. 'docs', 'ctf', 'notes')"),
 				body: z.string().describe("Markdown body"),
 				type: z
 					.string()

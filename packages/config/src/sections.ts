@@ -74,26 +74,20 @@ export function getSectionMeta(id: string, _count?: number): SectionConfig {
  * IDS ONLY. The labels and icons for these live in the seed
  * (packages/db/src/seed-sections.ts) and are read from the database — that is
  * what stops this list and the table disagreeing about what "docs" is called.
+ *
+ * Kept in step with SECTION_SEED by a test in packages/db, because these two
+ * lists answer the same question from opposite sides: this one is what a NEW
+ * document may be filed under, and the seed is what the nav shows.
  */
-export const DEFAULT_SECTION_IDS: readonly string[] = [
-	"docs",
-	"writeups",
-	"research",
-	"notes",
-]
+export const DEFAULT_SECTION_IDS: readonly string[] = ["docs", "ctf", "notes"]
 
 /**
- * Every seeded section id, including the ones outside the default create-form
- * list. A document may legitimately live in any of them.
+ * Every seeded section id. A document may legitimately live in any of them.
+ *
+ * Same three as the default list: the extra six presets (`writeups`, `research`,
+ * `guides`, `tutorials`, `api`, `projects`) were removed when the base was
+ * consolidated — `writeups` folded into `ctf`, and the other five never held a
+ * document. A document can still be created in ANY section id; this list only
+ * names the ones the app knows to offer.
  */
-export const SECTION_IDS: readonly string[] = [
-	"docs",
-	"writeups",
-	"research",
-	"notes",
-	"guides",
-	"tutorials",
-	"ctf",
-	"api",
-	"projects",
-]
+export const SECTION_IDS: readonly string[] = ["docs", "ctf", "notes"]

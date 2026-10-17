@@ -334,7 +334,7 @@ export default function DocForm({
 							setSection(e.target.value)
 							onSectionChange?.(e.target.value)
 						}}
-						placeholder="e.g. docs, writeups, research"
+						placeholder="e.g. docs, ctf, notes"
 						className={baseInputCls}
 						required
 					/>

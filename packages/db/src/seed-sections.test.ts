@@ -1,3 +1,4 @@
+import { SECTION_IDS } from "@mcpedia/config/sections"
 import { describe, expect, test } from "vitest"
 import { SECTION_SEED, seedSections } from "./seed-sections"
 
@@ -97,10 +98,22 @@ describe("seedSections", () => {
 			expect(s.label, `label for ${s.id}`).toBeTruthy()
 			expect(s.icon, `icon for ${s.id}`).toBeTruthy()
 		}
-		// The four that were the header nav must be present.
-		for (const id of ["docs", "writeups", "research", "notes"]) {
+		// The three that ship with the app. `docs` is the code's own fallback
+		// section, so it must always be seeded or a default write lands in a
+		// section with no registry row.
+		for (const id of ["docs", "ctf", "notes"]) {
 			expect(ids).toContain(id)
 		}
+	})
+
+	/**
+	 * The seed is the NAV, and the app's own id list is what a new document may
+	 * be filed under. They answer the same question from opposite sides, so a
+	 * divergence means either a section the nav shows that the create form does
+	 * not offer (or vice versa) — a silent mismatch with no error attached.
+	 */
+	test("the seed matches the app's section id list", async () => {
+		expect(SECTION_SEED.map((s) => s.id)).toEqual([...SECTION_IDS])
 	})
 
 	test("order in the array is the nav order", async () => {

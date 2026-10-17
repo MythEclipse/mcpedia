@@ -31,10 +31,33 @@ import type { AnyDatabase } from "./migrate-guard"
 import { sections } from "./schema"
 
 /**
- * Order is the header nav order. docs/writeups/research/notes were the four in
- * DEFAULT_SECTIONS (the header nav); the rest were presets that only appeared
- * once a document existed in them. Seeding all nine keeps that behaviour — the
- * nav filters by document count, not by presence in this table.
+ * Order is the header nav order.
+ *
+ * ## WHY THIS IS THE SHORT LIST, NOT THE ORIGINAL NINE
+ *
+ * The seed used to declare nine sections because the old config held them as
+ * presets, and the nav filtered by document count. In practice six of those nine
+ * never received a single document, and the header carried the clutter: `docs`,
+ * `writeups`, `research`, `notes`, `guides`, `tutorials`, `ctf`, `api`,
+ * `projects` all existed as registry rows to serve three sections' worth of
+ * content.
+ *
+ * It is three now, and each one is load-bearing:
+ *
+ *   - `docs`  — the code's own default section (see `deriveSectionMeta` and the
+ *               create form, which both fall back to it, so it must exist).
+ *   - `ctf`   — every challenge writeup, consolidated out of `writeups` and
+ *               `learn` (see scripts/consolidate-ctf-sections.ts).
+ *   - `notes` — quick references; holds documents.
+ *
+ * ## WHY REMOVING AN ENTRY HERE IS NOT ENOUGH ON ITS OWN
+ *
+ * This runs on every `db:migrate`, i.e. every deploy, and it only INSERTs. A
+ * section deleted from the table but still listed here is therefore recreated by
+ * the next deploy — the delete appears to work and then silently undoes itself.
+ * Dropping a section is a two-part change: remove it from this list AND delete
+ * its row. `ON CONFLICT DO NOTHING` means the reverse order is safe (a stale row
+ * is left alone until it is explicitly removed).
  */
 export const SECTION_SEED: Array<{
 	id: string
@@ -49,52 +72,16 @@ export const SECTION_SEED: Array<{
 		desc: "Setup guides, API references, and protocol specs.",
 	},
 	{
-		id: "writeups",
-		label: "Writeups",
-		icon: "📝",
-		desc: "Post-mortems, CTF writeups, debugging stories, and case studies.",
-	},
-	{
-		id: "research",
-		label: "Research",
-		icon: "🔬",
-		desc: "Deep-dive analysis, architecture notes, and experiments.",
-	},
-	{
-		id: "notes",
-		label: "Notes",
-		icon: "📌",
-		desc: "Quick references, patterns, and cheat-sheets.",
-	},
-	{
-		id: "guides",
-		label: "Guides",
-		icon: "🧭",
-		desc: "Step-by-step guides and implementation walkthroughs.",
-	},
-	{
-		id: "tutorials",
-		label: "Tutorials",
-		icon: "🎓",
-		desc: "Educational lessons and practical tutorials.",
-	},
-	{
 		id: "ctf",
 		label: "CTF",
 		icon: "🚩",
 		desc: "Capture The Flag challenge writeups and exploit solutions.",
 	},
 	{
-		id: "api",
-		label: "API",
-		icon: "⚡",
-		desc: "API documentation and endpoint definitions.",
-	},
-	{
-		id: "projects",
-		label: "Projects",
-		icon: "🚀",
-		desc: "Project overviews and technical architecture roadmaps.",
+		id: "notes",
+		label: "Notes",
+		icon: "📌",
+		desc: "Quick references, patterns, and cheat-sheets.",
 	},
 ]
 

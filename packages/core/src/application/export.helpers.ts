@@ -323,11 +323,11 @@ export function formatScopeTitle(pathOrSection: string): string {
 
 	const formatted = words.join(" ")
 
-	if (
-		parts.length > 1 &&
-		((parts[0] ?? "").toLowerCase() === "ctf" ||
-			(parts[0] ?? "").toLowerCase() === "writeups")
-	) {
+	// `ctf` is the only CTF section id now — `writeups` was folded into it (see
+	// scripts/consolidate-ctf-sections.ts). The check is on the FIRST path
+	// segment, so it fires for a section-level export (`ctf/...`) and not for a
+	// document that merely mentions CTF deeper in its slug.
+	if ((parts[0] ?? "").toLowerCase() === "ctf") {
 		if (!/ctf|writeup/i.test(formatted)) {
 			return `${formatted} — CTF Writeups Report`
 		}
