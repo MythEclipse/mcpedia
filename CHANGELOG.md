@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/asepharyana/mcpedia/compare/v1.0.7...v1.1.0) (2026-10-17)
+
+
+### Features
+
+* **search:** namespace the corpora inside one shared hindsight bank ([064d6d7](https://github.com/asepharyana/mcpedia/commit/064d6d76283b0a27510af45ac05df5e9ee2b37c1))
+
 ## [1.0.7](https://github.com/asepharyana/mcpedia/compare/v1.0.6...v1.0.7) (2026-10-17)
 
 
