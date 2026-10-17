@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/asepharyana/mcpedia/compare/v1.1.2...v1.1.3) (2026-10-17)
+
+
+### Bug Fixes
+
+* **web:** stop advertising pgvector and the Postgres search arm we no longer have ([b2d540b](https://github.com/asepharyana/mcpedia/commit/b2d540b7fc023394797edd8d8c8605b227c80e3a))
+
 ## [1.1.2](https://github.com/asepharyana/mcpedia/compare/v1.1.1...v1.1.2) (2026-10-17)
 
 
