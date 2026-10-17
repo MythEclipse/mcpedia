@@ -169,25 +169,36 @@ function FolderIndex({
 				>
 					{info.label}
 				</DocLink>
-				{folderSlug.split("/").map((part, i, all) => {
-					const path = `${section}/${all.slice(0, i + 1).join("/")}`
-					const isLast = i === all.length - 1
-					return (
-						<span key={path} className="flex items-center gap-2">
-							<span>/</span>
-							<DocLink
-								to={path}
-								className={
-									isLast
-										? "text-[var(--text-primary)] font-semibold"
-										: "hover:text-[var(--text-primary)]"
-								}
-							>
-								{slugToTitle(part)}
-							</DocLink>
-						</span>
-					)
-				})}
+				{folderSlug
+					.split("/")
+					// The FIRST segment is the section itself, which the crumb
+					// above already links — rendering it again produced
+					// "Writeups / Writeups / Gemastik 2026" with links to
+					// /writeups/writeups/…, a doubled path that 404s.
+					//
+					// folderSlug arrives as the FULL slug ("writeups/gemastik-2026"),
+					// not a section-relative path, so the remaining segments are
+					// re-joined with `section` to rebuild cumulative paths.
+					.slice(1)
+					.map((part, i, all) => {
+						const path = `${section}/${all.slice(0, i + 1).join("/")}`
+						const isLast = i === all.length - 1
+						return (
+							<span key={path} className="flex items-center gap-2">
+								<span>/</span>
+								<DocLink
+									to={path}
+									className={
+										isLast
+											? "text-[var(--text-primary)] font-semibold"
+											: "hover:text-[var(--text-primary)]"
+									}
+								>
+									{slugToTitle(part)}
+								</DocLink>
+							</span>
+						)
+					})}
 			</nav>
 
 			<div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl p-6 shadow-xs">

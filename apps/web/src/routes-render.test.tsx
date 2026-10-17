@@ -87,6 +87,11 @@ function seededClient(): QueryClient {
 	client.setQueryData(qk.folderInfo(SECTION, DOC_SLUG), {
 		classification: "doc",
 	})
+	// The folder URL's classification, so the folder branch renders rather
+	// than sitting in its pending state.
+	client.setQueryData(qk.folderInfo(SECTION, `${SECTION}/gemastik-2026`), {
+		classification: "folder",
+	})
 	client.setQueryData(qk.related(DOC_SLUG), [])
 	return client
 }
@@ -130,6 +135,19 @@ describe("route rendering", () => {
 		const html = await renderUrl(`/${SECTION}`)
 
 		expect(html).toContain("Folder &amp; Chapter Structure")
+	})
+
+	it("builds folder breadcrumbs without doubling the section", async () => {
+		// The folder view receives folderSlug as the FULL slug
+		// ("writeups/gemastik-2026"), so rendering every segment after the
+		// already-linked section crumb produced "Writeups / Writeups /
+		// Gemastik 2026" pointing at /writeups/writeups/… — a doubled path
+		// that 404s. The bug was invisible in the section index and in a
+		// document; it only appears on a FOLDER url.
+		const html = await renderUrl(`/${SECTION}/gemastik-2026`)
+
+		expect(html).not.toContain(`/${SECTION}/${SECTION}`)
+		expect(html).toContain(`href="/${SECTION}/gemastik-2026"`)
 	})
 
 	it("gives every route with children a component that renders an Outlet", () => {
