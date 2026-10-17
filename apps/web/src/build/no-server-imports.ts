@@ -46,6 +46,38 @@ export const BROWSER_SAFE = [
 	// no-server-imports.test.ts, which assert both that this subpath is allowed
 	// AND that the "." barrel above it still is not.
 	"@mcpedia/core/export-helpers",
+	// core/export-docx is the .docx writer, added for the client-side Word
+	// export that replaces the deleted Next /api/export route. Allowed on the
+	// SAME mechanical standard as the entry above, and the audit is stronger
+	// than "it looked fine":
+	//
+	//   - Its only runtime imports are `docx` (a pure OpenXML writer) and its
+	//     own sibling ./export.helpers, which is already allow-listed. The rest
+	//     of its import list is `import type` and is erased.
+	//   - `docx` reaches no Node API. PROBED, not assumed: bundling this exact
+	//     module with esbuild for platform:"browser" produces a bundle with ZERO
+	//     `node:` imports and ZERO `require(` calls.
+	//   - It does NOT reach the core barrel (src/index.ts), which pulls
+	//     Postgres. Denying "." while allowing this subpath is the whole point
+	//     of the fail-closed rule, and no-server-imports.test.ts asserts both
+	//     halves.
+	//
+	// IMPORTANT — what those probes do NOT prove. A bundle-level check is a
+	// check on esbuild's RESOLUTION, not on the host the code later runs in.
+	// Both probes above passed while the export was completely broken in a
+	// browser, because the generator ended with `Packer.toBuffer`, whose JSZip
+	// output type "nodebuffer" is gated on a bare `Buffer` GLOBAL. Node has one
+	// (so every probe and test here succeeded); a browser does not (so every
+	// click threw). It now uses `Packer.toArrayBuffer`, which needs no global.
+	//
+	// The lesson for this allow-list: a browser-safety audit must exercise the
+	// code path with the browser's globals ABSENT, not merely with browser
+	// resolution. "No node: imports" is necessary and not sufficient.
+	//
+	// The 860 KB cost of this dependency is why its consumers import it with a
+	// dynamic `await import()`, so it lands in its own chunk instead of the
+	// entry bundle every visitor downloads.
+	"@mcpedia/core/export-docx",
 ] as const
 
 /**

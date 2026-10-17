@@ -3,11 +3,36 @@
  *
  * `@import "tailwindcss"` is the whole wiring under @tailwindcss/vite — the
  * plugin compiles it, there is no tailwind.config.js and nothing to register.
+ * `@plugin` loads the typography plugin that `prose` classes need.
  *
- * The design tokens live in app/globals.css (shared with the Next build while
- * both apps run). They are CSS custom properties on :root/.dark, so they apply
- * to any stylesheet that is loaded on the page — this file only needs the
- * import above for Tailwind's own layer.
+ * ## WHY theme.css IS IMPORTED HERE
+ *
+ * The design tokens, prose rules, syntax-highlighting classes and the print
+ * stylesheet live in ./theme.css. They used to live in the Next app's
+ * app/globals.css, which was deleted with the Next tree — leaving this file as a
+ * 13-line Tailwind entry and the SPA with NO design tokens at all. Every
+ * component styles itself with `bg-[var(--bg-surface)]`-style utilities, so the
+ * built stylesheet contained zero definitions for `--brand` or `--bg-app` and
+ * every one of those classes resolved to nothing. See the header of theme.css.
+ *
+ * The import is plain CSS and Tailwind inlines it during the same pass, so the
+ * `@theme inline` block in that file is compiled exactly as if it were written
+ * here — which is required, because `@theme` is a Tailwind at-rule and a browser
+ * would drop it.
+ *
+ * ORDER: `@import "./theme.css"` MUST come before `@plugin`. Per the CSS spec
+ * every `@import` has to precede all other at-rules, and a browser silently
+ * DROPS one that does not — so theme.css would have loaded in dev (where Vite
+ * inlines it at build time) and vanished in a browser that received the import
+ * unresolved. Biome flags the misordering as `noInvalidPositionAtImportRule`,
+ * which is how this was caught. `@plugin` is not an `@import`, so the typography
+ * plugin stays below.
+ *
+ * The theme file is plain CSS and Tailwind inlines it during the same pass, so
+ * the `@theme inline` block in it is compiled exactly as if it were written
+ * here — which is required, because `@theme` is a Tailwind at-rule and a browser
+ * would drop it.
  */
 @import "tailwindcss";
+@import "./theme.css";
 @plugin "@tailwindcss/typography";

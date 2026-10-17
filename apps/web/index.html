@@ -1,12 +1,69 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="h-full scroll-smooth">
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
-		<title>MCPedia</title>
+		<title>MCPedia — Archival Knowledge Base for Humans & AI Agents</title>
+		<meta
+			name="description"
+			content="A content-first knowledge base. Humans read the Web UI; AI agents use the Model Context Protocol (MCP). Both share one Core."
+		/>
+		<!--
+			The theme bootstrap, inline and BEFORE any stylesheet or module.
+
+			It is inline because it must run before first paint: the `.dark` class
+			has to be on <html> by the time the browser paints, or the page flashes
+			light and then repaints dark. A module script is deferred by
+			definition, so the same code in main.tsx would always be too late.
+
+			It lives HERE because the SPA shell (src/routes/shell.tsx) states that
+			this is where it went when the Next root layout was deleted — the Next
+			layout carried it in a <head> script tag. Nothing had actually been
+			written, so the app rendered with whatever class the markup shipped
+			(never `.dark`) and ThemeToggle could only correct it after mount, in
+			an effect: the flash the inline script exists to prevent.
+
+			The key and the predicate are byte-identical to ThemeToggle's
+			STORAGE_KEY and its "stored, else system preference" rule. Two places
+			read this decision, so they must agree; the try/catch mirrors the
+			original, because localStorage THROWS in a blocked-cookies context and
+			an exception here would leave the document unstyled-by-theme.
+		-->
+		<script>
+			// Every `var` is declared at the top level of the IIFE rather than
+			// inside the `try`: Biome's noInnerDeclarations flags a declaration
+			// nested in a block, and a `var` is function-scoped regardless, so
+			// hoisting it costs nothing and states the intent.
+			//
+			// The IIFE is an arrow so it inherits `this`; irrelevant here, but it
+			// is what the linter asks for.
+			;(() => {
+				var isDark = false
+				var stored = null
+				try {
+					stored = localStorage.getItem("mcpedia-theme")
+				} catch (e) {
+					// localStorage THROWS when cookies are blocked. `stored` stays
+					// null, which the rule below reads as "no preference" — the same
+					// answer as a first-time visitor, and the correct default.
+				}
+				try {
+					isDark =
+						stored === "dark" ||
+						(stored === null &&
+							window.matchMedia("(prefers-color-scheme: dark)").matches)
+				} catch (e) {
+					// matchMedia is absent in very old browsers. Light is the safe
+					// fallback, matching the CSS default.
+				}
+				document.documentElement.classList.toggle("dark", isDark)
+			})()
+		</script>
 	</head>
-	<body>
+	<body
+		class="min-h-screen bg-[var(--bg-app)] text-[var(--text-secondary)] font-sans antialiased selection:bg-[var(--text-primary)] selection:text-[var(--bg-app)] flex flex-col transition-colors duration-150"
+	>
 		<div id="root"></div>
 		<script type="module" src="/src/main.tsx"></script>
 	</body>

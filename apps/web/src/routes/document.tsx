@@ -11,12 +11,19 @@
  *   documents.folderInfo  -> "doc" | "folder" | "none", the classification
  *   documents.get         -> the document, or null
  *
- * WHAT IS DELIBERATELY NOT HERE: the edit form. DocForm needs WEBHOOK_SECRET,
- * a server-only env read from @mcpedia/config (whose barrel also touches
- * node:fs), and it is a write surface gated by x-webhook-secret. Porting it
- * belongs to the authenticated route group, not this one. So `?edit=1` is
- * recognised and ignored here, and the Edit button links to the Next route that
- * still serves it.
+ * WHAT IS DELIBERATELY NOT HERE: the editing form. `DocForm` is a write surface
+ * and lives on the /create route group, where its route's beforeLoad is what
+ * gates it. Porting an in-place editor onto THIS read-only route would need the
+ * gate duplicated here for no gain, so the toolbar's Edit button is a plain link
+ * to /login (this route renders with `canEdit` false).
+ *
+ * ## THE EXPORT PATHS ARE REAL NOW
+ *
+ * `/:section/export` and `/:section/<folder>/export` render the printable export
+ * view via InlineExport. They previously rendered a placeholder that pointed at
+ * the Next app's route, which had already been deleted — so every "Export PDF"
+ * button in the app landed on an explanation of missing work that was in fact
+ * already available in the browser bundle. See routes/inline-export.tsx.
  */
 import { Link, notFound, useParams } from "@tanstack/react-router"
 import {
@@ -36,12 +43,16 @@ import { DocLink } from "#/components/DocLink"
 import { EmptyState } from "#/components/EmptyState"
 import Markdown from "#/components/Markdown"
 import RelatedGrid from "#/components/RelatedGrid"
+import RevisionList from "#/components/RevisionList"
 import TOC from "#/components/TOC"
+import { InlineExport, inlineExportTarget } from "#/routes/inline-export"
+import { isAdmin } from "#/screens/gate"
 import {
 	type DocumentResult,
 	useDocumentQuery,
 	useDocumentsQuery,
 	useFolderInfoQuery,
+	useMeQuery,
 	useSectionsQuery,
 } from "#/lib/queries"
 import type { DocSummary } from "#/lib/shape"
@@ -331,6 +342,21 @@ function DocumentView({
 	const { data: liveSections } = useSectionsQuery()
 	const info = sectionMeta(doc.section, sectionsOrDefaults(liveSections))
 
+	/**
+	 * Real admin state, replacing the hardcoded `canEdit={false}`.
+	 *
+	 * The Next page resolved `isAdmin()` in the server and threaded the boolean
+	 * down. That is unavailable to a SPA loader, so it comes from `auth.me` — the
+	 * same source /create's beforeLoad uses, through the same `isAdmin` predicate
+	 * in #/screens/gate so the two cannot disagree about what admin means.
+	 *
+	 * `isAdmin(null)` is false, so an unreachable API renders read-only rather
+	 * than offering edits that cannot save. That is UX: `revisions.restore` and
+	 * the document writes are gated server-side, and this flag grants nothing.
+	 */
+	const { data: me } = useMeQuery()
+	const canEdit = isAdmin(me ?? null)
+
 	return (
 		<div className="flex items-start gap-8">
 			<article className="flex-1 min-w-0">
@@ -386,7 +412,13 @@ function DocumentView({
 							</h1>
 						</div>
 
-						<DocActions slug={doc.slug} body={doc.body} canEdit={false} />
+						<DocActions
+							slug={doc.slug}
+							title={doc.title}
+							section={doc.section}
+							body={doc.body}
+							canEdit={canEdit}
+						/>
 					</div>
 
 					<div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)] pt-3.5 border-t border-[var(--border-color)]">
@@ -441,6 +473,11 @@ function DocumentView({
 				</div>
 
 				<RelatedGrid slug={fullSlug} />
+
+				{/* The revision history, restored to the document page. It rendered
+				    here in the Next app and was dropped in the port, so the API's
+				    revisions.* procedures had no UI at all. */}
+				<RevisionList slug={fullSlug} canEdit={canEdit} />
 			</article>
 
 			<aside className="hidden xl:block w-64 shrink-0 sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto pl-6 border-l border-[var(--border-color)]">
@@ -453,20 +490,18 @@ function DocumentView({
 export function DocRoute() {
 	const { section, _splat } = useParams({ from: "/$section/$" })
 
-	// `/:section/export` and `/:section/<folder>/export` are export views. The
-	// PDF component itself is out of this route group's scope — it depends on
-	// @mcpedia/core/export-helpers — so the page says so rather than pretending.
+	// `/:section/export` and `/:section/<folder>/export` are the export views.
+	// This used to render an EmptyState pointing at "the Next route until the
+	// export helpers are ported" — a route deleted with the Next tree, for
+	// helpers that are in fact allow-listed for the browser. Every "Export PDF"
+	// button in the app (section hero, folder hero, document toolbar) links here,
+	// so that placeholder was the whole PDF-export feature.
 	if (isExportPath(section, _splat)) {
 		const target = exportTargetSlug(section, _splat)
 		return (
-			<EmptyState
-				title="PDF export"
-				description={
-					target
-						? `The PDF export view for /${target} is served by the Next route until the export helpers are ported.`
-						: "The PDF export view is served by the Next route until the export helpers are ported."
-				}
-				icon={FileDown}
+			<InlineExport
+				section={section}
+				target={inlineExportTarget(section, target)}
 			/>
 		)
 	}

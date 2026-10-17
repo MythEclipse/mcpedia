@@ -28,6 +28,25 @@ describe("browser bundle guard", () => {
 		expect(rejectionReason("@mcpedia/core")).toBeTypeOf("string")
 	})
 
+	it("allows core/export-docx but still denies the core barrel", () => {
+		// Same shape of argument as the case above, for the .docx writer that
+		// replaced the deleted Next /api/export route. This is the assertion that
+		// makes the exception reviewable: the subpath is reachable from the
+		// browser and the barrel — which pulls Postgres — is not.
+		expect(rejectionReason("@mcpedia/core/export-docx")).toBeNull()
+		expect(rejectionReason("@mcpedia/core")).toBeTypeOf("string")
+	})
+
+	it("denies a subpath adjacent to an allowed export entry point", () => {
+		// Fail-closed control, mirroring the /row-map case. The export writers
+		// live beside the use cases that read from the database; allowing the two
+		// writer subpaths must not open their directory.
+		expect(
+			rejectionReason("@mcpedia/core/application/export.use-cases"),
+		).toBeTypeOf("string")
+		expect(rejectionReason("@mcpedia/core/application")).toBeTypeOf("string")
+	})
+
 	it("denies @mcpedia/config's bare barrel", () => {
 		// config's "." reads .env off disk via node:fs; its /sections subpath
 		// has no imports at all and IS safe. Only one of the two is on the

@@ -17,7 +17,7 @@
  *    be served stale. One global value would be wrong for one of those.
  */
 
-import type { SectionInfo } from "@mcpedia/types"
+import type { ExportSortOption, SectionInfo } from "@mcpedia/types"
 import {
 	queryOptions,
 	type UseQueryResult,
@@ -25,8 +25,9 @@ import {
 } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
 import { RPC_BASE, rpcCall } from "#/lib/api-client"
+import { type MeResponse, fetchMe } from "#/lib/api-client"
 import type { QueueCounts, TagCount } from "#/lib/orpc"
-import { fetchQueueStatus, fetchTags } from "#/lib/orpc"
+import { fetchExportData, fetchQueueStatus, fetchTags } from "#/lib/orpc"
 import type { ProcedureResult } from "#/lib/orpc-client"
 import type {
 	DocSummary,
@@ -47,6 +48,8 @@ import {
  * "documents" without knowing each hook's argument shape.
  */
 export const qk = {
+	/** Who the caller is; see useMeQuery for why this is cached. */
+	me: ["auth", "me"] as const,
 	sections: ["documents", "sections"] as const,
 	documents: (section?: string) =>
 		["documents", "list", section ?? "all"] as const,
@@ -57,6 +60,21 @@ export const qk = {
 	search: (q: string, mode: SearchMode) => ["search", mode, q] as const,
 	queue: ["queue", "status"] as const,
 	tags: (limit: number) => ["tags", String(limit)] as const,
+	/**
+	 * The export payload for one scope.
+	 *
+	 * Keyed by BOTH the path and the sort, and neither is redundant: `path`
+	 * selects which documents are in scope, while `sortBy` is applied
+	 * server-side by `getExportDocuments` and changes the document ORDER the
+	 * summary's category list is built from. Keying on path alone would serve a
+	 * cached result sorted the other way.
+	 */
+	exportData: (path: string | undefined, sortBy: string) =>
+		["documents", "export", path ?? "all", sortBy] as const,
+	/** A document's revision history, newest first. */
+	revisions: (slug: string) => ["revisions", "list", slug] as const,
+	/** One revision's full body. */
+	revision: (id: string) => ["revisions", "get", id] as const,
 }
 
 /** The section registry. Rarely changes; cached for a minute. */
@@ -65,6 +83,37 @@ export function useSectionsQuery(): UseQueryResult<SectionInfo[]> {
 		queryOptions({
 			queryKey: qk.sections,
 			queryFn: () => rpcCall(RPC_BASE, ["documents", "sections"] as const),
+			staleTime: 60_000,
+			retry: false,
+		}),
+	)
+}
+
+/**
+ * Who the caller is: `auth.me`.
+ *
+ * ## WHY THIS IS A QUERY AND NOT A ROUTE CONTEXT
+ *
+ * /create reads `me` in its beforeLoad because it must REDIRECT before render,
+ * and a loader is the only place that can. Everywhere else the question is
+ * "should this control be shown", which is a render-time decision: a redirect
+ * would be wrong (a signed-out reader must still see the document) and a second
+ * beforeLoad would gate a page that is deliberately public.
+ *
+ * `auth.me` is public and non-throwing — it answers `authenticated: false` with
+ * a 200 when signed out — so a failed call is a transport problem, not an
+ * authorization answer. `retry: false` and a short staleTime keep it from
+ * hammering the API on every navigation while still picking up a sign-in.
+ *
+ * This is UX ONLY. Every write it enables is gated server-side by
+ * `requireWriteAuthOrSession`; rendering a button it should not have granted
+ * gets a 401, and rendering none it should have granted costs a click.
+ */
+export function useMeQuery(): UseQueryResult<MeResponse> {
+	return useQuery(
+		queryOptions({
+			queryKey: qk.me,
+			queryFn: () => fetchMe(),
 			staleTime: 60_000,
 			retry: false,
 		}),
@@ -267,6 +316,103 @@ export function useTagsQuery(limit: number): UseQueryResult<TagCount[]> {
 		}),
 	)
 }
+
+/**
+ * A document's revision history, newest first.
+ *
+ * `revisions.list` is public — restoring is the gated half — so this needs no
+ * credential. It was reachable only through the Next app's `/api/revisions`
+ * route before, and nothing in the SPA called the procedure at all, so the
+ * revision history that the document page used to render below the body had
+ * simply gone missing in the port.
+ *
+ * The 50 limit is the schema's own maximum (RevisionListInput caps at 50), so
+ * passing it is a deliberate "as many as the API will give" rather than an
+ * arbitrary number that silently truncates a busy document's history.
+ */
+export function useRevisionsQuery(slug: string, limit = 50) {
+	return useQuery(
+		queryOptions({
+			queryKey: [...qk.revisions(slug), limit],
+			queryFn: () =>
+				rpcCall(RPC_BASE, ["revisions", "list"] as const, { slug, limit }),
+			staleTime: 30_000,
+			retry: false,
+		}),
+	)
+}
+
+/**
+ * One revision's full body, for the diff/review pane.
+ *
+ * Enabled on demand: the history list carries metadata only, and fetching every
+ * revision's body to render a collapsed list would pull the document's entire
+ * edit history on page load. The caller enables it when a row is expanded.
+ */
+export function useRevisionQuery(id: string, enabled = true) {
+	return useQuery(
+		queryOptions({
+			queryKey: qk.revision(id),
+			queryFn: () => rpcCall(RPC_BASE, ["revisions", "get"] as const, { id }),
+			enabled: enabled && Boolean(id),
+			// A revision is immutable by definition: the row is never rewritten.
+			staleTime: Number.POSITIVE_INFINITY,
+			retry: false,
+		}),
+	)
+}
+
+/**
+ * The export payload for one scope: full documents plus the summary.
+ *
+ * ## WHY THIS IS A QUERY AND NOT A ROUTE LOADER
+ *
+ * /export/pdf is a route with its own loader (see routes/export-pdf.tsx). This
+ * hook exists for the INLINE export: the section page and the folder page each
+ * offer an "Export PDF" button that must render the same printable view without
+ * navigating away from where the user is. That button previously rendered a
+ * placeholder saying the view was "served by the Next route until the export
+ * helpers are ported" — a route that had already been deleted.
+ *
+ * ## WHY `enabled` IS A PARAMETER
+ *
+ * The payload carries every document's FULL BODY. Fetching it on page load would
+ * make opening a section index pull the entire section's text, for a button the
+ * user may never press. So the caller enables it on demand — the button toggles
+ * a state that flips this to true — and the query is then cached, which is what
+ * makes a second press instant.
+ */
+export function useExportDataQuery(
+	path: string | undefined,
+	sortBy: ExportSortOption = "category_points",
+	enabled = true,
+) {
+	return useQuery(
+		queryOptions({
+			queryKey: qk.exportData(path, sortBy),
+			queryFn: () =>
+				fetchExportData({
+					...(path ? { path } : {}),
+					sortBy,
+				}),
+			enabled,
+			// Export bodies are stable and expensive to fetch; a minute of
+			// staleness is right for a print-preview surface.
+			staleTime: 60_000,
+			retry: false,
+		}),
+	)
+}
+
+/** The six sort modes, in the order the export toolbar lists them. */
+export const EXPORT_SORT_OPTIONS = [
+	"category_points",
+	"points_desc",
+	"difficulty",
+	"title",
+	"path",
+	"updated_at",
+] as const satisfies readonly ExportSortOption[]
 
 /**
  * Debounce a value. 180ms is what the Next search page used, and it is the

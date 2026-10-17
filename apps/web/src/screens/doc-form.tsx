@@ -71,6 +71,9 @@ interface DocFormProps {
  * Markup, field list, validation text, presets, markdown toolbar and the
  * write/preview tabs are unchanged. What changed:
  *  - POST /api/docs -> documents.create; PUT /api/docs/:slug -> documents.update.
+ *  - DELETE is now wired to documents.remove. The Next tree had no delete
+ *    affordance at all — `documents.remove` existed in the API and was called by
+ *    nothing — so the Delete control below is new surface rather than a port.
  *  - The SWR cache invalidation (`mutate("/api/docs")`) is gone: SWR is keyed by
  *    URL and this form no longer calls those URLs, so the invalidation would be
  *    a no-op that hides a real staleness bug. The post-save navigation below is
@@ -88,6 +91,7 @@ export default function DocForm({
 }: DocFormProps) {
 	const router = useRouter()
 	const [loading, setLoading] = useState(false)
+	const [deleting, setDeleting] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [activeTab, setActiveTab] = useState<"write" | "preview">("write")
 
@@ -241,6 +245,47 @@ export default function DocForm({
 					: String(err),
 			)
 			setLoading(false)
+		}
+	}
+
+	/**
+	 * Delete this document.
+	 *
+	 * `documents.remove` was reachable from nothing before this: the Next tree had
+	 * no delete affordance, so the procedure existed and no UI called it. Deletion
+	 * removes the DB row, its chunks and the on-disk mirror, so it is confirmed
+	 * and the button says which document it is about to destroy.
+	 *
+	 * The API gate decides: `documents.remove` carries `requireWriteAuthOrSession`,
+	 * so a non-admin gets a 401 that is shown verbatim rather than being smoothed
+	 * over. That is the authoritative answer, and this component cannot influence
+	 * it.
+	 */
+	async function handleDelete() {
+		const target = effectiveSlug
+		const ok = window.confirm(
+			`Permanently delete "${title || target}"?\n\n` +
+				`This removes the document and its search index entries. ` +
+				`Revision history is not shown in the UI after this — it is not recoverable from here.`,
+		)
+		if (!ok) return
+
+		setDeleting(true)
+		setError(null)
+		try {
+			await rpcCall(RPC_BASE, ["documents", "remove"], { slug: target })
+			// A full navigation rather than a router push: the sidebar, the section
+			// list and the dashboard's counts are all cached reads that mention this
+			// document, and invalidating each one individually is more code than a
+			// reload for an action this rare.
+			window.location.assign("/")
+		} catch (err) {
+			setError(
+				err instanceof OrpcCallError || err instanceof Error
+					? err.message
+					: String(err),
+			)
+			setDeleting(false)
 		}
 	}
 
@@ -640,6 +685,26 @@ export default function DocForm({
 				>
 					Cancel
 				</button>
+
+				{/*
+				 Delete. Edit mode only: there is nothing to delete while creating.
+				 It is pushed to the right of the row and visually separated so it is
+				 never mistaken for the primary action.
+				*/}
+				{isEdit && (
+					<button
+						type="button"
+						onClick={handleDelete}
+						disabled={loading || deleting}
+						className="ml-auto px-4 py-2.5 border border-rose-500/30 hover:border-rose-500/60 text-rose-500 hover:text-rose-600 dark:hover:text-rose-400 bg-rose-500/5 hover:bg-rose-500/10 rounded-lg text-xs transition-colors shadow-xs cursor-pointer font-mono disabled:opacity-50 disabled:cursor-wait flex items-center gap-2"
+					>
+						{deleting && (
+							<div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+						)}
+						<Trash2 className="w-3.5 h-3.5" />
+						<span>{deleting ? "DELETING..." : "DELETE_DOCUMENT"}</span>
+					</button>
+				)}
 			</div>
 		</form>
 	)

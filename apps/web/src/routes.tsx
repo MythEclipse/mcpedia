@@ -62,6 +62,7 @@ import {
 	getRouteApi,
 	redirect,
 	useLoaderData,
+	useSearch,
 } from "@tanstack/react-router"
 import { fetchMe, fetchSections } from "#/lib/api-client"
 import { sectionIdsFrom } from "#/lib/sections"
@@ -131,6 +132,12 @@ const loginRoute = createRoute({
 const createRoute_ = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/create",
+	// `?slug=` selects EDIT mode. Validated here so a hostile/typo'd value is a
+	// string or nothing, never a number or an object reaching the form's slug.
+	validateSearch: (search: Record<string, unknown>): { slug?: string } => {
+		const slug = search.slug
+		return typeof slug === "string" && slug.length > 0 ? { slug } : {}
+	},
 	beforeLoad: async () => {
 		// "cannot tell" (a failed auth.me) must read as "not allowed", or a dead
 		// API would render the editor and fail at submit instead of at the door.
@@ -151,10 +158,12 @@ const createRoute_ = createRoute({
 	// @tanstack/react-router `type RouteComponent = AsyncRouteComponent<{}>` — a
 	// single non-generic type with an empty props argument, so the prop is typed
 	// `{}`. The supported way to read a loader's result is useLoaderData, keyed
-	// by route id.
+	// by route id. The search params come from useSearch, which needs a `from`
+	// for the same reason.
 	component: () => {
 		const { sectionIds } = useLoaderData({ from: "/create" })
-		return <CreatePage sectionIds={sectionIds} />
+		const { slug } = useSearch({ from: "/create" })
+		return <CreatePage sectionIds={sectionIds} editSlug={slug} />
 	},
 })
 

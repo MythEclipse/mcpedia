@@ -632,11 +632,44 @@ export interface DocxExportOptions {
 /**
  * Generate a complete, publication-grade Microsoft Word (.docx) document
  * from MCPedia ExportData.
+ *
+ * ## WHY THE RETURN TYPE IS `Uint8Array` AND NOT `Buffer`
+ *
+ * This used to be `Promise<Buffer>` and ended with `Packer.toBuffer(docx)`.
+ * That combination CANNOT run in a browser, and the failure is not subtle: it
+ * throws `nodebuffer is not supported by this platform` the moment it is called.
+ *
+ * `Packer.toBuffer` does not "return bytes" — it asks JSZip for a named output
+ * type, `"nodebuffer"`, and JSZip's `checkSupport` gates every output type on a
+ * runtime capability probe. For `"nodebuffer"` that probe is a bare `Buffer`
+ * GLOBAL, not an import. Bundling the `buffer` shim into the web chunk therefore
+ * does not help: the shim is module-scoped and the probe never sees it. The few
+ * `Buffer.` references inside the bundle are the shim's internals plus JSZip's
+ * own `typeof Buffer === "function"` guards, and all of them are false in a
+ * browser.
+ *
+ * `Packer.toArrayBuffer` uses the `"arraybuffer"` output type, which needs no
+ * global at all, so this now runs unchanged in Node AND in the browser. The
+ * `Uint8Array` wrapper is what the browser's `Blob` wants and it stringifies,
+ * subscript-indexes and reports `.length` exactly as the old `Buffer` did — and
+ * because `Uint8Array` is the superclass `Buffer` extends, a Node caller that
+ * genuinely needs a `Buffer` can still get one with `Buffer.from(result)`.
+ *
+ * The type argument is `Uint8Array<ArrayBuffer>` rather than a bare
+ * `Uint8Array`, and it is load-bearing: a bare `Uint8Array` defaults to
+ * `Uint8Array<ArrayBufferLike>`, whose `.buffer` is not assignable to
+ * `BlobPart`. Spelling out `ArrayBuffer` — which is exactly what
+ * `Packer.toArrayBuffer` promises — is what lets the browser call
+ * `new Blob([bytes])` without a cast.
+ *
+ * The `.docx` export is the only caller in this repo and it runs in the tab
+ * (apps/web/src/lib/export-docx.ts), so nothing server-side depends on the old
+ * type.
  */
 export async function generateExportDocx(
 	exportData: ExportData,
 	options: DocxExportOptions = {},
-): Promise<Buffer> {
+): Promise<Uint8Array<ArrayBuffer>> {
 	const { summary, documents: docs } = exportData
 	const pageBreaks = options.pageBreaks ?? true
 
@@ -897,5 +930,5 @@ export async function generateExportDocx(
 		],
 	})
 
-	return await Packer.toBuffer(docx)
+	return new Uint8Array(await Packer.toArrayBuffer(docx))
 }

@@ -1,0 +1,773 @@
+/*
+ * MCPedia design tokens, base layer, prose, syntax highlighting, and the print
+ * stylesheet.
+ *
+ * ## WHY THIS FILE EXISTS AT ALL
+ *
+ * This is the content of `app/globals.css` — the Next app's single stylesheet —
+ * recovered into the SPA. That file was deleted along with the Next tree, and
+ * `styles.css` was left as a 13-line Tailwind entry that only imported Tailwind
+ * itself. The result was not "unstyled-ish": EVERY component in src/ styles
+ * itself with `bg-[var(--bg-surface)]`-style classes, so with the tokens gone
+ * those classes resolved to nothing. The built stylesheet contained ZERO
+ * occurrences of `--brand` or `--bg-app`, no `.prose`, no `.hljs-*`, and no
+ * `@media print` block. Measured on the deployed bundle
+ * (assets/index-M2yxFgZd.css), not inferred.
+ *
+ * ## WHY IT IS A SEPARATE FILE FROM styles.css
+ *
+ * `styles.css` is the Tailwind entry: `@import "tailwindcss"` plus the
+ * typography plugin. Those two directives must appear once, in the file Vite
+ * feeds to @tailwindcss/vite's transform. Everything below is ordinary CSS that
+ * Tailwind does not need to generate, so it lives here and is imported — which
+ * also keeps the Tailwind wiring readable at a glance instead of buried under
+ * 700 lines of tokens.
+ *
+ * ## WHY THE PRINT BLOCK IS STILL HERE, AND STILL MATTERS
+ *
+ * The `/export/pdf` route prints via `window.print()` — there is no headless
+ * browser and no server-side PDF renderer anywhere in this repo. So the ONLY
+ * thing that turns the export view into a publication-grade PDF is the
+ * `@media print` block at the bottom of this file, plus the `.no-print` class
+ * the shell and the toolbar carry. Losing it does not error; it prints the web
+ * chrome, at screen sizes, with the toolbar in the middle of page 1.
+ */
+
+/*
+  MCPedia Design Philosophy: Archival Precision & Technical Monolith
+  - Strict monochromatic foundation (Graphite, Zinc, Charcoal)
+  - Zero decorative AI gradients or blurred blobs
+  - Typographic hierarchy: Strong contrast, razor-sharp hairline borders, monospace telemetry
+  - Functional signal indicators (Status Green, Alert Amber, Critical Coral)
+*/
+
+/* Light mode defaults (:root) - Technical Paper / Archival Slate */
+:root {
+	color-scheme: light;
+	--bg-app: #f9fafb;
+	--bg-surface: #ffffff;
+	--bg-surface-hover: #f3f4f6;
+	--bg-elevated: #f3f4f6;
+	--bg-elevated-hover: #e5e7eb;
+	--border-color: #e5e7eb;
+	--border-subtle: #f3f4f6;
+	--border-card: #e5e7eb;
+
+	--text-primary: #111827;
+	--text-secondary: #374151;
+	--text-muted: #6b7280;
+	--text-dim: #9ca3af;
+
+	/* Accent: Precision Technical Ink */
+	--brand: #18181b;
+	--brand-hover: #27272a;
+	--brand-fg: #ffffff;
+	--accent: #2563eb;
+	--accent-hover: #1d4ed8;
+
+	--nav-bg: rgba(255, 255, 255, 0.92);
+
+	/* Code & Syntax (Light Mode) */
+	--code-bg: #f3f4f6;
+	--code-block-bg: #f8fafc;
+	--code-header-bg: #f1f5f9;
+	--border-code: #e2e8f0;
+	--code-button-bg: #ffffff;
+	--code-button-hover-bg: #e2e8f0;
+	--pre-text: #1e293b;
+	--code-inline-bg: #f1f5f9;
+	--code-inline-text: #0f172a;
+	--code-inline-border: #e2e8f0;
+
+	--table-zebra: rgba(243, 244, 246, 0.5);
+	--scrollbar-thumb: #d1d5db;
+	--scrollbar-thumb-hover: #9ca3af;
+	--shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+
+	/* Syntax Highlighting */
+	--hl-keyword: #cf222e;
+	--hl-string: #0a3069;
+	--hl-title: #6f42c1;
+	--hl-attr: #953800;
+	--hl-number: #0550ae;
+	--hl-comment: #6e7781;
+	--hl-builtin: #0969da;
+	--hl-operator: #57606a;
+	--hl-variable: #953800;
+	--hl-meta: #6e7781;
+}
+
+/* Dark mode overrides (html.dark) - Deep Basalt / Precision Carbon */
+html.dark {
+	color-scheme: dark;
+	--bg-app: #090a0c;
+	--bg-surface: #101216;
+	--bg-surface-hover: #16181f;
+	--bg-elevated: #161920;
+	--bg-elevated-hover: #1e222b;
+	--border-color: #222630;
+	--border-subtle: #181b22;
+	--border-card: #222630;
+
+	--text-primary: #f3f4f6;
+	--text-secondary: #d1d5db;
+	--text-muted: #9ca3af;
+	--text-dim: #6b7280;
+
+	/* Accent: Monolithic Snow Ink */
+	--brand: #f3f4f6;
+	--brand-hover: #ffffff;
+	--brand-fg: #090a0c;
+	--accent: #60a5fa;
+	--accent-hover: #93c5fd;
+
+	--nav-bg: rgba(9, 10, 12, 0.9);
+
+	/* Code & Syntax (Dark Mode) */
+	--code-bg: #0c0e12;
+	--code-block-bg: #0c0e12;
+	--code-header-bg: #14171d;
+	--border-code: #222630;
+	--code-button-bg: #181b22;
+	--code-button-hover-bg: #222630;
+	--pre-text: #e5e7eb;
+	--code-inline-bg: #161920;
+	--code-inline-text: #e5e7eb;
+	--code-inline-border: #222630;
+
+	--table-zebra: rgba(255, 255, 255, 0.015);
+	--scrollbar-thumb: #222630;
+	--scrollbar-thumb-hover: #374151;
+	--shadow-card: none;
+
+	/* Syntax Highlighting */
+	--hl-keyword: #ff7b72;
+	--hl-string: #a5d6ff;
+	--hl-title: #d2a8ff;
+	--hl-attr: #ffa657;
+	--hl-number: #79c0ff;
+	--hl-comment: #8b949e;
+	--hl-builtin: #7ee787;
+	--hl-operator: #8b949e;
+	--hl-variable: #ffa657;
+	--hl-meta: #8b949e;
+}
+
+/*
+ * Map the tokens onto Tailwind's own namespaces.
+ *
+ * `@theme inline` (not plain `@theme`) is required and is not a style choice:
+ * the values are `var(--…)` references, and without `inline` Tailwind would
+ * resolve them once at build time and emit static colour values — so a
+ * `.dark`-mode swap of `--bg-app` would no longer reach any utility that used
+ * the token, and dark mode would half-work.
+ *
+ * NOTE the omission of the original's `--border-code: var(--border-code);`
+ * line. It was a self-reference: a custom property defined in terms of itself,
+ * which is a cycle and computes to the guaranteed-invalid value. `--border-code`
+ * is already declared in `:root`/`html.dark` above, so all the line could do was
+ * break the variable it claimed to define. Dropped deliberately.
+ */
+@theme inline {
+	--font-sans:
+		"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	--font-mono:
+		"JetBrains Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas,
+		monospace;
+
+	--color-background: var(--bg-app);
+	--color-surface: var(--bg-surface);
+	--color-surface-hover: var(--bg-surface-hover);
+	--color-elevated: var(--bg-elevated);
+	--color-elevated-hover: var(--bg-elevated-hover);
+	--color-border: var(--border-color);
+	--color-border-subtle: var(--border-subtle);
+
+	--color-text-primary: var(--text-primary);
+	--color-text-secondary: var(--text-secondary);
+	--color-text-tertiary: var(--text-muted);
+	--color-text-quaternary: var(--text-dim);
+
+	--color-brand: var(--brand);
+	--color-brand-hover: var(--brand-hover);
+	--color-accent: var(--accent);
+	--color-accent-hover: var(--accent-hover);
+}
+
+html {
+	scroll-behavior: smooth;
+}
+
+body {
+	background-color: var(--bg-app);
+	color: var(--text-secondary);
+	font-family: var(--font-sans);
+	font-feature-settings: "cv01", "ss03", "zero", "calt";
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	transition:
+		background-color 0.15s ease,
+		color 0.15s ease;
+	min-height: 100vh;
+}
+
+/* Custom hairline scrollbar */
+::-webkit-scrollbar {
+	width: 5px;
+	height: 5px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--scrollbar-thumb);
+	border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--scrollbar-thumb-hover);
+}
+
+/* Glass navigation */
+.glass-nav {
+	background: var(--nav-bg);
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+}
+
+/* Tactical Architectural Callouts */
+.callout {
+	border-left-width: 3px;
+	border-radius: 0 0.375rem 0.375rem 0;
+	padding: 0.875rem 1.125rem;
+	margin: 1.5rem 0;
+}
+
+.callout-note {
+	border-left-color: var(--text-muted);
+	background-color: var(--bg-elevated);
+}
+
+.callout-tip {
+	border-left-color: #10b981;
+	background-color: rgba(16, 185, 129, 0.06);
+}
+
+.callout-important {
+	border-left-color: #3b82f6;
+	background-color: rgba(59, 130, 246, 0.06);
+}
+
+.callout-warning {
+	border-left-color: #f59e0b;
+	background-color: rgba(245, 158, 11, 0.06);
+}
+
+.callout-caution {
+	border-left-color: #ef4444;
+	background-color: rgba(239, 68, 68, 0.06);
+}
+
+/* Prose Typography */
+.prose {
+	color: var(--text-secondary) !important;
+	max-width: 100% !important;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose strong {
+	color: var(--text-primary) !important;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+
+.prose a {
+	color: var(--text-primary) !important;
+	text-decoration: underline;
+	text-decoration-color: var(--border-color);
+	text-underline-offset: 3px;
+	font-weight: 500;
+	transition: all 0.15s ease;
+}
+
+.prose a:hover {
+	text-decoration-color: var(--text-primary);
+}
+
+.prose table {
+	width: 100%;
+	border-collapse: separate;
+	border-spacing: 0;
+	margin: 2rem 0;
+	font-size: 0.875rem;
+	border-radius: 0.5rem;
+	overflow: hidden;
+	border: 1px solid var(--border-color);
+	background: var(--bg-surface);
+}
+
+.prose th,
+.prose td {
+	padding: 0.75rem 1rem;
+	text-align: left;
+	border-bottom: 1px solid var(--border-color);
+}
+
+.prose th {
+	background: var(--bg-elevated);
+	color: var(--text-primary);
+	font-weight: 600;
+	font-size: 0.75rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	font-family: var(--font-mono);
+}
+
+.prose td {
+	color: var(--text-secondary);
+}
+
+.prose tbody tr:last-child td {
+	border-bottom: none;
+}
+
+.prose tbody tr:hover {
+	background: var(--bg-elevated-hover);
+}
+
+.prose tbody tr:nth-child(even) {
+	background: var(--table-zebra);
+}
+
+.prose pre {
+	background: var(--code-block-bg) !important;
+	color: var(--pre-text) !important;
+	border: 1px solid var(--border-code);
+	border-radius: 0.5rem;
+	padding: 1rem 1.25rem;
+	overflow-x: auto;
+	position: relative;
+	font-family: var(--font-mono);
+	line-height: 1.6;
+}
+
+.prose code {
+	font-family: var(--font-mono);
+	font-size: 0.875em;
+}
+
+.prose :not(pre) > code {
+	background: var(--code-inline-bg);
+	color: var(--code-inline-text);
+	border: 1px solid var(--code-inline-border);
+	padding: 0.15rem 0.35rem;
+	border-radius: 0.25rem;
+	font-weight: 500;
+}
+
+.prose :not(pre) > code::before,
+.prose :not(pre) > code::after {
+	content: none !important;
+}
+
+.prose blockquote {
+	border-left: 2px solid var(--text-muted);
+	background: var(--bg-elevated);
+	border-radius: 0 0.375rem 0.375rem 0;
+	margin: 1.5em 0;
+	padding: 0.75em 1.25em;
+	font-style: normal;
+	color: var(--text-secondary);
+}
+
+.prose hr {
+	border-color: var(--border-color);
+	margin: 2.5rem 0;
+}
+
+/* Syntax Highlighting */
+.hljs {
+	color: var(--pre-text);
+	background: transparent;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-subst,
+.hljs-doctag {
+	color: var(--hl-keyword);
+	font-weight: 600;
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-link {
+	color: var(--hl-string);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_,
+.hljs-section {
+	color: var(--hl-title);
+	font-weight: 600;
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-type {
+	color: var(--hl-attr);
+}
+
+.hljs-number,
+.hljs-literal {
+	color: var(--hl-number);
+}
+
+.hljs-comment,
+.hljs-quote {
+	color: var(--hl-comment);
+	font-style: italic;
+}
+
+.hljs-built_in,
+.hljs-symbol,
+.hljs-bullet {
+	color: var(--hl-builtin);
+}
+
+.hljs-meta,
+.hljs-meta .hljs-keyword,
+.hljs-meta .hljs-string {
+	color: var(--hl-meta);
+}
+
+.hljs-params {
+	color: var(--pre-text);
+}
+
+.hljs-punctuation,
+.hljs-operator {
+	color: var(--hl-operator);
+}
+
+.hljs-addition {
+	color: #10b981;
+	background-color: rgba(16, 185, 129, 0.15);
+	border-radius: 2px;
+}
+
+.hljs-deletion {
+	color: #ef4444;
+	background-color: rgba(239, 68, 68, 0.15);
+	border-radius: 2px;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+
+/* Transitions */
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.animate-fade-in {
+	animation: fadeIn 0.18s ease-out forwards;
+}
+
+/* Print & PDF Export Stylesheet */
+@media print {
+	@page {
+		size: A4 portrait;
+		margin: 10mm 12mm 10mm 12mm;
+	}
+
+	*,
+	*::before,
+	*::after {
+		-webkit-print-color-adjust: exact !important;
+		print-color-adjust: exact !important;
+		box-sizing: border-box !important;
+	}
+
+	html,
+	body {
+		background-color: #ffffff !important;
+		color: #0f172a !important;
+		font-family:
+			ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+			Roboto, sans-serif !important;
+		font-size: 8.5pt !important;
+		line-height: 1.35 !important;
+		margin: 0 !important;
+		padding: 0 !important;
+		width: 100% !important;
+	}
+
+	/* Hide navigation, toolbars, sidebar, and web UI controls */
+	header.site-header,
+	header.glass-nav,
+	aside.site-sidebar,
+	aside:not(.print-include),
+	footer,
+	nav.site-header,
+	.no-print,
+	.export-toolbar,
+	#a11y-live-region {
+		display: none !important;
+	}
+
+	main,
+	.print-container,
+	main > div {
+		max-width: 100% !important;
+		width: 100% !important;
+		margin: 0 !important;
+		padding: 0 !important;
+		border: none !important;
+		box-shadow: none !important;
+		background: transparent !important;
+	}
+
+	/* Explicit page break classes */
+	.page-break-before,
+	.chapter-page {
+		break-before: page !important;
+		page-break-before: always !important;
+	}
+
+	/* Prevent awkward mid-element page breaks */
+	.avoid-break-inside,
+	.code-block-wrapper,
+	.code-block-container,
+	.callout,
+	blockquote,
+	table,
+	tr,
+	img {
+		break-inside: avoid !important;
+		page-break-inside: avoid !important;
+	}
+
+	/* Prevent headings from being orphaned at the bottom of pages */
+	.challenge-header,
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		break-after: avoid !important;
+		page-break-after: avoid !important;
+	}
+
+	/* Dense / compact challenge flow */
+	.challenge-entry {
+		break-inside: auto !important;
+		page-break-inside: auto !important;
+	}
+
+	/* Compact typography & prose overrides */
+	p,
+	.prose p {
+		margin-top: 0 !important;
+		margin-bottom: 2.5pt !important;
+		font-size: 8.5pt !important;
+		line-height: 1.35 !important;
+		color: #1e293b !important;
+	}
+
+	h1,
+	.prose h1 {
+		font-size: 13pt !important;
+		line-height: 1.2 !important;
+		font-weight: 800 !important;
+		color: #020617 !important;
+		margin-top: 6pt !important;
+		margin-bottom: 2pt !important;
+		padding-bottom: 1pt !important;
+		border-bottom: 1px solid #cbd5e1 !important;
+	}
+
+	h2,
+	.prose h2 {
+		font-size: 10.5pt !important;
+		line-height: 1.2 !important;
+		font-weight: 700 !important;
+		color: #020617 !important;
+		margin-top: 5pt !important;
+		margin-bottom: 2pt !important;
+		padding-bottom: 1pt !important;
+		border-bottom: 1px solid #e2e8f0 !important;
+	}
+
+	h3,
+	.prose h3 {
+		font-size: 9.5pt !important;
+		line-height: 1.2 !important;
+		font-weight: 700 !important;
+		color: #0f172a !important;
+		margin-top: 4pt !important;
+		margin-bottom: 1.5pt !important;
+	}
+
+	h4,
+	h5,
+	h6,
+	.prose h4,
+	.prose h5,
+	.prose h6 {
+		font-size: 8.5pt !important;
+		line-height: 1.2 !important;
+		font-weight: 600 !important;
+		color: #1e293b !important;
+		margin-top: 3pt !important;
+		margin-bottom: 1pt !important;
+	}
+
+	ul,
+	ol,
+	.prose ul,
+	.prose ol {
+		margin-top: 1pt !important;
+		margin-bottom: 2.5pt !important;
+		padding-left: 13pt !important;
+	}
+
+	li,
+	.prose li {
+		margin-top: 0.5pt !important;
+		margin-bottom: 0.5pt !important;
+		font-size: 8.5pt !important;
+		line-height: 1.3 !important;
+	}
+
+	li > p {
+		margin: 0 !important;
+	}
+
+	blockquote,
+	.prose blockquote,
+	.callout {
+		margin: 2.5pt 0 !important;
+		padding: 2pt 5pt !important;
+		font-size: 8pt !important;
+		line-height: 1.3 !important;
+		border-left: 2.5px solid #64748b !important;
+		background-color: #f8fafc !important;
+		border-radius: 0 2px 2px 0 !important;
+	}
+
+	table,
+	.prose table {
+		margin: 2.5pt 0 !important;
+		font-size: 7.5pt !important;
+		line-height: 1.25 !important;
+		border-collapse: collapse !important;
+		width: 100% !important;
+		border: 1px solid #cbd5e1 !important;
+	}
+
+	th,
+	td,
+	.prose th,
+	.prose td {
+		padding: 2pt 4pt !important;
+		border: 1px solid #cbd5e1 !important;
+		color: #1e293b !important;
+	}
+
+	th,
+	.prose th {
+		background-color: #f1f5f9 !important;
+		font-weight: 700 !important;
+		text-transform: uppercase !important;
+		letter-spacing: 0.04em !important;
+	}
+
+	hr,
+	.prose hr {
+		margin: 3pt 0 !important;
+		border-color: #e2e8f0 !important;
+	}
+
+	img {
+		max-width: 100% !important;
+		max-height: 220px !important;
+		height: auto !important;
+		object-fit: contain !important;
+		margin: 2.5pt auto !important;
+		display: block !important;
+	}
+
+	.code-block-wrapper,
+	.code-block-container {
+		break-inside: avoid !important;
+		page-break-inside: avoid !important;
+		border: 1px solid #cbd5e1 !important;
+		background-color: #f8fafc !important;
+		border-radius: 3px !important;
+		margin: 2.5pt 0 !important;
+		overflow: hidden !important;
+	}
+
+	.code-block-header {
+		border-bottom: 1px solid #cbd5e1 !important;
+		background-color: #f1f5f9 !important;
+		padding: 1.5pt 5pt !important;
+		color: #334155 !important;
+		font-size: 7pt !important;
+		font-family:
+			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+		font-weight: 700 !important;
+		text-transform: uppercase !important;
+	}
+
+	.code-block-wrapper pre {
+		border: none !important;
+		background-color: transparent !important;
+		padding: 3pt 5pt !important;
+		margin: 0 !important;
+		border-radius: 0 !important;
+	}
+
+	pre,
+	pre code,
+	code {
+		white-space: pre-wrap !important;
+		word-break: break-all !important;
+		overflow-wrap: anywhere !important;
+		font-family:
+			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+		font-size: 7.5pt !important;
+		line-height: 1.3 !important;
+		color: #0f172a !important;
+	}
+
+	:not(pre) > code {
+		padding: 0.5pt 2pt !important;
+		font-size: 7.5pt !important;
+		background-color: #f1f5f9 !important;
+		border: 1px solid #e2e8f0 !important;
+		border-radius: 2px !important;
+	}
+}

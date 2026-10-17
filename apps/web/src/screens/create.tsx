@@ -1,11 +1,12 @@
 import { Plus } from "lucide-react"
 import { useEffect, useState } from "react"
 import { fetchFolderInfo } from "../lib/api-client"
+import { useDocumentQuery } from "../lib/queries"
 import { DEFAULT_SECTION } from "../lib/sections"
 import DocForm from "./doc-form"
 
 /**
- * /create — the SPA port of app/create/page.tsx.
+ * /create — the SPA port of app/create/page.tsx, now also the EDIT page.
  *
  * ## WHAT CHANGED FROM THE SERVER COMPONENT
  *
@@ -25,9 +26,9 @@ import DocForm from "./doc-form"
  * The route's beforeLoad redirects to /login unless auth.me reports an admin
  * (see gate.ts). That is UX: it avoids rendering an editor that cannot save.
  * It is NOT the security boundary — a client-side redirect is a suggestion
- * anyone can skip. documents.create stays gated by requireWriteAuth in the
- * procedure and the form surfaces whatever the API says. The weaker check is
- * never treated as sufficient on its own.
+ * anyone can skip. documents.create/update/remove stay gated in the procedure
+ * and the form surfaces whatever the API says. The weaker check is never
+ * treated as sufficient on its own.
  *
  * ## WHY FOLDERS ARE FETCHED HERE, NOT IN THE LOADER
  *
@@ -36,6 +37,15 @@ import DocForm from "./doc-form"
  * only for that one; fetching on section change keeps it correct for whichever
  * section is selected. The default section is fetched on mount so the common
  * case shows folders immediately.
+ *
+ * ## EDIT MODE IS THIS SAME ROUTE, KEYED BY ?slug=
+ *
+ * The document toolbar's Edit button used to link to `/<slug>?edit=1`, which the
+ * document route explicitly did NOT handle — so it bounced to the login redirect
+ * and editing was unreachable. Rather than teach the read-only document route to
+ * be a write surface (and duplicate the admin gate there), Edit links here with
+ * `?slug=`; this page already owns the gate, the section list and the folder
+ * tree, so editing is a mode of it rather than a second editor.
  */
 
 /** The section whose folder tree is fetched first. */
@@ -44,11 +54,51 @@ export { DEFAULT_SECTION, sectionIdsFrom } from "../lib/sections"
 export interface CreatePageProps {
 	/** Loader data: the sections that already exist. */
 	sectionIds: string[]
+	/**
+	 * The slug being edited, from `?slug=`. Absent means create.
+	 *
+	 * Read from the search params rather than a path segment because a slug
+	 * contains slashes and is not a single route segment; `?slug=writeups/x/y`
+	 * is unambiguous where `/[section]/[...slug]/edit` would collide with the
+	 * document route tree.
+	 */
+	editSlug?: string
 }
 
-export default function CreatePage({ sectionIds }: CreatePageProps) {
-	const [activeSection, setActiveSection] = useState(DEFAULT_SECTION)
+export default function CreatePage({ sectionIds, editSlug }: CreatePageProps) {
+	const isEdit = Boolean(editSlug)
+
+	// The document being edited. Disabled when creating, so this costs nothing on
+	// the create path.
+	const { data: existing, isPending } = useDocumentQuery(editSlug ?? "")
+
+	// The section drives the folder lookup below. It starts at the default and is
+	// corrected to the loaded document's section once the edit payload arrives —
+	// in an effect, because `useFoldersFor` must not be called with a value that
+	// changes dependency identity on every render.
+	const [activeSection, setActiveSection] = useState(
+		existing?.section ?? DEFAULT_SECTION,
+	)
+	useEffect(() => {
+		if (existing?.section) setActiveSection(existing.section)
+	}, [existing?.section])
+
 	const folders = useFoldersFor(activeSection)
+
+	// Creating is immediately renderable; editing must wait for the body, or the
+	// form would mount empty and then swap its contents under the user's cursor.
+	if (isEdit && isPending) {
+		return (
+			<div
+				className="flex items-center justify-center gap-3 py-16 text-[var(--text-muted)] text-xs font-mono"
+				role="status"
+				aria-live="polite"
+			>
+				<div className="w-4 h-4 border-2 border-[var(--text-muted)] border-t-transparent rounded-full animate-spin" />
+				<span>Loading document…</span>
+			</div>
+		)
+	}
 
 	return (
 		<div className="space-y-6">
@@ -60,21 +110,44 @@ export default function CreatePage({ sectionIds }: CreatePageProps) {
 					</div>
 					<div>
 						<h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--text-primary)] tracking-tight">
-							Create Knowledge Document
+							{isEdit ? "Edit Knowledge Document" : "Create Knowledge Document"}
 						</h1>
 						<p className="text-xs text-[var(--text-muted)] mt-0.5 font-mono">
-							Persists directly into PostgreSQL, tracks revision history, and
-							generates vector embeddings.
+							{isEdit ? (
+								<>
+									Editing <code>{editSlug}</code>. Saving appends a revision.
+								</>
+							) : (
+								<>
+									Persists directly into PostgreSQL, tracks revision history,
+									and generates vector embeddings.
+								</>
+							)}
 						</p>
 					</div>
 				</div>
 			</div>
 
 			<DocForm
-				mode="create"
+				mode={isEdit ? "edit" : "create"}
+				{...(editSlug ? { slug: editSlug } : {})}
 				existingSections={sectionIds}
 				existingFolders={{ [activeSection]: folders }}
 				onSectionChange={setActiveSection}
+				{...(isEdit && existing
+					? {
+							initial: {
+								title: existing.title,
+								body: existing.body,
+								section: existing.section,
+								type: existing.type,
+								status: existing.status,
+								tags: existing.tags,
+								author: existing.author,
+								extraFields: existing.extraFields,
+							},
+						}
+					: {})}
 			/>
 		</div>
 	)

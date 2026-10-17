@@ -7,6 +7,7 @@
 		".": "./src/index.ts",
 		"./row-map": "./src/row-map.ts",
 		"./export-helpers": "./src/application/export.helpers.ts",
+		"./export-docx": "./src/application/export.docx.ts",
 		"./domain": "./src/domain/index.ts",
 		"./application": "./src/application/index.ts",
 		"./infrastructure": "./src/infrastructure/index.ts",

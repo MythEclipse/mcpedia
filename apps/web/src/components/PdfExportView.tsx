@@ -14,12 +14,16 @@
  *   - filter/sort run on the client via the same stateless helpers
  *   - the summary is used as-is; only `documents` is re-filtered locally
  *
- * The one behavioural difference from the Next version, and it is a fix rather
- * than a regression: the .docx button used to GET /api/export on the Next
- * origin. The SPA does not serve that route, so the button is disabled with a
- * visible reason instead of failing at click time. The server-side .docx
- * generation still lives behind the Next app's /api/export during the
- * migration; wiring it to the API is a separate piece of work.
+ * ## THE THREE DOWNLOAD BUTTONS ARE ALL CLIENT-SIDE
+ *
+ * `Download .md` and `Download .docx` build their file in the tab and hand it to
+ * the browser via a Blob; `Print / Save PDF` is `window.print()`. None of them
+ * calls a server. That is a correction, not a preference: the .docx button used
+ * to be DISABLED with a title claiming the export "still runs on the Next app's
+ * /api/export route", and DocActions linked straight at that route — which had
+ * been deleted with the Next tree, so the link downloaded the SPA's HTML shell
+ * under a .docx name and reported success. See lib/export-docx.ts for the probe
+ * showing the docx package needs no Node API.
  */
 
 import {
@@ -39,11 +43,22 @@ import {
 	Copy,
 	FileDown,
 	FileText,
+	Loader2,
 	Printer,
 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { isExportableDocument } from "../routes/export-pdf-params"
+import { downloadBlob } from "../lib/download"
+import { downloadExportDocx } from "../lib/export-docx"
+import { exportFilename } from "../lib/export-filename"
 import Markdown from "./Markdown"
+
+/**
+ * Re-exported so PdfExportView.test.ts's import keeps pointing at the real
+ * implementation. The function now lives in lib/export-filename because the
+ * document toolbar's .docx export needs the same rule; see that module.
+ */
+export { exportFilename }
 
 /** Frontmatter keys that are already shown as a labelled field, or are noise. */
 const REDUNDANT_EXTRA_KEYS = new Set([
@@ -87,29 +102,11 @@ export function printableExtraFields(
 /**
  * Turn a title into a safe download filename.
  *
- * Ported verbatim, including the "export" fallback in one of its two call
- * sites: a title made entirely of characters the slugger strips (e.g. "!!!")
- * would otherwise produce ".md" — a dotfile the browser refuses to save.
+ * MOVED to lib/export-filename.ts and re-exported above, because the document
+ * toolbar's .docx export needs the same rule. The test that covers it lives in
+ * PdfExportView.test.ts and imports it from this module, so the re-export is
+ * what keeps that test pointing at the real implementation.
  */
-export function exportFilename(title: string, fallback = "export"): string {
-	const safe = title
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-|-$/g, "")
-	return safe || fallback
-}
-
-/** Trigger a client-side download of a Blob under `filename`. */
-function downloadBlob(blob: Blob, filename: string): void {
-	const url = URL.createObjectURL(blob)
-	const anchor = document.createElement("a")
-	anchor.href = url
-	anchor.download = filename
-	document.body.appendChild(anchor)
-	anchor.click()
-	document.body.removeChild(anchor)
-	URL.revokeObjectURL(url)
-}
 
 interface PdfExportViewProps {
 	exportData: ExportData
@@ -133,6 +130,9 @@ export default function PdfExportView({
 	const [pageBreaks, setPageBreaks] = useState(true)
 	const [selectedCategory, setSelectedCategory] = useState<string>("all")
 	const [copiedMd, setCopiedMd] = useState(false)
+	const [docxState, setDocxState] = useState<"idle" | "working" | "error">(
+		"idle",
+	)
 
 	// The section name arrives on the summary, resolved server-side from the
 	// `sections` table. It used to come from a hardcoded getSectionMeta() here,
@@ -187,6 +187,47 @@ export default function PdfExportView({
 			new Blob([md], { type: "text/markdown;charset=utf-8" }),
 			`${exportFilename(summary.title)}.md`,
 		)
+	}
+
+	/**
+	 * Build the .docx from what is ON SCREEN and download it.
+	 *
+	 * `filteredAndSortedDocs` rather than `cleanDocs` is deliberate: the toolbar
+	 * lets the user filter by category and re-sort, and the summary is rebuilt
+	 * from that same filtered set so the cover's document count, total points and
+	 * table of contents all agree with the list beneath them. Exporting the
+	 * unfiltered set would produce a file that contradicts the preview.
+	 *
+	 * `pageBreaks` is passed through from the checkbox, so the download matches
+	 * what `window.print()` would produce beside it.
+	 */
+	async function handleDownloadDocx() {
+		setDocxState("working")
+		try {
+			await downloadExportDocx(
+				{
+					// The summary is re-derived from the filtered set for the reason
+					// above. `sectionLabel` and the scope fields are carried over
+					// from the server's summary: they come from the `sections`
+					// registry, which the browser cannot read.
+					summary: {
+						...summary,
+						totalDocuments: filteredAndSortedDocs.length,
+						totalPoints: currentTotalPoints,
+					},
+					documents: filteredAndSortedDocs,
+				},
+				`${exportFilename(summary.title, "mcpedia-export")}.docx`,
+				{ pageBreaks },
+			)
+			setDocxState("idle")
+		} catch {
+			// A failure here is a build problem in the tab (a busted lazy chunk,
+			// an out-of-memory document), not a network one — there is nothing to
+			// retry against, so the message belongs on the button that caused it.
+			setDocxState("error")
+			setTimeout(() => setDocxState("idle"), 3000)
+		}
 	}
 
 	return (
@@ -251,18 +292,36 @@ export default function PdfExportView({
 						</button>
 
 						{/*
-						 .docx generation is server-side (docx npm package, node:fs).
-						 The SPA has no such route, so this is shown disabled with the
-						 reason rather than left to fail when clicked.
-					 */}
+						 .docx is built in the tab by lib/export-docx.ts and handed to the
+						 browser as a Blob. It used to be `disabled` with a title blaming
+						 the Next app's /api/export route — a route that no longer exists
+						 in this repo. The state is threaded through the button because the
+						 dynamic import plus the OpenXML build is not instant on a large
+						 export, and a slow click otherwise looks identical to a broken one.
+						*/}
 						<button
+							onClick={handleDownloadDocx}
 							type="button"
-							disabled
-							title="Word export still runs on the Next app's /api/export route"
-							className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-dim)] rounded-md transition-colors shadow-xs cursor-not-allowed disabled:opacity-60"
+							disabled={docxState === "working"}
+							title="Download editable Microsoft Word (.docx) file"
+							className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[var(--bg-elevated)] hover:bg-[var(--bg-elevated-hover)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-md transition-colors shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-wait"
 						>
-							<FileText className="w-3.5 h-3.5" />
-							<span>Download .docx</span>
+							{docxState === "working" ? (
+								<>
+									<Loader2 className="w-3.5 h-3.5 animate-spin" />
+									<span>Building…</span>
+								</>
+							) : docxState === "error" ? (
+								<>
+									<FileText className="w-3.5 h-3.5 text-rose-500" />
+									<span className="text-rose-500 font-bold">Failed</span>
+								</>
+							) : (
+								<>
+									<FileText className="w-3.5 h-3.5" />
+									<span>Download .docx</span>
+								</>
+							)}
 						</button>
 
 						<button
