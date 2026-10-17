@@ -31,7 +31,7 @@ const SUGGESTIONS = [
 	"streamable http",
 	"full-text search",
 	"caddy reverse proxy",
-	"pgvector cosine",
+	"semantic similarity",
 ]
 
 /** The search params this route reads, with their defaults. */
@@ -113,8 +113,8 @@ export function SearchPage() {
 					Multi-Modal Search Console
 				</h1>
 				<p className="text-xs sm:text-sm text-[var(--text-muted)] leading-relaxed">
-					Query across knowledge documents and CTF writeups using PostgreSQL
-					hindsight's own chunking, keyword arm, embeddings and reranking.
+					Query across knowledge documents and CTF writeups using hindsight's
+					own chunking, keyword arm, embeddings and reranking.
 				</p>
 			</div>
 

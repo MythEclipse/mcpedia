@@ -44,7 +44,7 @@ export function Shell() {
 						<span className="text-[var(--border-color)]">/</span>
 						<span>PostgreSQL 16 Core</span>
 						<span className="text-[var(--border-color)]">/</span>
-						<span>pgvector</span>
+						<span>Hindsight</span>
 					</div>
 
 					<div className="flex items-center gap-4 text-[11px] text-[var(--text-muted)]">

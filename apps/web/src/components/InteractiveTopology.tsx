@@ -123,18 +123,18 @@ const NODES: NodeDetail[] = [
 	},
 	{
 		id: "postgres-db",
-		title: "PostgreSQL 16 + pgvector",
+		title: "PostgreSQL 16",
 		badge: "DB::POSTGRES",
 		type: "storage",
 		icon: Database,
-		desc: "ACID-compliant relational database storing document bodies, revision trees, vector embeddings, and full-text indexes.",
+		desc: "ACID-compliant relational database holding the document bodies, revision trees and full-text indexes — the source of truth the search index is derived from.",
 		metrics: [
-			{ label: "Extension", value: "vector (1536 dim)" },
+			{ label: "Source Of Truth", value: "Postgres" },
 			{ label: "Backups", value: "Auto .md to disk" },
 			{ label: "Isolation", value: "Transactional" },
 		],
 		features: [
-			"HNSW vector index for embeddings",
+			"Full-text `tsvector` search vectors",
 			"Complete revision history preservation",
 			"Instant document schema migrations",
 		],
