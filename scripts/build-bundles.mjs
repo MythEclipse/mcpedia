@@ -20,7 +20,7 @@
 import { build } from "esbuild"
 import { fileURLToPath } from "node:url"
 import { dirname, resolve } from "node:path"
-import { copyFileSync, mkdirSync, readdirSync, rmSync } from "node:fs"
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 
@@ -79,6 +79,72 @@ for (const { name, entry, outfile } of BUNDLES) {
 	})
 	console.log(`built ${name} -> ${outfile}`)
 }
+
+/**
+ * ONE ENTRYPOINT PER BUNDLE — asserted, because bundling silently breaks the
+ * idiom that used to guarantee it.
+ *
+ * `packages/db/src/migrate.ts` was a library AND had a local `main()` guarded by
+ * `import.meta.url === pathToFileURL(process.argv[1]).href` — the standard
+ * "run only when invoked directly" check, and correct for unbundled Node.
+ * esbuild inlines that module and `apps/api/src/migrate.ts` into ONE file, so
+ * both modules shared a single `import.meta.url`, BOTH guards compared equal,
+ * and BOTH ran the migration.
+ *
+ * The result was a failed production deploy: two migrators racing one shared
+ * `client`, the first to finish calling `await client.end()` and closing the
+ * pool under the second, whose in-flight insert died with a bare Drizzle
+ * "Failed query" and no SQLSTATE (`CONNECTION_ENDED`) on the last seed row.
+ *
+ * The duplicate entrypoint is gone now, so this counts the markers that must
+ * appear exactly once and fails the BUILD if a second one ever appears — which
+ * is the only place the mistake can still be caught, since the broken bundle
+ * otherwise runs happily in CI and only fails on a real deploy.
+ *
+ * Note the markers are strings the ENTRYPOINT owns. A library may legitimately
+ * be imported many times; what must be unique is the code that decides to run.
+ */
+const ENTRYPOINT_MARKERS = [
+	{
+		bundle: "migrate",
+		file: "apps/api/dist/migrate.js",
+		// apps/api/src/migrate.ts's catch block. The removed library main() had
+		// its own, distinct one, so this counted 2 while the bug was live.
+		marker: "migration failed:",
+		expected: 1,
+	},
+	{
+		bundle: "migrate",
+		file: "apps/api/dist/migrate.js",
+		// The direct-invocation idiom itself. Bundling makes it unsound, so no
+		// bundle may carry it at all — if one does, some module is trying to be
+		// a second entrypoint and will succeed at it.
+		marker: "isEntrypoint",
+		expected: 0,
+	},
+]
+
+for (const { bundle, file, marker, expected } of ENTRYPOINT_MARKERS) {
+	const abs = resolve(root, file)
+	const body = readFileSync(abs, "utf8")
+	// Counted by plain substring occurrence. The markers are literal strings
+	// from the entrypoint's own source and no identifier in the bundle contains
+	// them as a prefix, so `split().length` is exact here — and if a dependency
+	// ever did contain one, the guard would fire loudly rather than miss the
+	// duplicate, which is the failure direction to prefer.
+	const found = body.split(marker).length - 1
+	if (found !== expected) {
+		throw new Error(
+			`${file}: expected ${expected} occurrence(s) of ${JSON.stringify(marker)} ` +
+				`for bundle "${bundle}", found ${found}. More than one means a second ` +
+				`entrypoint got bundled in — the failure mode that shipped two ` +
+				`concurrent migrators and broke a deploy. See the note above.`,
+		)
+	}
+}
+console.log(
+	`entrypoint check: ${ENTRYPOINT_MARKERS.length} marker(s) as expected in the migrate bundle`,
+)
 
 // The drizzle migration journal, copied beside the migrate bundle.
 //

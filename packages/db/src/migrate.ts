@@ -1,18 +1,40 @@
 #!/usr/bin/env tsx
 /**
- * The migration WORKER, as a library.
+ * The migration WORKER, as a LIBRARY.
  *
  * `runMigrations` is exported so apps/api/src/migrate.ts — the production
  * entrypoint the deploy pipeline runs — can own process exit codes and
- * operator-facing output while reusing this. The alternative, a second copy of
- * the guard-and-apply sequence, is exactly how a deploy path and a local path
- * end up disagreeing about what "migrated" means.
+ * operator-facing output while reusing this.
  *
- * This file is still runnable directly (`pnpm --filter @mcpedia/db db:migrate`)
- * for local use, which is why main() is still here. Both paths call the same
- * `runMigrations`.
+ * ## WHY THERE IS NO `main()` HERE ANY MORE
+ *
+ * This file used to end with a `main()` guarded by
+ * `import.meta.url === pathToFileURL(process.argv[1]).href` — the standard
+ * "only run when invoked directly" idiom, and correct for unbundled Node.
+ * esbuild BREAKS it: the production `migrate.js` bundle inlines this module and
+ * apps/api/src/migrate.ts into ONE file, so both modules share one
+ * `import.meta.url`, BOTH guards compared equal, and BOTH ran.
+ *
+ * The observable result was a failed deploy with
+ * `migration failed: Failed query: insert into "sections" ...` on the LAST seed
+ * row. Two migrators ran concurrently against one shared `client`; the first to
+ * finish called `await client.end()`, closing the pool under the second, whose
+ * in-flight insert then died with a bare Drizzle "Failed query" and NO SQLSTATE
+ * — `CONNECTION_ENDED`, not a constraint violation. The seed is
+ * `on conflict do nothing`, so a duplicate could not have been the cause; the
+ * error shape is what identified it.
+ *
+ * The guard's own docstring said its purpose was preventing "two concurrent
+ * migrators racing on the same schema". A guard that bundling silently disables
+ * cannot do that, so the duplicate entrypoint is REMOVED rather than
+ * re-guarded: this module is now a pure library with no top-level side effects,
+ * and exactly one entrypoint (apps/api/src/migrate.ts) exists to be bundled.
+ * `scripts/build-bundles.mjs` asserts that count at build time.
+ *
+ * Local use goes through the SAME entrypoint the deploy runs — see the
+ * `db:migrate` script in this package's package.json — so the local path and the
+ * deploy path cannot disagree about what "migrated" means.
  */
-import { pathToFileURL } from "node:url"
 import { migrate } from "drizzle-orm/postgres-js/migrator"
 import type { AnyDatabase } from "./migrate-guard"
 import { assertMigrationTargetIsClean } from "./migrate-guard"
@@ -85,54 +107,4 @@ export async function runMigrations(
 			// operator wants to see both facts for.
 			(seeded.length > 0 ? `; seeded ${seeded.length} section(s)` : ""),
 	}
-}
-
-/** Local entrypoint. The deploy path lives in apps/api/src/migrate.ts. */
-async function main() {
-	// Imported lazily so the exported helpers above can be used by a consumer
-	// without this module opening a database connection at import time.
-	const { db, client } = await import("./client")
-	const outcome = await runMigrations(db)
-	await client.end()
-	if (!outcome.ok) {
-		console.error(`\n✗ ${outcome.message}\n`)
-		// Exit 0: the refusal is informational, and a non-zero exit would break
-		// any wrapper that treats "migrate failed" as "schema is broken".
-		process.exit(0)
-	}
-	console.log(`✓ ${outcome.message}`)
-	process.exit(0)
-}
-
-/**
- * Run the local entrypoint ONLY when this file is the process entrypoint.
- *
- * This guard is load-bearing, not defensive tidiness. This module is also a
- * LIBRARY — apps/api/src/migrate.ts imports `runMigrations` from it — and an
- * unconditional `main()` at module scope therefore ran the whole migration a
- * SECOND time inside the deploy process: once from the imported module and once
- * from the importing entrypoint. The observable symptom was the failure message
- * printed twice, and in production it would have been two concurrent migrators
- * racing on the same schema, which is precisely the failure mode this file was
- * extracted to prevent.
- *
- * `import.meta.url` is compared against `process.argv[1]` because that is the
- * path the node/tsx CLI was invoked with; the resolved URLs are compared so a
- * symlinked bin or a relative invocation still matches.
- */
-const isEntrypoint = (() => {
-	const invoked = process.argv[1]
-	if (!invoked) return false
-	try {
-		return import.meta.url === pathToFileURL(invoked).href
-	} catch {
-		return false
-	}
-})()
-
-if (isEntrypoint) {
-	main().catch(async (err) => {
-		console.error("migration failed:", err instanceof Error ? err.message : err)
-		process.exit(1)
-	})
 }
