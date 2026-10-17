@@ -57,8 +57,11 @@ describe("route matching", () => {
 		expect(leaf("/export/pdf")).toBe("/export/pdf")
 	})
 
-	it("serves a one-segment section path to $section", () => {
-		expect(leaf("/docs")).toBe("/$section/$")
+	it("serves a one-segment section path to the section INDEX route", () => {
+		// The index is now its own child route (`/$section/`) under the
+		// component-less `/$section` layout. It used to be `/$section` itself,
+		// matched via the splat with an empty _splat.
+		expect(leaf("/docs")).toBe("/$section/")
 	})
 
 	it("serves a deep document path to the splat, NOT to $section", () => {
@@ -78,17 +81,18 @@ describe("route matching", () => {
 		])
 	})
 
-	it("still routes the section index through $section itself", () => {
-		// The nesting must not have broken the one-segment case: it matches the
-		// splat with an empty _splat, which is how SectionPage stays reachable.
+	it("still routes the section index to the section page route", () => {
+		// The nesting must not have broken the one-segment case: /docs matches
+		// the index child, with the layout as its parent, and its params carry
+		// the section. SectionPage reads {section} from this route.
 		const router = createAppRouter()
 		const matches = router.matchRoutes("/docs", {})
+		const ids = (matches ?? []).map((m) => m.routeId)
 		const params = matches?.[matches.length - 1]?.params as {
 			section?: string
-			_splat?: string
 		}
+		expect(ids).toEqual(["__root__", "/$section", "/$section/"])
 		expect(params?.section).toBe("docs")
-		expect(params?._splat).toBe("")
 	})
 
 	it("splits a deep path into section and _splat", () => {

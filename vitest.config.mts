@@ -26,8 +26,10 @@ export default defineConfig({
 		// either way, so it is left until the Next tree is fully gone.
 		include: [
 			"apps/**/src/**/*.test.ts",
+			"apps/**/src/**/*.test.tsx",
 			"apps/web/app/**/*.test.ts",
 			"packages/**/src/**/*.test.ts",
+			"packages/**/src/**/*.test.tsx",
 		],
 		environment: "node",
 		// Each file gets its own module registry + process, so module mocks

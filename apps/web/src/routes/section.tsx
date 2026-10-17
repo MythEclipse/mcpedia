@@ -83,7 +83,7 @@ function TreeList({
 }
 
 export function SectionPage() {
-	const { section } = useParams({ from: "/$section" })
+	const { section } = useParams({ from: "/$section/" })
 	const { data: all = [] } = useDocumentsQuery()
 	const { data: liveSections } = useSectionsQuery()
 

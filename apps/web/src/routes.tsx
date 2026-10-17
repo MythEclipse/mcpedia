@@ -39,14 +39,21 @@
  * matches one segment and satisfies the match before the longer, less specific
  * route is considered.
  *
- * Nesting the splat under `$section` gives the correct shapes:
+ * Nesting the splat under `$section` fixed the matching, and giving `$section`
+ * no component and the index its own child route (`/$section/`) fixed the
+ * RENDERING — matching was right while every document URL still showed the
+ * section index, because `$section` had a component that rendered no <Outlet/>.
+ * See the note on sectionRoute for the mechanism and routes-render.test.tsx for
+ * the test that catches it:
  *
- *     /docs       -> __root__ > /$section > /$section/$   _splat=""
+ *     /docs       -> __root__ > /$section > /$section/    (index)
  *     /docs/setup -> __root__ > /$section > /$section/$   _splat="setup"
  *     /login      -> __root__ > /$login                   (static, declared first)
  *
- * The regression test for this is src/routes.test.ts — the tree below and the
- * nested shape must not be "simplified" back to siblings without it failing.
+ * The regression test for this is src/routes.test.ts (matching) and
+ * src/routes-render.test.tsx (which component actually renders) — the tree
+ * below must not be "simplified" back to siblings, nor `$section` given a
+ * component again, without those failing.
  */
 import {
 	createRootRoute,
@@ -168,12 +175,54 @@ const exportPdfRoute = createRoute({
 })
 
 /**
- * `/:section` — the section index. $section is ONE segment; the splat below it
- * catches everything deeper.
+ * `/:section` — A LAYOUT ROUTE. It has NO component, and that is load-bearing.
+ *
+ * WHY THERE IS NO `component` HERE. This route only existed as a page until
+ * now, and the page was unreachable: every deep document URL rendered the
+ * SECTION INDEX instead of the document. Measured, in the installed router
+ * (dist/esm/Match.js:100):
+ *
+ *     const Comp = route.options.component ?? router.options.defaultComponent;
+ *     return Comp ? jsx(Comp, {}) : jsx(Outlet, {});
+ *
+ * A route gets its OWN component if it declares one, otherwise a passthrough
+ * Outlet. `/$section` declared SectionPage, and SectionPage renders no
+ * <Outlet/>, so for /writeups/gemastik-2026/wraith the router rendered the
+ * PARENT — the Writeups index — and the matched child was never rendered at
+ * all. Matching was correct the whole time (the leaf really was
+ * `/$section/$`); the child simply had nowhere to go.
+ *
+ * It failed as a plausible page, not as an error: the section index looks like
+ * a real page, so "clicking a document shows the section listing" reads as a
+ * content problem rather than a routing one.
+ *
+ * THE RULE THIS ENCODES: a route with children must NOT declare a `component`
+ * unless that component renders <Outlet />. `__root__` (Shell) is the only
+ * legitimate case, and it does render one. Leaving this route component-less
+ * lets the router supply the passthrough, which is the shape that cannot break
+ * when children are added below it. src/routes-render.test.ts renders real URLs
+ * through this tree to keep it that way — matching tests alone do not catch it.
  */
 const sectionRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/$section",
+})
+
+/**
+ * `/:section/` — the section INDEX, as a child of the layout above.
+ *
+ * The section page moved off the layout route onto this child. Its URL is
+ * unchanged (`/writeups` matches this, with the parent as its layout), and
+ * because the parent no longer renders a component of its own the index and the
+ * splat are now siblings under a passthrough — the arrangement where the
+ * deep path cannot be shadowed.
+ *
+ * `/writeups` and `/writeups/` are the same URL to the router; the trailing
+ * slash is in the path for legibility only.
+ */
+const sectionIndexRoute = createRoute({
+	getParentRoute: () => sectionRoute,
+	path: "/",
 	component: SectionPage,
 })
 
@@ -200,7 +249,7 @@ const routeTree = rootRoute.addChildren([
 	createRoute_,
 	dashboardRoute,
 	exportPdfRoute,
-	sectionRoute.addChildren([docRoute]),
+	sectionRoute.addChildren([sectionIndexRoute, docRoute]),
 ])
 
 export { rootRoute, routeTree }
