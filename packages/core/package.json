@@ -19,7 +19,7 @@
 		"@mcpedia/types": "workspace:*",
 		"docx": "^9.10.0",
 		"drizzle-orm": "^0.45.4",
-		"ts-pattern": "^5.9.0"
+		"ts-pattern": "^5.9.1"
 	},
 	"scripts": {
 		"test": "vitest run"
