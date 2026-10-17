@@ -52,7 +52,14 @@ async function main() {
 	const failed = published.failed + drafts.failed
 
 	console.log(`\nretained ${retained}, missing ${missing}, failed ${failed}`)
-	if (failed > 0 || missing > 0) process.exitCode = 1
+	// An explicit exit, like scripts/indexer.ts and scripts/enqueue.ts. The
+	// Postgres pool holds open sockets, so setting `process.exitCode` and
+	// returning leaves the event loop alive and the script HANGS after its work
+	// is finished — which reads as "the reindex is still running" and is why
+	// this was written without one the first time. The exit code still reports
+	// the outcome: missing and failed are both non-zero on purpose, because a
+	// slug with no row means a document is NOT indexed.
+	process.exit(failed > 0 || missing > 0 ? 1 : 0)
 }
 
 main().catch((err) => {
