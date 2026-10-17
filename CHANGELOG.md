@@ -1,3 +1,10 @@
+## [1.2.6](https://github.com/asepharyana/mcpedia/compare/v1.2.5...v1.2.6) (2026-10-17)
+
+
+### Bug Fixes
+
+* **web:** retarget the topology links that pointed at removed sections ([37eba9b](https://github.com/asepharyana/mcpedia/commit/37eba9ba23c4b4f6dc05387c8826d1fec419dffe))
+
 ## [1.2.5](https://github.com/asepharyana/mcpedia/compare/v1.2.4...v1.2.5) (2026-10-17)
 
 ## [1.2.4](https://github.com/asepharyana/mcpedia/compare/v1.2.3...v1.2.4) (2026-10-17)
