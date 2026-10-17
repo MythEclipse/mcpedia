@@ -1,3 +1,5 @@
+## [1.2.5](https://github.com/asepharyana/mcpedia/compare/v1.2.4...v1.2.5) (2026-10-17)
+
 ## [1.2.4](https://github.com/asepharyana/mcpedia/compare/v1.2.3...v1.2.4) (2026-10-17)
 
 
