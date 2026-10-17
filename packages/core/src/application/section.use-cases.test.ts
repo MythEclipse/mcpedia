@@ -101,6 +101,139 @@ describe("makeUpsertSection", () => {
 	})
 })
 
+describe("makeUpsertSection — partial updates preserve what they omit", () => {
+	/**
+	 * A stored row with a CURATED label, icon and description: all three differ
+	 * from what a default would produce for the id, so a field that gets reset is
+	 * visible in the assertion rather than coincidentally correct.
+	 */
+	const curated: SectionRecord = {
+		id: "writeups",
+		label: "CTF & Writeups",
+		icon: "📝",
+		desc: "Pwn, reverse, web and crypto solutions.",
+		sortOrder: 1,
+		hidden: false,
+	}
+
+	test("hiding a section does NOT blank its label, icon or description", async () => {
+		// THE bug this exists for. `upsert({id, hidden:true})` is how a section is
+		// hidden, and it used to reset every other column to its default — the
+		// caller got a success and a curated description was gone. Found on the
+		// live database when a partial upsert meant only to unhide writeups
+		// stripped its icon and description instead.
+		const deps = fakeRepo([curated])
+		const result = await makeUpsertSection(deps)({
+			id: "writeups",
+			hidden: true,
+		})
+
+		expect(result).toEqual({ ...curated, hidden: true })
+	})
+
+	test("renaming a section keeps its icon, description and ORDER", async () => {
+		// sortOrder especially: it is the nav position, and a rename that reset it
+		// to the default 1000 would silently move the section to the end.
+		const deps = fakeRepo([curated])
+		const result = await makeUpsertSection(deps)({
+			id: "writeups",
+			label: "Post-Mortems",
+		})
+
+		expect(result).toEqual({ ...curated, label: "Post-Mortems" })
+		expect(result.sortOrder).toBe(1)
+	})
+
+	test("unhiding with hidden:false is honoured, not swallowed as 'absent'", async () => {
+		// The distinction the merge has to keep: `false` is a value, not a
+		// missing field. A truthiness check here would make a section impossible
+		// to unhide once hidden.
+		const deps = fakeRepo([{ ...curated, hidden: true }])
+		const result = await makeUpsertSection(deps)({
+			id: "writeups",
+			hidden: false,
+		})
+
+		expect(result.hidden).toBe(false)
+		expect(result.label).toBe("CTF & Writeups")
+	})
+
+	test("clearing the description is possible with an explicit empty string", async () => {
+		// Deliberately asymmetric with label/icon: a description may legitimately
+		// be emptied, so `desc: ""` means "remove it" while an ABSENT desc means
+		// "leave it". Without this the field could only be set, never cleared.
+		const deps = fakeRepo([curated])
+		const result = await makeUpsertSection(deps)({ id: "writeups", desc: "" })
+		expect(result.desc).toBe("")
+		expect(result.label).toBe("CTF & Writeups")
+	})
+
+	test("a blank label does not erase a curated one", async () => {
+		// The form submits `label: "   "` when a rename field is cleared. That is
+		// an absent value, not an instruction to blank the nav entry.
+		const deps = fakeRepo([curated])
+		const result = await makeUpsertSection(deps)({
+			id: "writeups",
+			label: "   ",
+		})
+		expect(result.label).toBe("CTF & Writeups")
+	})
+
+	test("a section that does not exist yet still gets the defaults", async () => {
+		// The other side of the merge: with no stored row there is nothing to
+		// preserve, so registering a section stays a one-argument operation.
+		const deps = fakeRepo()
+		const result = await makeUpsertSection(deps)({ id: "threat-intel" })
+
+		expect(result).toEqual({
+			id: "threat-intel",
+			label: "Threat Intel",
+			icon: "📁",
+			desc: "",
+			sortOrder: 1000,
+			hidden: false,
+		})
+	})
+
+	test("a full upsert still overwrites every provided field", async () => {
+		// The merge must not make a deliberate overwrite impossible.
+		const deps = fakeRepo([curated])
+		const result = await makeUpsertSection(deps)({
+			id: "writeups",
+			label: "Everything",
+			icon: "🔥",
+			desc: "All of it.",
+			sortOrder: 7,
+			hidden: true,
+		})
+
+		expect(result).toEqual({
+			id: "writeups",
+			label: "Everything",
+			icon: "🔥",
+			desc: "All of it.",
+			sortOrder: 7,
+			hidden: true,
+		})
+	})
+
+	test("looks the row up by the NORMALIZED id", async () => {
+		// The lookup has to use the same normalization the write does, or
+		// `upsert({id:"  WRITEUPS  "})` would miss the stored row, take the
+		// new-row path and blank the curated fields — the same bug through a
+		// different door.
+		const deps = fakeRepo([curated])
+		const result = await makeUpsertSection(deps)({
+			id: "  WRITEUPS  ",
+			hidden: true,
+		})
+
+		expect(result.id).toBe("writeups")
+		expect(result.label).toBe("CTF & Writeups")
+		expect(result.icon).toBe("📝")
+	})
+})
+
 describe("makeRemoveSection", () => {
 	test("removes the metadata row and reports it", async () => {
 		const deps = fakeRepo([
