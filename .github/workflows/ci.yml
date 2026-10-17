@@ -186,6 +186,31 @@ jobs:
   deploy:
     name: deploy to host
     needs: check
+    # GATED ON A MAIN PUSH ON PURPOSE — a `pull_request` run must NOT deploy.
+    #
+    # `needs: check` only ORDERS the jobs; it does not restrict which events reach
+    # them. So a Dependabot PR used to run this whole job and die in "Setup SSH
+    # key", because GitHub hands a Dependabot-triggered run the DEPENDABOT secret
+    # store (empty here) rather than the repository one. `SSH_DEPLOY_KEY` arrived
+    # as an empty string, `printf` wrote a zero-byte key, and `ssh-keygen -y`
+    # rejected it:
+    #
+    #   failure | Setup SSH key
+    #
+    # The result was a red X no agent could ever clear: a dependency bump cannot
+    # fix a missing credential, and the worker saw only "CI FAILED: deploy to
+    # host". It retried a structural impossibility — the failure was in the
+    # WORKFLOW, not in the bump. Verified: `gh api .../dependabot/secrets` lists
+    # nothing while the repo store holds all five.
+    #
+    # Two properties matter and neither is cosmetic:
+    #   - a PR must never deploy (it would publish unreviewed code to the host);
+    #   - a PR must not RUN the deploy job, or every Dependabot PR wears a
+    #     permanent red X and the worker chases it forever.
+    #
+    # `github.event_name == 'push'` covers both: a push to main is the only way
+    # here, and the branch filter below keeps forks and feature branches out.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     # Serialised against itself. Two deploys racing on the same host would both
     # assemble releases/ and flip `current`, and the loser's symlink flip would
     # land after the winner's — leaving the older release running under a log
