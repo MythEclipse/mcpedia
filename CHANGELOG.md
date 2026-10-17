@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/asepharyana/mcpedia/compare/v1.1.1...v1.1.2) (2026-10-17)
+
+
+### Bug Fixes
+
+* **scripts:** exit the reindex explicitly so it does not hang after its work ([0f52898](https://github.com/asepharyana/mcpedia/commit/0f52898678bc0855830bbc672052e8c67df62593))
+
 ## [1.1.1](https://github.com/asepharyana/mcpedia/compare/v1.1.0...v1.1.1) (2026-10-17)
 
 
