@@ -81,7 +81,12 @@ const NODES: NodeDetail[] = [
 			"search_hybrid / search_semantic tools",
 			"list_sections & list_revisions resources",
 		],
-		docLink: "/api",
+		// `/dashboard` because the gateway is infrastructure, not content: it had
+		// no document to point at. It used to link to `/api`, a seeded preset
+		// section that never held a document and was removed with the base
+		// consolidation. The dashboard is where this service's own health,
+		// queue and index state actually live.
+		docLink: "/dashboard",
 	},
 	{
 		id: "core-engine",
@@ -100,7 +105,12 @@ const NODES: NodeDetail[] = [
 			"Markdown document chunking & tokenization",
 			"Drizzle ORM transactional schema mapping",
 		],
-		docLink: "/research",
+		// `/docs` rather than the section this pointed at before. It linked to
+		// `/research`, which no longer exists — that section was an empty seeded
+		// preset removed with the base consolidation (see
+		// scripts/consolidate-ctf-sections.ts), so the link rendered and then
+		// 404'd. `docs` is the section that actually holds this material.
+		docLink: "/docs",
 	},
 	{
 		id: "search-engine",
