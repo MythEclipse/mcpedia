@@ -1,3 +1,10 @@
+## [1.0.7](https://github.com/asepharyana/mcpedia/compare/v1.0.6...v1.0.7) (2026-10-17)
+
+
+### Bug Fixes
+
+* **ci:** gate the deploy job on the ref, not the event — a dispatch could deploy a branch ([2522d74](https://github.com/asepharyana/mcpedia/commit/2522d749072c70c6f0d980583d7e8cb4e543083a))
+
 ## [1.0.6](https://github.com/asepharyana/mcpedia/compare/v1.0.5...v1.0.6) (2026-10-17)
 
 ## [1.0.5](https://github.com/asepharyana/mcpedia/compare/v1.0.4...v1.0.5) (2026-10-16)

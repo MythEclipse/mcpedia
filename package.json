@@ -1,6 +1,6 @@
 {
   "name": "mcpedia",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "scripts": {
