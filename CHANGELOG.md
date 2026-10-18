@@ -1,3 +1,10 @@
+## [1.4.4](https://github.com/asepharyana/mcpedia/compare/v1.4.3...v1.4.4) (2026-10-18)
+
+
+### Bug Fixes
+
+* **search:** don't serialise recall behind the bank check ([abd1227](https://github.com/asepharyana/mcpedia/commit/abd12271d6be464412ab55c72c9cf2a68107a85f))
+
 ## [1.4.3](https://github.com/asepharyana/mcpedia/compare/v1.4.2...v1.4.3) (2026-10-18)
 
 ## [1.4.2](https://github.com/asepharyana/mcpedia/compare/v1.4.1...v1.4.2) (2026-10-18)
