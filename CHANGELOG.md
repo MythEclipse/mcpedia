@@ -1,3 +1,10 @@
+## [1.2.7](https://github.com/asepharyana/mcpedia/compare/v1.2.6...v1.2.7) (2026-10-18)
+
+
+### Bug Fixes
+
+* **web:** correct the stale framework, tool-count and section claims on the home page ([17a598c](https://github.com/asepharyana/mcpedia/commit/17a598c46e27919f231ea1d5417632ddd8157667))
+
 ## [1.2.6](https://github.com/asepharyana/mcpedia/compare/v1.2.5...v1.2.6) (2026-10-17)
 
 
