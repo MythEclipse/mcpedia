@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/asepharyana/mcpedia/compare/v1.2.9...v1.3.0) (2026-10-18)
+
+
+### Features
+
+* **web:** present the site as a plain wiki, with no product or stack naming ([2cf22c4](https://github.com/asepharyana/mcpedia/commit/2cf22c41d21bd80eb5338fbb21bb48129d73aace))
+
 ## [1.2.9](https://github.com/asepharyana/mcpedia/compare/v1.2.8...v1.2.9) (2026-10-18)
 
 
