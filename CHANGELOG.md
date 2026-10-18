@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/asepharyana/mcpedia/compare/v1.3.0...v1.3.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **ci:** clear the systemd staging dir before scp, or every deploy after the first nests ([f149341](https://github.com/asepharyana/mcpedia/commit/f149341e62611245fd091198637773a33a33f416))
+
 # [1.3.0](https://github.com/asepharyana/mcpedia/compare/v1.2.9...v1.3.0) (2026-10-18)
 
 
