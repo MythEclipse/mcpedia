@@ -1,3 +1,10 @@
+## [1.3.2](https://github.com/asepharyana/mcpedia/compare/v1.3.1...v1.3.2) (2026-10-18)
+
+
+### Bug Fixes
+
+* **api:** delete the branded HTML dashboard, and guard the class ([b726439](https://github.com/asepharyana/mcpedia/commit/b7264390ee2fa0626a47d7bd780a8e5999765851))
+
 ## [1.3.1](https://github.com/asepharyana/mcpedia/compare/v1.3.0...v1.3.1) (2026-10-18)
 
 
