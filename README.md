@@ -35,7 +35,7 @@ MCPedia keeps content as plain Markdown files under `content/` as a Git-tracked 
 2. **Single Core Layer**: All business logic (CRUD, indexing, search, revisions, path classification) is encapsulated in `@mcpedia/core`. Interfaces never touch the database directly.
 3. **Multi-Modal Search**: Keyword search, semantic search, and hybrid search (Reciprocal Rank Fusion / RRF) work out of the box, all served through a hindsight bank.
 4. **Resilient Revision System**: Content edits snapshot revisions automatically; metadata-only edits are deduplicated. Restoring a revision automatically rebuilds semantic search chunks.
-5. **Dual Interface**: Full human-friendly web experience + first-class AI agent integration via MCP.
+5. **Dual Interface**: The web UI presents itself purely as a wiki; machines reach the same corpus over MCP (`:4021`) and the oRPC API.
 
 ---
 
@@ -110,9 +110,9 @@ MCPedia runs an MCP server accessible via **Stdio** (for local subagents) and **
 
 ### MCP Tools (18 Total)
 
-The count is asserted against this server's own source by
-`apps/web/src/lib/mcp-tools.test.ts`, because it previously drifted: three places
-on the home page claimed 13 while the server answered with 18.
+The web UI no longer advertises this count or the protocol at all — it presents
+itself as a plain wiki (see `apps/web/src/lib/site.ts`). The figure below is for
+the README only; `apps/mcp/src/index.ts` is the authoritative list.
 
 #### Read Tools (Public)
 | Tool | Description |

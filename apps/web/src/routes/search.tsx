@@ -24,14 +24,22 @@ import { useDebounced, useSearchQuery, useSectionsQuery } from "#/lib/queries"
 import type { SearchMode } from "#/lib/shape"
 import { parseSearchMode, SEARCH_MODES, sectionsOrDefaults } from "#/lib/shape"
 
+/**
+ * Starter queries, drawn from the corpus rather than from the stack.
+ *
+ * Two of the previous entries ("bullmq worker", "caddy reverse proxy") named
+ * infrastructure components and were kept only because the search backend did
+ * not care what it searched. They are replaced with terms the documents
+ * actually carry, so a first-time reader clicking one gets a result.
+ */
 const SUGGESTIONS = [
 	"stack alignment",
-	"ret2win exploit",
-	"bullmq worker",
-	"streamable http",
-	"full-text search",
-	"caddy reverse proxy",
-	"semantic similarity",
+	"ret2win",
+	"buffer overflow",
+	"RSA",
+	"memory dump",
+	"reverse engineering",
+	"buffer",
 ]
 
 /** The search params this route reads, with their defaults. */
@@ -110,11 +118,11 @@ export function SearchPage() {
 		<div className="max-w-4xl space-y-8">
 			<div>
 				<h1 className="text-3xl font-extrabold text-[var(--text-primary)] tracking-tight mb-2">
-					Multi-Modal Search Console
+					Search
 				</h1>
 				<p className="text-xs sm:text-sm text-[var(--text-muted)] leading-relaxed">
-					Query across knowledge documents and CTF writeups using hindsight's
-					own chunking, keyword arm, embeddings and reranking.
+					Search every page in the wiki. Keyword matching finds the exact words;
+					semantic search finds the same idea in different ones.
 				</p>
 			</div>
 
@@ -130,7 +138,7 @@ export function SearchPage() {
 				<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2.5 border-t border-[var(--border-color)] text-xs">
 					<div className="flex items-center gap-1.5 flex-wrap">
 						<span className="text-[var(--text-dim)] font-mono uppercase text-[10px] mr-1">
-							Algorithm:
+							Match:
 						</span>
 						{SEARCH_MODES.map((m) => (
 							<button
@@ -181,14 +189,14 @@ export function SearchPage() {
 					aria-live="polite"
 				>
 					<div className="w-4 h-4 border-2 border-[var(--text-muted)] border-t-transparent rounded-full animate-spin" />
-					<span>SEARCHING_VECTOR_SPACE...</span>
+					<span>Searching…</span>
 				</div>
 			)}
 
 			{!loading && query.trim() && filteredHits.length === 0 && !isError && (
 				<EmptyState
 					title="No matching documents found"
-					description="Try switching algorithm mode to Hybrid or Semantic, or search with different keywords."
+					description="Try a different match mode above, or different words."
 					icon={SearchX}
 				/>
 			)}
@@ -196,7 +204,7 @@ export function SearchPage() {
 			{!loading && !query.trim() && (
 				<div className="p-6 text-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl space-y-3 shadow-xs">
 					<p className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-						Popular Queries:
+						Try searching for
 					</p>
 					<div className="flex justify-center flex-wrap gap-2 text-xs">
 						{SUGGESTIONS.map((term) => (
@@ -223,7 +231,9 @@ export function SearchPage() {
 							Found {filteredHits.length} result
 							{filteredHits.length !== 1 ? "s" : ""}
 						</span>
-						<span>Ranked by {mode} score</span>
+						<span>
+							Ranked by {SEARCH_MODES.find((m) => m.id === mode)?.label ?? mode}
+						</span>
 					</div>
 					<div className="space-y-2.5">
 						{filteredHits.map((r) => (

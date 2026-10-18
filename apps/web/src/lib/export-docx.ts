@@ -35,6 +35,7 @@
  */
 import type { ExportData } from "@mcpedia/types"
 import { downloadBlob } from "./download"
+import { SITE_NAME } from "./site"
 
 /** The extension and MIME type the browser writes for this format. */
 export const DOCX_MIME =
@@ -76,6 +77,12 @@ async function loadDocxBuilder() {
  * used to be here was working around the old `Buffer` return type — the copy
  * is gone because the type no longer needs it, and re-creating a view over
  * `bytes.buffer` would be a needless second pass over a few-hundred-KB file.
+ *
+ * `siteName` is passed from here rather than defaulted inside the generator:
+ * the file's metadata and running header are a piece of the site's identity, so
+ * the name has one source (src/lib/site.ts) shared with the header, the tab
+ * title and the <meta> tag. Core supplies a neutral fallback for any other
+ * caller.
  */
 export async function downloadExportDocx(
 	exportData: ExportData,
@@ -85,6 +92,7 @@ export async function downloadExportDocx(
 	const buildDocx = await loadDocxBuilder()
 	const bytes = await buildDocx(exportData, {
 		pageBreaks: options.pageBreaks ?? true,
+		siteName: SITE_NAME,
 	})
 	downloadBlob(new Blob([bytes], { type: DOCX_MIME }), filename)
 }

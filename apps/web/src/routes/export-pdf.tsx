@@ -145,7 +145,7 @@ function ExportEmptyState({
 					className="inline-flex items-center gap-1.5 px-4 py-2 bg-[var(--brand)] hover:bg-[var(--brand-hover)] text-white text-xs font-semibold rounded-xl shadow-md shadow-[var(--brand)]/20 transition-all"
 				>
 					<ArrowLeft className="w-3.5 h-3.5" />
-					<span>Return to Knowledge Base</span>
+					<span>Back to the wiki</span>
 				</a>
 			</div>
 		</div>

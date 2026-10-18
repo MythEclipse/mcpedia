@@ -6,11 +6,20 @@
  * index.html now, the theme bootstrap script moved there too (it has to run
  * before first paint to avoid a flash), and there is no <SWRProvider> — the
  * query client is created once in main.tsx.
+ *
+ * THE FOOTER IS CONTENT-SHAPED, NOT INFRA-SHAPED. It used to render a status
+ * ribbon — the database engine, the search backend's product name and a
+ * service port — and link to the operations dashboard. That is the deployment
+ * describing itself to a reader who came for the content, so it is gone; what
+ * remains is the site name, what the site is, and links to the two ways of
+ * reading it. The dashboard route itself still exists for the operator (see
+ * routes/dashboard.tsx); it is simply not advertised here any more.
  */
 import { Outlet } from "@tanstack/react-router"
 import { SearchLink } from "#/components/DocLink"
 import Header from "#/components/Header"
 import Sidebar from "#/components/Sidebar"
+import { SITE_TAGLINE } from "#/lib/site"
 
 export function Shell() {
 	return (
@@ -34,40 +43,31 @@ export function Shell() {
 				</div>
 			</div>
 
-			<footer className="no-print border-t border-[var(--border-color)] bg-[var(--bg-surface)] py-4 text-xs text-[var(--text-muted)]">
-				<div className="mx-auto max-w-7xl px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 font-mono">
-					<div className="flex items-center gap-2">
-						<span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-						<span className="text-[var(--text-primary)] font-semibold">
-							MCPedia
-						</span>
-						<span className="text-[var(--border-color)]">/</span>
-						<span>PostgreSQL 16 Core</span>
-						<span className="text-[var(--border-color)]">/</span>
-						<span>Hindsight</span>
-					</div>
+			<footer className="no-print border-t border-[var(--border-color)] bg-[var(--bg-surface)] py-5 text-xs text-[var(--text-muted)]">
+				<div className="mx-auto max-w-7xl px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+					<p className="text-[var(--text-muted)] text-center sm:text-left">
+						{SITE_TAGLINE}
+					</p>
 
-					<div className="flex items-center gap-4 text-[11px] text-[var(--text-muted)]">
+					<nav className="flex items-center gap-4 text-[11px] shrink-0">
 						<a
-							href="/dashboard"
+							href="/docs"
 							className="hover:text-[var(--text-primary)] transition-colors"
 						>
-							Dashboard
+							Browse
 						</a>
-						<span>·</span>
+						<span className="text-[var(--border-color)]">·</span>
 						<SearchLink className="hover:text-[var(--text-primary)] transition-colors">
-							Hybrid Search
+							Search
 						</SearchLink>
-						<span>·</span>
+						<span className="text-[var(--border-color)]">·</span>
 						<a
 							href="/export/pdf"
 							className="hover:text-[var(--text-primary)] transition-colors"
 						>
-							Publication PDF
+							Print view
 						</a>
-						<span>·</span>
-						<span>HTTP :4021</span>
-					</div>
+					</nav>
 				</div>
 			</footer>
 		</>

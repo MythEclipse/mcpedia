@@ -287,7 +287,7 @@ export async function rpcCall<P extends readonly string[]>(
 		})
 	} catch {
 		throw new OrpcTransportError(
-			`Could not reach the MCPedia API at ${base}. Is it running?`,
+			`Could not reach the wiki API at ${base}. Is it running?`,
 		)
 	}
 
@@ -295,7 +295,7 @@ export async function rpcCall<P extends readonly string[]>(
 	const contentType = response.headers.get("content-type") ?? ""
 	if (!contentType.includes("application/json")) {
 		throw new OrpcTransportError(
-			`MCPedia API returned ${response.status} ${response.statusText} (not an RPC response).`,
+			`The wiki API returned ${response.status} ${response.statusText} (not an RPC response).`,
 			response.status,
 		)
 	}
@@ -305,7 +305,7 @@ export async function rpcCall<P extends readonly string[]>(
 		body = await response.json()
 	} catch {
 		throw new OrpcTransportError(
-			"MCPedia API returned a malformed RPC response.",
+			"The wiki API returned a malformed RPC response.",
 			response.status,
 		)
 	}

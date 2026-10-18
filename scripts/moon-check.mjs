@@ -38,6 +38,26 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
  */
 const STEPS = [
 	{
+		name: "build:web",
+		// BEFORE the tests, and with --force.
+		//
+		// apps/web/src/build/no-retired-branding.test.ts asserts on dist/ — the
+		// bytes a browser actually receives — because a scan of apps/web/src
+		// cannot see code that arrives from packages/core. An assertion over
+		// dist/ is only meaningful if dist/ is the build of the CURRENT tree,
+		// so the build has to happen first and has to be real.
+		//
+		// --force is load-bearing, not caution. web's build inputs are declared
+		// as its own sources (apps/web/moon.yml), and moon resolves input globs
+		// per-project, so a change in packages/core does NOT invalidate a cached
+		// web:build. Verified: editing packages/core/src/application/export.docx.ts
+		// and running a plain `moon run web:build` printed "(cached, 3ms)" and
+		// replayed the previous bundle, which made that test pass over a dist/
+		// containing a string the source no longer had.
+		command: "moon",
+		args: ["run", "web:build", "--force"],
+	},
+	{
 		name: "test",
 		command: "node",
 		args: ["./node_modules/vitest/vitest.mjs", "run"],

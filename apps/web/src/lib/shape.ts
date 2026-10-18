@@ -318,26 +318,26 @@ export type SearchMode = "hybrid" | "keyword" | "semantic"
 
 /**
  * The three modes remain distinct in the API, but they are no longer three
- * algorithms. All three are hindsight's recall against the same bank; what
- * differs is the limit and the caller's intent, so the labels say what actually
- * differs. Claiming "RRF", "tsvector" or "cosine" here was describing a stack
- * that no longer exists.
+ * algorithms — all three read the same index, and what differs is how the
+ * ranking is weighted. The labels and blurbs say what a reader gets, not which
+ * component computes it: naming the search backend here was describing the
+ * deployment to somebody who came to read a page.
  */
 export const SEARCH_MODES: { id: SearchMode; label: string; desc: string }[] = [
 	{
 		id: "hybrid",
-		label: "Hybrid",
-		desc: "hindsight — keyword + semantic, fused score",
+		label: "Best match",
+		desc: "Both signals together — the usual choice",
 	},
 	{
 		id: "keyword",
-		label: "Keyword",
-		desc: "hindsight — lexical signal weighted",
+		label: "Exact words",
+		desc: "Ranked by the words you typed",
 	},
 	{
 		id: "semantic",
-		label: "Semantic",
-		desc: "hindsight — meaning, not wording",
+		label: "Meaning",
+		desc: "Finds the same idea in different words",
 	},
 ]
 

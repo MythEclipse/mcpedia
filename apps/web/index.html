@@ -3,11 +3,11 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
-		<title>MCPedia — Archival Knowledge Base for Humans & AI Agents</title>
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<title>Wiki</title>
 		<meta
 			name="description"
-			content="A content-first knowledge base. Humans read the Web UI; AI agents use the Model Context Protocol (MCP). Both share one Core."
+			content="An open knowledge base: reference documentation, CTF writeups and working notes, with full-text and semantic search."
 		/>
 		<!--
 			The theme bootstrap, inline and BEFORE any stylesheet or module.
@@ -17,18 +17,17 @@
 			light and then repaints dark. A module script is deferred by
 			definition, so the same code in main.tsx would always be too late.
 
-			It lives HERE because the SPA shell (src/routes/shell.tsx) states that
-			this is where it went when the Next root layout was deleted — the Next
-			layout carried it in a <head> script tag. Nothing had actually been
-			written, so the app rendered with whatever class the markup shipped
-			(never `.dark`) and ThemeToggle could only correct it after mount, in
-			an effect: the flash the inline script exists to prevent.
+			The key and the predicate are byte-identical to THEME_STORAGE_KEY and
+			ThemeToggle's "stored, else system preference" rule. Two places read
+			this decision, so they must agree; src/lib/site.test.ts asserts this
+			file against those constants so a rename cannot desync them. The
+			try/catch mirrors the original, because localStorage THROWS in a
+			blocked-cookies context and an exception here would leave the document
+			unstyled-by-theme.
 
-			The key and the predicate are byte-identical to ThemeToggle's
-			STORAGE_KEY and its "stored, else system preference" rule. Two places
-			read this decision, so they must agree; the try/catch mirrors the
-			original, because localStorage THROWS in a blocked-cookies context and
-			an exception here would leave the document unstyled-by-theme.
+			The title and the description above are literals for the same reason:
+			this file is the static shell, so nothing can import them. They are
+			asserted against src/lib/site.ts for the same reason.
 		-->
 		<script>
 			// Every `var` is declared at the top level of the IIFE rather than
@@ -42,7 +41,7 @@
 				var isDark = false
 				var stored = null
 				try {
-					stored = localStorage.getItem("mcpedia-theme")
+					stored = localStorage.getItem("wiki-theme")
 				} catch (e) {
 					// localStorage THROWS when cookies are blocked. `stored` stays
 					// null, which the rule below reads as "no preference" — the same

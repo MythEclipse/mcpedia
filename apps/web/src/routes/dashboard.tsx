@@ -19,13 +19,12 @@
 
 import { QueueStrip } from "../components/QueueBadge"
 import TagCloud from "../components/TagCloud"
-import { fetchDocuments, fetchSections, searchHref } from "../lib/orpc"
+import { fetchDocuments, fetchSections } from "../lib/orpc"
 import {
 	countUniqueTags,
 	type DashboardData,
 	recentDocuments,
 	sectionShare,
-	topTags,
 } from "./dashboard-data"
 
 /**
@@ -68,44 +67,45 @@ export function DashboardView({ data }: { data: DashboardData }) {
 	const { docs, sections } = data
 	const totalTags = countUniqueTags(docs)
 	const recent = recentDocuments(docs)
-	const tags = topTags(docs)
 
 	return (
 		<div className="space-y-8 max-w-5xl">
 			<div className="flex items-center justify-between">
 				<div>
 					<h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--text-primary)] tracking-tight">
-						Dashboard
+						Site overview
 					</h1>
 					<p className="text-xs sm:text-sm text-[var(--text-muted)] mt-1">
-						Live overview of the MCPedia knowledge base. Data via the oRPC API —
-						PostgreSQL core + BullMQ queue.
+						Every page in the wiki, by section and tag, with the most recent
+						edits.
 					</p>
 				</div>
 				<a
 					href="/create"
 					className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--brand)] text-[var(--brand-fg)] rounded-md text-xs font-semibold shadow-xs"
 				>
-					+ New Doc
+					+ New page
 				</a>
 			</div>
 
-			{/* Metric strip */}
-			<div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+			{/* Metric strip. Three cards, matching the three things a wiki has:
+			    pages, the sections they live in, and the tags that cut across
+			    both. The fourth slot used to restate a service port. */}
+			<div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
 				<div className="p-4 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-xs">
 					<div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-						DB Documents
+						Pages
 					</div>
 					<div className="text-2xl font-bold font-mono text-[var(--text-primary)] mt-1">
 						{docs.length}
 					</div>
 					<div className="text-[11px] text-[var(--text-dim)] font-mono">
-						{totalTags} unique tags
+						in the wiki
 					</div>
 				</div>
 				<div className="p-4 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-xs">
 					<div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-						Active Sections
+						Sections
 					</div>
 					<div className="text-2xl font-bold font-mono text-[var(--text-primary)] mt-1">
 						{sections.length}
@@ -116,24 +116,13 @@ export function DashboardView({ data }: { data: DashboardData }) {
 				</div>
 				<div className="p-4 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-xs">
 					<div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-						Search
+						Tags
 					</div>
 					<div className="text-2xl font-bold font-mono text-[var(--text-primary)] mt-1">
-						Hindsight
+						{totalTags}
 					</div>
 					<div className="text-[11px] text-[var(--text-dim)] font-mono">
-						Keyword + Semantic Recall
-					</div>
-				</div>
-				<div className="p-4 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-xs">
-					<div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-						MCP Tools
-					</div>
-					<div className="text-2xl font-bold font-mono text-[var(--text-primary)] mt-1">
-						13
-					</div>
-					<div className="text-[11px] text-[var(--text-dim)] font-mono">
-						HTTP :4021
+						unique, across all pages
 					</div>
 				</div>
 			</div>
@@ -173,30 +162,24 @@ export function DashboardView({ data }: { data: DashboardData }) {
 				</div>
 			</section>
 
-			{tags.length > 0 && (
-				<section className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl p-5 shadow-xs">
-					<h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] font-mono mb-3">
-						Top Tags
-					</h2>
-					<div className="flex flex-wrap gap-1.5">
-						{tags.map((tag) => (
-							<a
-								key={tag.tag}
-								href={searchHref(tag.tag)}
-								className="px-2.5 py-1 rounded-full bg-[var(--bg-elevated)] border border-[var(--border-color)] text-xs font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--text-muted)]"
-							>
-								#{tag.tag}{" "}
-								<span className="text-[10px] bg-[var(--bg-surface)] px-1 py-0.2 rounded ml-1">
-									{tag.count}
-								</span>
-							</a>
-						))}
-					</div>
-					<div className="mt-3">
-						<TagCloud limit={30} />
-					</div>
-				</section>
-			)}
+			{/*
+				One tag list, not two.
+
+				This section used to render the tags TWICE: a chip row of the top
+				12 (topTags, derived from the loader's documents) and then
+				TagCloud's weighted cloud of the top 30 (fetched separately),
+				under two different headings — "Top Tags" and "Popular Tags" —
+				one directly under the other. Same tags, two shapes, on one
+				screen, which reads as a rendering mistake rather than a feature.
+
+				TagCloud is the survivor: it is the dedicated component, it
+				weights each tag's opacity by frequency, and it owns the
+				"/tags?limit" query. `topTags` in dashboard-data went with the
+				chip row — it had no other caller.
+			*/}
+			<section className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl p-5 shadow-xs">
+				<TagCloud limit={30} />
+			</section>
 
 			{recent.length > 0 && (
 				<section>

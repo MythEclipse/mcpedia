@@ -47,10 +47,11 @@ import {
 	Printer,
 } from "lucide-react"
 import { useMemo, useState } from "react"
-import { isExportableDocument } from "../routes/export-pdf-params"
 import { downloadBlob } from "../lib/download"
 import { downloadExportDocx } from "../lib/export-docx"
 import { exportFilename } from "../lib/export-filename"
+import { EXPORT_FALLBACK } from "../lib/site"
+import { isExportableDocument } from "../routes/export-pdf-params"
 import Markdown from "./Markdown"
 
 /**
@@ -217,7 +218,7 @@ export default function PdfExportView({
 					},
 					documents: filteredAndSortedDocs,
 				},
-				`${exportFilename(summary.title, "mcpedia-export")}.docx`,
+				`${exportFilename(summary.title, EXPORT_FALLBACK)}.docx`,
 				{ pageBreaks },
 			)
 			setDocxState("idle")

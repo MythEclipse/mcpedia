@@ -29,7 +29,7 @@ export default function RelatedGrid({ slug }: { slug: string }) {
 			<div className="flex items-center gap-2 mb-3.5">
 				<Sparkles className="w-4 h-4 text-[var(--text-muted)]" />
 				<h2 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">
-					Related Knowledge
+					Related pages
 				</h2>
 			</div>
 			<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

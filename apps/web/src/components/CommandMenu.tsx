@@ -33,21 +33,21 @@ interface QuickAction {
  * The two shortcuts that are application surfaces rather than sections.
  *
  * These stay hardcoded on purpose: /create and /search are routes this app
- * defines, not entries in the knowledge base's section registry. Nothing an
- * operator does to the registry should remove or rename them.
+ * defines, not entries in the section registry. Nothing an operator does to the
+ * registry should remove or rename them.
  */
 const APP_ACTIONS: QuickAction[] = [
 	{
 		id: "create-doc",
-		title: "Create New Document",
-		subtitle: "Write technical doc, writeup, or note",
+		title: "New page",
+		subtitle: "Write a page in Markdown",
 		icon: Plus,
 		href: "/create",
 	},
 	{
 		id: "hybrid-search",
-		title: "Multi-Modal Hybrid Search",
-		subtitle: "Full-text + Semantic vector search console",
+		title: "Search",
+		subtitle: "Search every page in the wiki",
 		icon: Search,
 		href: "/search",
 	},
@@ -196,7 +196,7 @@ export default function CommandMenu() {
 						value={query}
 						onChange={(e) => setQuery(e.target.value)}
 						onKeyDown={handleKeyNavigation}
-						placeholder="Search documents, writeups, concepts, or tools..."
+						placeholder="Search pages, sections, tags..."
 						className="w-full bg-transparent text-[var(--text-primary)] placeholder-[var(--text-dim)] text-sm focus:outline-none"
 					/>
 					{loading && (
@@ -251,7 +251,7 @@ export default function CommandMenu() {
 						</div>
 					) : results.length === 0 && !loading ? (
 						<div className="px-4 py-10 text-center text-xs text-[var(--text-muted)] space-y-1">
-							<p>No knowledge base items matched &quot;{query}&quot;</p>
+							<p>No pages matched &quot;{query}&quot;</p>
 						</div>
 					) : (
 						<ul className="space-y-1 p-1">

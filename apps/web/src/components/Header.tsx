@@ -1,13 +1,14 @@
 "use client"
 
 import { Link, useRouterState } from "@tanstack/react-router"
-import { Lock, Menu, Plus, Search, X } from "lucide-react"
+import { BookOpen, Lock, Menu, Plus, Search, X } from "lucide-react"
 import { useState } from "react"
 import CommandMenu from "#/components/CommandMenu"
 import { DocLink, SearchLink } from "#/components/DocLink"
 import ThemeToggle from "#/components/ThemeToggle"
 import { useSectionsQuery } from "#/lib/queries"
 import { sectionsOrDefaults } from "#/lib/shape"
+import { SITE_NAME } from "#/lib/site"
 
 export default function Header() {
 	const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -21,17 +22,12 @@ export default function Header() {
 				{/* Brand */}
 				<div className="flex items-center gap-3">
 					<Link to="/" className="flex items-center gap-2.5 group">
-						<div className="flex items-center justify-center w-7 h-7 rounded-md bg-[var(--brand)] text-[var(--brand-fg)] font-mono font-bold text-xs shadow-xs group-hover:opacity-90 transition-opacity">
-							M
+						<div className="flex items-center justify-center w-7 h-7 rounded-md bg-[var(--brand)] text-[var(--brand-fg)] shadow-xs group-hover:opacity-90 transition-opacity">
+							<BookOpen className="w-4 h-4" />
 						</div>
-						<div className="flex items-center gap-2">
-							<span className="font-bold text-[var(--text-primary)] text-sm tracking-tight leading-none">
-								MCPedia
-							</span>
-							<span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-muted)] hidden sm:inline-block">
-								CORE::DB
-							</span>
-						</div>
+						<span className="font-bold text-[var(--text-primary)] text-sm tracking-tight leading-none">
+							{SITE_NAME}
+						</span>
 					</Link>
 				</div>
 
@@ -63,7 +59,7 @@ export default function Header() {
 
 					<SearchLink
 						className="md:hidden p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-md bg-[var(--bg-surface)] border border-[var(--border-color)] transition-colors"
-						title="Search knowledge base"
+						title="Search the wiki"
 					>
 						<Search className="w-4 h-4" />
 					</SearchLink>
@@ -73,7 +69,7 @@ export default function Header() {
 						className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--brand)] hover:opacity-90 text-[var(--brand-fg)] text-xs font-semibold rounded-md shadow-xs transition-all cursor-pointer"
 					>
 						<Plus className="w-3.5 h-3.5" />
-						<span>New Doc</span>
+						<span>New page</span>
 					</a>
 
 					<a
@@ -83,10 +79,10 @@ export default function Header() {
 								? "text-[var(--text-primary)] bg-[var(--bg-elevated)] font-semibold border border-[var(--border-color)]"
 								: "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
 						}`}
-						title="Admin Login"
+						title="Sign in"
 					>
 						<Lock className="w-3.5 h-3.5" />
-						<span className="hidden sm:inline">Admin</span>
+						<span className="hidden sm:inline">Sign in</span>
 					</a>
 
 					<div className="border-l border-[var(--border-color)] pl-2 flex items-center">
@@ -113,7 +109,7 @@ export default function Header() {
 			{mobileMenuOpen && (
 				<div className="md:hidden border-t border-[var(--border-color)] bg-[var(--bg-surface)] px-4 py-4 space-y-2 animate-fade-in shadow-lg">
 					<div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)] px-1 mb-1">
-						Knowledge Sections
+						Sections
 					</div>
 					<div className="grid grid-cols-2 gap-1.5">
 						{sections.map((s) => {

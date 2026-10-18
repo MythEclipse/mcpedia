@@ -69,7 +69,7 @@ export const SECTION_SEED: Array<{
 		id: "docs",
 		label: "Documentation",
 		icon: "📄",
-		desc: "Setup guides, API references, and protocol specs.",
+		desc: "Setup guides, references, and technical notes.",
 	},
 	{
 		id: "ctf",

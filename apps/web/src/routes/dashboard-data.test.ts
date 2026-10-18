@@ -4,7 +4,6 @@ import {
 	countUniqueTags,
 	recentDocuments,
 	sectionShare,
-	topTags,
 } from "./dashboard-data"
 
 function doc(slug: string, tags: string[], updatedAt: string): DocumentMeta {
@@ -72,22 +71,6 @@ describe("recentDocuments", () => {
 		]
 		const sorted = recentDocuments(withBad).map((d) => d.slug)
 		expect(sorted[0]).toBe("good")
-	})
-})
-
-describe("topTags", () => {
-	it("counts and ranks by frequency", () => {
-		expect(topTags(DOCS)).toEqual([
-			{ tag: "web", count: 3 },
-			{ tag: "pwn", count: 1 },
-		])
-	})
-
-	it("caps at the limit", () => {
-		const many = [
-			doc("a", ["t1", "t2", "t3", "t4"], "2026-01-01T00:00:00.000Z"),
-		]
-		expect(topTags(many, 2)).toHaveLength(2)
 	})
 })
 

@@ -2,7 +2,7 @@
 import { createReadStream } from "node:fs"
 import { stat } from "node:fs/promises"
 /**
- * The static file server for the MCPedia web SPA on :4016.
+ * The static file server for the wiki SPA on :4016.
  *
  * WHY THIS EXISTS RATHER THAN `vite preview`. Three reasons, each of which
  * would break the deploy on its own:
@@ -144,5 +144,5 @@ const server = createServer((req, res) => {
 })
 
 server.listen(port, host, () => {
-	console.log(`mcpedia-web serving ${root} on http://${host}:${port}`)
+	console.log(`wiki-web serving ${root} on http://${host}:${port}`)
 })

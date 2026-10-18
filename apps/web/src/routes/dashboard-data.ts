@@ -27,8 +27,16 @@ export interface DashboardData {
 	sections: SectionInfo[]
 }
 
-/** Distinct tags across every document. */
-export function countUniqueTags(docs: readonly DocumentMeta[]): number {
+/**
+ * Distinct tags across every document.
+ *
+ * Takes the minimal structural shape (`{ tags?: string[] }`) rather than
+ * `DocumentMeta`, because two different shapes reach it: the dashboard's full
+ * metadata rows and the home page's lighter `DocSummary`. Both carry `tags`, and
+ * narrowing the parameter would have meant either a second copy of this loop on
+ * the home page or a cast at the call site.
+ */
+export function countUniqueTags(docs: readonly { tags?: string[] }[]): number {
 	const tags = new Set<string>()
 	for (const doc of docs) {
 		for (const tag of doc.tags ?? []) tags.add(tag)
@@ -43,22 +51,6 @@ export function recentDocuments(
 ): DocumentMeta[] {
 	return [...docs]
 		.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
-		.slice(0, limit)
-}
-
-/** The 12 most-used tags, by count descending. */
-export function topTags(
-	docs: readonly DocumentMeta[],
-	limit = 12,
-): { tag: string; count: number }[] {
-	const counts = new Map<string, number>()
-	for (const doc of docs) {
-		for (const tag of doc.tags ?? [])
-			counts.set(tag, (counts.get(tag) ?? 0) + 1)
-	}
-	return [...counts.entries()]
-		.map(([tag, count]) => ({ tag, count }))
-		.sort((a, b) => b.count - a.count)
 		.slice(0, limit)
 }
 

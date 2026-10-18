@@ -310,7 +310,7 @@ export default function DocForm({
 					type="text"
 					value={title}
 					onChange={(e) => setTitle(e.target.value)}
-					placeholder="e.g. Exploiting Stack Alignment Issues in x86_64"
+					placeholder="e.g. Exploiting stack alignment issues in x86_64"
 					className={`${baseInputCls} text-base font-semibold`}
 					required
 				/>
@@ -386,7 +386,7 @@ export default function DocForm({
 						className={baseInputCls}
 					>
 						<option value="published">Published</option>
-						<option value="draft">Draft (Unindexed)</option>
+						<option value="draft">Draft</option>
 					</select>
 				</div>
 			</div>
@@ -493,7 +493,7 @@ export default function DocForm({
 					<div>
 						<h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] font-mono flex items-center gap-1.5">
 							<Sliders className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-							<span>Technical Metadata</span>
+							<span>Details</span>
 						</h3>
 						<p className="text-[11px] text-[var(--text-dim)] mt-0.5">
 							Custom fields (points, difficulty, event, solved) will render as
@@ -649,7 +649,7 @@ export default function DocForm({
 						value={body}
 						onChange={(e) => setBody(e.target.value)}
 						className="w-full h-96 p-4 bg-transparent text-[var(--text-primary)] placeholder-[var(--text-dim)] font-mono text-sm focus:outline-none resize-y leading-relaxed"
-						placeholder="# Write your technical documentation or writeup here in Markdown..."
+						placeholder="# Write your page here, in Markdown..."
 						required
 					/>
 				) : (

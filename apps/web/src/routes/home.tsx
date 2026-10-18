@@ -4,25 +4,43 @@
  * Ported from app/page.tsx. The structural change is one line: where the Next
  * server component awaited `listDocuments()` and `listSections()` from
  * @mcpedia/core in-process, this reads the same two procedures over oRPC via
- * the query hooks. The rendering below is unchanged.
+ * the query hooks.
+ *
+ * ## WHAT THIS PAGE NO LONGER RENDERS, AND WHY
+ *
+ * It used to be a landing page for the deployment rather than a door into the
+ * corpus: a hero addressed to AI agents, a metric derived from the tool count
+ * of a protocol gateway, an interactive architecture diagram of the services,
+ * and an integration section holding copy-paste client configs. A reader who
+ * arrived for a document had to scroll past all of it.
+ *
+ * The diagram and the config block are gone from the page. Both described how
+ * the site is built rather than what is in it, and the config block in
+ * particular was instructions for connecting a tool, not reading material.
+ * Their components went with them; InteractiveTopology and McpConfigSnippet are
+ * deleted rather than left unrendered, and src/lib/mcp-tools.ts — the constant
+ * that only existed to keep the topology's tool count honest — went with them.
+ * The gateway and its tools are untouched: this is a change to the web app.
+ *
+ * What is left is the shape a wiki actually has: what this is, how to search it,
+ * what it covers, and what changed recently.
  */
 
+import { useNavigate } from "@tanstack/react-router"
 import {
 	ArrowRight,
 	BookOpen,
 	Clock,
-	Database,
 	FileText,
 	Folder,
 	Layers,
 	Plus,
 	Search,
-	Terminal,
+	Tag,
 } from "lucide-react"
+import { useState } from "react"
 import { DocLink, SearchLink } from "#/components/DocLink"
-import InteractiveTopology from "#/components/InteractiveTopology"
-import McpConfigSnippet from "#/components/McpConfigSnippet"
-import { MCP_TOOL_COUNT } from "#/lib/mcp-tools"
+import SearchBar from "#/components/SearchBar"
 import { useDocumentsQuery, useSectionsQuery } from "#/lib/queries"
 import type { DocSummary } from "#/lib/shape"
 import {
@@ -32,6 +50,8 @@ import {
 	sectionMeta,
 	sectionsOrDefaults,
 } from "#/lib/shape"
+import { SITE_NAME, SITE_TAGLINE } from "#/lib/site"
+import { countUniqueTags } from "#/routes/dashboard-data"
 
 /**
  * The first five entries of a section, rendered as an indented file tree.
@@ -89,80 +109,97 @@ export function HomePage() {
 	const { data: all = [], isPending: docsPending } = useDocumentsQuery()
 	const { data: liveSections, isPending: sectionsPending } = useSectionsQuery()
 	const sections = sectionsOrDefaults(liveSections)
+	const navigate = useNavigate()
+
+	// The hero search box is a doorway to /search, not a second search
+	// implementation: it navigates with `?q=`, where the real console owns
+	// debouncing, modes and results. A wiki's front page should let a reader
+	// type immediately without the front page also having to answer.
+	const [query, setQuery] = useState("")
 
 	// Both lists gate the same page; one spinner covers either being in flight.
 	const loading = docsPending || sectionsPending
 	const recent = byUpdatedDesc(all).slice(0, 6)
 
 	return (
-		<div className="space-y-16">
-			<section className="relative pt-2 pb-4">
-				<div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-secondary)] text-xs font-mono mb-6">
-					<span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-					<span>PostgreSQL 16 Core · Model Context Protocol</span>
-				</div>
-
-				<h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-[var(--text-primary)] tracking-tight mb-5 leading-[1.1]">
-					Knowledge Base for <br />
-					Humans and AI Agents.
+		<div className="space-y-14">
+			<section className="pt-2">
+				<h1 className="text-3xl sm:text-4xl font-bold text-[var(--text-primary)] tracking-tight mb-2">
+					{SITE_NAME}
 				</h1>
-
-				<p className="text-base sm:text-lg text-[var(--text-muted)] max-w-2xl leading-relaxed mb-8">
-					A high-performance technical knowledge repository. Humans read the web
-					interface; AI assistants connect directly via native MCP tools. Both
-					share one unified database source of truth.
+				<p className="text-sm text-[var(--text-muted)] leading-relaxed mb-6">
+					{SITE_TAGLINE}
 				</p>
 
-				<div className="flex flex-wrap items-center gap-3 mb-10">
+				<form
+					action="/search"
+					method="get"
+					className="max-w-2xl mb-6"
+					onSubmit={(e) => {
+						// The form exists for the no-scripting path, where the browser
+						// performs the GET and `name="q"` is what puts the query in the
+						// URL. With scripting, the router handles the same navigation
+						// client-side so the query cache is not thrown away — and an
+						// empty box must not navigate at all.
+						e.preventDefault()
+						const q = query.trim()
+						if (!q) return
+						void navigate({ to: "/search", search: { q, mode: "hybrid" } })
+					}}
+				>
+					<SearchBar
+						value={query}
+						onChange={setQuery}
+						placeholder="Search the wiki…"
+						onClear={() => setQuery("")}
+						name="q"
+					/>
+					<input type="hidden" name="mode" value="hybrid" />
+				</form>
+
+				<div className="flex flex-wrap items-center gap-3">
 					<DocLink
 						to="docs"
-						className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--brand)] hover:opacity-90 text-[var(--brand-fg)] rounded-lg font-semibold text-sm transition-all shadow-xs cursor-pointer"
+						className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--brand)] hover:opacity-90 text-[var(--brand-fg)] rounded-lg font-semibold text-sm transition-all shadow-xs cursor-pointer"
 					>
 						<BookOpen className="w-4 h-4" />
-						<span>Browse Documentation</span>
+						<span>Browse all pages</span>
 						<ArrowRight className="w-4 h-4 ml-0.5" />
 					</DocLink>
 
-					<SearchLink className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] border border-[var(--border-color)] hover:border-[var(--text-muted)] text-[var(--text-primary)] rounded-lg font-semibold text-sm transition-colors shadow-xs">
+					<SearchLink className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] border border-[var(--border-color)] hover:border-[var(--text-muted)] text-[var(--text-primary)] rounded-lg font-semibold text-sm transition-colors shadow-xs">
 						<Search className="w-4 h-4 text-[var(--text-muted)]" />
-						<span>Hybrid Search</span>
+						<span>Search</span>
 					</SearchLink>
 
 					<a
 						href="/create"
-						className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg text-sm transition-colors shadow-xs"
+						className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg text-sm transition-colors shadow-xs"
 					>
 						<Plus className="w-4 h-4" />
-						<span>Create Document</span>
+						<span>New page</span>
 					</a>
-				</div>
-
-				<div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 sm:p-5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-xs">
-					<Metric
-						icon={<Database className="w-4 h-4" />}
-						value={loading ? "—" : String(all.length)}
-						label="DB Documents"
-					/>
-					<Metric
-						icon={<Layers className="w-4 h-4" />}
-						value={loading ? "—" : String(sections.length)}
-						label="Active Sections"
-					/>
-					<Metric
-						icon={<Search className="w-4 h-4" />}
-						value="Hindsight"
-						label="Keyword + Semantic Recall"
-					/>
-					<Metric
-						icon={<Terminal className="w-4 h-4" />}
-						value={`${MCP_TOOL_COUNT} Tools`}
-						label="HTTP :4021 MCP"
-					/>
 				</div>
 			</section>
 
 			<section>
-				<InteractiveTopology />
+				<div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 sm:p-5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-xs">
+					<Metric
+						icon={<FileText className="w-4 h-4" />}
+						value={loading ? "—" : String(all.length)}
+						label="Pages"
+					/>
+					<Metric
+						icon={<Layers className="w-4 h-4" />}
+						value={loading ? "—" : String(sections.length)}
+						label="Sections"
+					/>
+					<Metric
+						icon={<Tag className="w-4 h-4" />}
+						value={loading ? "—" : String(countUniqueTags(all))}
+						label="Tags"
+					/>
+				</div>
 			</section>
 
 			<section>
@@ -170,12 +207,12 @@ export function HomePage() {
 					<div className="flex items-center gap-2">
 						<Layers className="w-4 h-4 text-[var(--text-muted)]" />
 						<h2 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">
-							Knowledge Sections
+							Browse by section
 						</h2>
 					</div>
 				</div>
 
-				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 					{sections.map((s) => (
 						<div
 							key={s.id}
@@ -183,12 +220,12 @@ export function HomePage() {
 						>
 							<div>
 								<div className="flex items-center justify-between gap-2 mb-3">
-									<span className="text-2xl">{s.icon}</span>
+									<span className="text-xl">{s.icon}</span>
 									<DocLink
 										to={s.id}
 										className="text-xs font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] font-semibold"
 									>
-										{docsInSection(all, s.id).length} docs →
+										{docsInSection(all, s.id).length} pages →
 									</DocLink>
 								</div>
 								<h3 className="font-bold text-sm text-[var(--text-primary)] mb-1">
@@ -215,7 +252,7 @@ export function HomePage() {
 						<div className="flex items-center gap-2">
 							<Clock className="w-4 h-4 text-[var(--text-muted)]" />
 							<h2 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">
-								Recently Updated
+								Recently updated
 							</h2>
 						</div>
 						<DocLink
@@ -269,24 +306,6 @@ export function HomePage() {
 					</div>
 				</section>
 			)}
-
-			<section className="border-t border-[var(--border-color)] pt-12 pb-6">
-				<div className="mb-6">
-					<div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-muted)] text-xs font-mono mb-2">
-						<span>[ MCP_INTEGRATION ]</span>
-					</div>
-					<h2 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight mb-1.5">
-						Model Context Protocol Configuration
-					</h2>
-					<p className="text-xs sm:text-sm text-[var(--text-muted)] max-w-xl leading-relaxed">
-						Equip Claude Desktop, Cursor, Antigravity, or custom agents with
-						direct access to your knowledge base via semantic search, read
-						resources, and document tools.
-					</p>
-				</div>
-
-				<McpConfigSnippet />
-			</section>
 		</div>
 	)
 }

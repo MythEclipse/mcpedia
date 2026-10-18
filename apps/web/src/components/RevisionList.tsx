@@ -39,7 +39,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { History, Loader2, RotateCcw } from "lucide-react"
 import { useState } from "react"
 import { RPC_BASE, rpcCall } from "#/lib/api-client"
-import { useRevisionsQuery, qk } from "#/lib/queries"
+import { qk, useRevisionsQuery } from "#/lib/queries"
 
 export default function RevisionList({
 	slug,
@@ -117,7 +117,7 @@ export default function RevisionList({
 								v{rev.revisionNo}
 							</span>
 							<span className="text-[var(--text-secondary)] font-sans truncate text-xs">
-								{rev.reason || "Updated document in PostgreSQL"}
+								{rev.reason || "Edited"}
 							</span>
 							<span className="text-[var(--text-dim)] hidden sm:inline text-[11px]">
 								· {new Date(rev.createdAt).toLocaleString()}

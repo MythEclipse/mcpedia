@@ -2,8 +2,7 @@
 
 import { Moon, Sun } from "lucide-react"
 import { useEffect, useState } from "react"
-
-const STORAGE_KEY = "mcpedia-theme"
+import { THEME_STORAGE_KEY } from "#/lib/site"
 
 export default function ThemeToggle() {
 	const [mounted, setMounted] = useState(false)
@@ -11,7 +10,7 @@ export default function ThemeToggle() {
 
 	useEffect(() => {
 		setMounted(true)
-		const stored = localStorage.getItem(STORAGE_KEY)
+		const stored = localStorage.getItem(THEME_STORAGE_KEY)
 		const darkActive =
 			stored === "dark" ||
 			(stored === null &&
@@ -27,7 +26,7 @@ export default function ThemeToggle() {
 	function toggle() {
 		const next = !isDark
 		setIsDark(next)
-		localStorage.setItem(STORAGE_KEY, next ? "dark" : "light")
+		localStorage.setItem(THEME_STORAGE_KEY, next ? "dark" : "light")
 		if (next) {
 			document.documentElement.classList.add("dark")
 		} else {

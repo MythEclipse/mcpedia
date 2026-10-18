@@ -45,8 +45,6 @@ import Markdown from "#/components/Markdown"
 import RelatedGrid from "#/components/RelatedGrid"
 import RevisionList from "#/components/RevisionList"
 import TOC from "#/components/TOC"
-import { InlineExport, inlineExportTarget } from "#/routes/inline-export"
-import { isAdmin } from "#/screens/gate"
 import {
 	type DocumentResult,
 	useDocumentQuery,
@@ -68,6 +66,9 @@ import {
 	sectionsOrDefaults,
 	slugToTitle,
 } from "#/lib/shape"
+import { SITE_NAME } from "#/lib/site"
+import { InlineExport, inlineExportTarget } from "#/routes/inline-export"
+import { isAdmin } from "#/screens/gate"
 
 /**
  * The custom frontmatter badges — CTF documents carry points, difficulty,
@@ -171,7 +172,7 @@ function FolderIndex({
 					to="/"
 					className="hover:text-[var(--text-primary)] transition-colors"
 				>
-					MCPedia
+					{SITE_NAME}
 				</Link>
 				<span>/</span>
 				<DocLink
@@ -365,7 +366,7 @@ function DocumentView({
 						to="/"
 						className="hover:text-[var(--text-primary)] transition-colors"
 					>
-						MCPedia
+						{SITE_NAME}
 					</Link>
 					{doc.slug.split("/").map((part, i, all) => {
 						const crumb = all.slice(0, i + 1).join("/")

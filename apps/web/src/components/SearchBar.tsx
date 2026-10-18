@@ -9,6 +9,13 @@ interface SearchBarProps {
 	placeholder?: string
 	autoFocus?: boolean
 	onClear?: () => void
+	/**
+	 * The input's `name`, for the one call site that wraps this in a real
+	 * <form method="get"> (the home page). Without a name a GET form submits
+	 * nothing, so the no-scripting path would land on /search with an empty
+	 * query. Omitted everywhere else, where no form is involved.
+	 */
+	name?: string
 }
 
 export default function SearchBar({
@@ -17,6 +24,7 @@ export default function SearchBar({
 	placeholder,
 	autoFocus,
 	onClear,
+	name,
 }: SearchBarProps) {
 	const inputRef = useRef<HTMLInputElement>(null)
 
@@ -33,9 +41,10 @@ export default function SearchBar({
 			<input
 				ref={inputRef}
 				type="search"
+				{...(name ? { name } : {})}
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
-				placeholder={placeholder ?? "Search knowledge base..."}
+				placeholder={placeholder ?? "Search the wiki..."}
 				className="w-full pl-10 pr-9 py-3 bg-[var(--bg-elevated)] border border-[var(--border-color)] hover:border-[var(--text-muted)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-dim)] focus:outline-none focus:border-[var(--text-primary)] text-sm transition-all"
 			/>
 			<Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-3.5 pointer-events-none" />
@@ -71,7 +80,7 @@ export function InlineSearchBar({
 				type="text"
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
-				placeholder={placeholder ?? "Filter index..."}
+				placeholder={placeholder ?? "Filter pages..."}
 				className="w-full pl-8 pr-7 py-1.5 bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--text-muted)] rounded-md text-xs text-[var(--text-primary)] placeholder-[var(--text-dim)] focus:outline-none focus:border-[var(--text-primary)] transition-all"
 			/>
 			<Search className="w-3.5 h-3.5 text-[var(--text-dim)] absolute left-2.5 top-2.5 pointer-events-none" />

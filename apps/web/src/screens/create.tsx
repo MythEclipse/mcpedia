@@ -110,7 +110,7 @@ export default function CreatePage({ sectionIds, editSlug }: CreatePageProps) {
 					</div>
 					<div>
 						<h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--text-primary)] tracking-tight">
-							{isEdit ? "Edit Knowledge Document" : "Create Knowledge Document"}
+							{isEdit ? "Edit page" : "New page"}
 						</h1>
 						<p className="text-xs text-[var(--text-muted)] mt-0.5 font-mono">
 							{isEdit ? (
@@ -119,8 +119,8 @@ export default function CreatePage({ sectionIds, editSlug }: CreatePageProps) {
 								</>
 							) : (
 								<>
-									Persists directly into PostgreSQL, tracks revision history,
-									and generates vector embeddings.
+									Saves the page and keeps every previous version in its
+									history.
 								</>
 							)}
 						</p>

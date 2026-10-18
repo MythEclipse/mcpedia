@@ -18,6 +18,7 @@ import {
 	sectionMeta,
 	sectionsOrDefaults,
 } from "#/lib/shape"
+import { SITE_NAME } from "#/lib/site"
 
 /**
  * The folder tree, with the current path highlighted.
@@ -99,7 +100,7 @@ export function SectionPage() {
 					to="/"
 					className="hover:text-[var(--text-primary)] transition-colors"
 				>
-					MCPedia
+					{SITE_NAME}
 				</Link>
 				<span>/</span>
 				<span className="text-[var(--text-muted)] font-semibold font-sans">

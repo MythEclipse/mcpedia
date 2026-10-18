@@ -164,7 +164,7 @@ export default function Sidebar() {
 						type="text"
 						value={filterText}
 						onChange={(e) => setFilterText(e.target.value)}
-						placeholder="Filter index..."
+						placeholder="Filter pages..."
 						className="w-full pl-8 pr-7 py-1.5 bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--text-muted)] rounded-md text-xs text-[var(--text-primary)] placeholder-[var(--text-dim)] focus:outline-none focus:border-[var(--text-primary)] transition-all"
 					/>
 					<Search className="w-3.5 h-3.5 text-[var(--text-dim)] absolute left-2.5 top-2.5 pointer-events-none" />
@@ -183,7 +183,7 @@ export default function Sidebar() {
 
 			{/* Summary count */}
 			<div className="flex items-center justify-between px-1 mb-2 text-[10px] text-[var(--text-muted)] font-mono uppercase tracking-wider">
-				<span>Knowledge Index</span>
+				<span>Contents</span>
 				<span>{filteredDocs.length} items</span>
 			</div>
 
@@ -251,7 +251,7 @@ export default function Sidebar() {
 					className="flex items-center justify-center gap-2 w-full py-2 text-xs bg-[var(--bg-elevated)] hover:bg-[var(--bg-elevated-hover)] border border-[var(--border-color)] hover:border-[var(--text-muted)] text-[var(--text-primary)] rounded-md transition-all font-medium shadow-xs"
 				>
 					<Plus className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-					<span>Create Document</span>
+					<span>New page</span>
 				</a>
 			</div>
 		</nav>
