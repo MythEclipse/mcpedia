@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/asepharyana/mcpedia/compare/v1.3.3...v1.4.0) (2026-10-18)
+
+
+### Features
+
+* **search:** fall back to Postgres full-text when hindsight cannot embed ([fca5476](https://github.com/asepharyana/mcpedia/commit/fca5476ec6e1f69a90caffdafb7b16329e3817f0))
+
 ## [1.3.3](https://github.com/asepharyana/mcpedia/compare/v1.3.2...v1.3.3) (2026-10-18)
 
 
