@@ -12,7 +12,7 @@ import {
 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { DocLink } from "#/components/DocLink"
-import { useDocumentsQuery } from "#/lib/queries"
+import { useDocumentsQuery, useSectionsQuery } from "#/lib/queries"
 import type { TreeNode } from "#/lib/shape"
 import { buildFolderTree, sectionMeta } from "#/lib/shape"
 
@@ -117,6 +117,12 @@ function TreeNodeItem({
 
 export default function Sidebar() {
 	const { data: docs = [] } = useDocumentsQuery()
+	// Headings come from the registry, not from the id. Without the live list
+	// `sectionMeta` falls back to the title-cased id, so this sidebar rendered
+	// "📁 Ctf" next to a header nav rendering "🚩 CTF" — the same section named
+	// two ways on one screen. The nav has always passed the live list; this is
+	// the same call, so a curated label and icon now appear here too.
+	const { data: liveSections } = useSectionsQuery()
 	const [filterText, setFilterText] = useState("")
 	const [collapsedMap, setCollapsedMap] = useState<Record<string, boolean>>({})
 	const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -141,13 +147,13 @@ export default function Sidebar() {
 		for (const doc of filteredDocs) {
 			const s = (doc.section || "docs").toLowerCase()
 			if (!map.has(s)) {
-				map.set(s, sectionMeta(s))
+				map.set(s, sectionMeta(s, liveSections))
 			}
 		}
 		return Array.from(map.values()).sort((a, b) =>
 			a.label.localeCompare(b.label),
 		)
-	}, [filteredDocs])
+	}, [filteredDocs, liveSections])
 
 	return (
 		<nav className="h-full flex flex-col py-4 px-3 select-none">
