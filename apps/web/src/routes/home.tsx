@@ -22,6 +22,7 @@ import {
 import { DocLink, SearchLink } from "#/components/DocLink"
 import InteractiveTopology from "#/components/InteractiveTopology"
 import McpConfigSnippet from "#/components/McpConfigSnippet"
+import { MCP_TOOL_COUNT } from "#/lib/mcp-tools"
 import { useDocumentsQuery, useSectionsQuery } from "#/lib/queries"
 import type { DocSummary } from "#/lib/shape"
 import {
@@ -154,7 +155,7 @@ export function HomePage() {
 					/>
 					<Metric
 						icon={<Terminal className="w-4 h-4" />}
-						value="13 Tools"
+						value={`${MCP_TOOL_COUNT} Tools`}
 						label="HTTP :4021 MCP"
 					/>
 				</div>

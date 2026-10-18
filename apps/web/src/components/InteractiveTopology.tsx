@@ -11,6 +11,7 @@ import {
 	Sparkles,
 } from "lucide-react"
 import { useState } from "react"
+import { MCP_TOOL_COUNT } from "#/lib/mcp-tools"
 
 interface NodeDetail {
 	id: string
@@ -23,6 +24,14 @@ interface NodeDetail {
 	metrics: { label: string; value: string }[]
 	features: string[]
 	docLink?: string
+	/**
+	 * Link text for docLink. Defaults to "Read documentation".
+	 *
+	 * Per-node because not every link leads to a document: the MCP gateway node
+	 * points at /dashboard, and a button reading "Read documentation" that opens
+	 * a live metrics page is a small lie in the UI.
+	 */
+	docLinkLabel?: string
 }
 
 const NODES: NodeDetail[] = [
@@ -35,7 +44,7 @@ const NODES: NodeDetail[] = [
 		desc: "Claude Desktop, Cursor, Antigravity, and Zed connect via Model Context Protocol to read and write technical knowledge directly.",
 		metrics: [
 			{ label: "Transport", value: "Stdio / HTTP SSE" },
-			{ label: "Tools Exposed", value: "13 Native Tools" },
+			{ label: "Tools Exposed", value: `${MCP_TOOL_COUNT} Native Tools` },
 			{ label: "Authentication", value: "x-webhook-secret" },
 		],
 		features: [
@@ -48,12 +57,14 @@ const NODES: NodeDetail[] = [
 	{
 		id: "web-ui",
 		title: "Human Web Interface",
-		badge: "UI::NEXTJS",
+		badge: "UI::VITE",
 		type: "client",
 		icon: Globe,
 		desc: "Fast, accessible developer web interface with dark/light themes, keyboard shortcuts, and instant search.",
 		metrics: [
-			{ label: "Framework", value: "Next.js 16.3" },
+			// Vite, not Next.js: this app was ported off Next and the label had
+			// been describing a framework that is no longer in package.json.
+			{ label: "Framework", value: "Vite 8.3 + React 19" },
 			{ label: "Styling", value: "Tailwind CSS v4" },
 			{ label: "Command Menu", value: "⌘K Omnisearch" },
 		],
@@ -87,6 +98,7 @@ const NODES: NodeDetail[] = [
 		// consolidation. The dashboard is where this service's own health,
 		// queue and index state actually live.
 		docLink: "/dashboard",
+		docLinkLabel: "Open dashboard",
 	},
 	{
 		id: "core-engine",
@@ -406,7 +418,7 @@ export default function InteractiveTopology() {
 								to={activeNode.docLink}
 								className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-[var(--bg-elevated)] hover:bg-[var(--bg-elevated-hover)] border border-[var(--border-color)] text-xs font-semibold text-[var(--text-primary)] rounded-lg transition-colors group"
 							>
-								<span>Read documentation</span>
+								<span>{activeNode.docLinkLabel ?? "Read documentation"}</span>
 								<ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
 							</Link>
 						</div>
