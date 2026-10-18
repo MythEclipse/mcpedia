@@ -82,9 +82,9 @@ mcpedia/
 
 MCPedia supports nested folder structures (like GitHub repositories):
 - **Dynamic Path Classification**: The router inspects paths and automatically distinguishes between leaf documents and folder nodes containing subfolders or child documents.
-- **Folder Index Pages**: Navigating to any folder (e.g. `/writeups/ctf/defcon-quals-2024`) renders subfolders and documents within that path.
+- **Folder Index Pages**: Navigating to any folder (e.g. `/ctf/defcon-quals-2024`) renders subfolders and documents within that path.
 - **Collapsible Sidebar**: Hierarchical navigation tree reflecting the on-disk directory structure.
-- **Section Indexes**: Dedicated overview pages for each section (`/docs`, `/writeups`, `/research`, `/notes`).
+- **Section Indexes**: Dedicated overview pages for each section (`/docs`, `/ctf`, `/notes`).
 
 ### 3. Dynamic Custom Fields
 
