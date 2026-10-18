@@ -37,7 +37,14 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
+#
+# `.env*` matches `.env.example` too, which is why the template was advertised
+# in .dockerignore (`!.env.example`) but absent from the repo: the negation there
+# was inert because the file was never committed in the first place. The negation
+# below is what makes it real. Keep this pattern and the .dockerignore one in
+# step — they answer the same question for two different mechanisms.
 .env*
+!.env.example
 
 # vercel
 .vercel
