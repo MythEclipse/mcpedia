@@ -88,6 +88,45 @@ function stubFetch(...replies: unknown[]) {
 }
 
 /**
+ * Capture fetch where the BANK call never settles, and every other call replies
+ * immediately.
+ *
+ * This exists because the defect it guards is invisible to a resolved stub. The
+ * `PUT /banks/{id}` and the recall are two SEPARATE requests, so they return in
+ * order and every assertion about bodies, call counts and `degraded` still holds
+ * while the recall is serialised behind a bank call that would take its full
+ * ceiling to fail. Measured on the real thing: 12.585s for the first search
+ * after a deploy, against a hindsight that hangs.
+ *
+ * Holding the bank call open makes the serialisation observable as TIMING rather
+ * than as an assertion about the call log: if recall awaits the bank, it can
+ * never resolve, and the test fails on a timeout instead of passing.
+ */
+function stubFetchWithHangingBank(recallReply: unknown) {
+	const calls: { url: string; init: RequestInit }[] = []
+	vi.stubGlobal(
+		"fetch",
+		vi.fn(async (url: string, init: RequestInit) => {
+			const href = String(url)
+			calls.push({ url: href, init })
+			if (href.includes("/banks/") && !href.includes("/memories")) {
+				// The bank PUT: never settles. No `abort` handling either, so an
+				// implementation that awaits it hangs rather than being rescued by
+				// its own timeout.
+				return new Promise<never>(() => {})
+			}
+			return {
+				ok: true,
+				status: 200,
+				json: async () => recallReply,
+				text: async () => JSON.stringify(recallReply),
+			}
+		}),
+	)
+	return calls
+}
+
+/**
  * The JSON body of the nth call, parsed.
  *
  * Typed `unknown` on purpose: it is an arbitrary request body, and a narrower
@@ -460,6 +499,49 @@ describe("hindsight adapter", () => {
 			// And the reason reaches the log, because "degraded" alone does not
 			// say whether it was a quota, a dead service or a timeout.
 			expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("503"))
+		})
+
+		it("does not wait for the bank before searching", async () => {
+			// The first search after a deploy must not pay for `ensureBank`.
+			//
+			// `ensureBank` is best-effort: it swallows its own failures because a
+			// bank that cannot be created must not stop a READ. Awaiting it in
+			// recall turned its 10s metadata ceiling into an ADDITIONAL 10s on top
+			// of recall's own 2.5s — measured at 12.585s against a hindsight that
+			// hangs, which is the exact production failure mode (a rate-limited
+			// embedding provider holds the connection open instead of returning
+			// 429).
+			//
+			// The bank call is held open here, so an implementation that awaits it
+			// cannot produce a result at all. That is what makes this catch the
+			// regression: the call log alone looks identical either way, because
+			// both requests are still made and still return in order.
+			// The document's own row is authoritative for title and section —
+			// hindsight only FINDS it — so the mock DB has to serve it, or the
+			// hit is dropped by `bySlug.get(...) ?? ""` for a reason unrelated to
+			// the bank.
+			dbMock.select.mockReturnValue(
+				selectReturning([{ slug: "docs/a", status: "published" }]),
+			)
+			stubFetchWithHangingBank({
+				results: [
+					{
+						id: "1",
+						text: "RSA padding",
+						type: "world",
+						metadata: { slug: "docs/a" },
+					},
+				],
+			})
+			const outcome = await adapter.recallForTest("RSA")
+
+			// It answered, and it answered from hindsight — not by falling back
+			// because the bank never came back. `metadata.slug` is what links a
+			// fact back to a document, and `slugOf` drops results without one, so
+			// a hit must carry it or this asserts 0 for the wrong reason.
+			expect(outcome.degraded).toBe(false)
+			expect(outcome.hits.length).toBe(1)
+			expect(outcome.hits[0]?.doc.slug).toBe("docs/a")
 		})
 
 		it("an EMPTY result is not a failure and does not fall back", async () => {

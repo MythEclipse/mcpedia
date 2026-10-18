@@ -445,7 +445,24 @@ async function recall(q: string, limit: number): Promise<RecallOutcome> {
 	const query = q.trim()
 	if (!query) return { hits: [], degraded: false }
 
-	await ensureBank()
+	// NOT awaited, and the difference is a reader waiting 12.5s instead of 2.5s.
+	//
+	// `ensureBank` is best-effort — it swallows its own failures, because a bank
+	// that cannot be created must not stop a READ (hindsight creates one
+	// implicitly on first retain anyway). Awaiting it here turned its 10s
+	// metadata ceiling into an ADDITIONAL 10s on top of recall's own timeout:
+	// measured against a hindsight that hangs, the first search after a deploy
+	// took 12.585s, which is exactly ensureBank's 10s plus recall's 2.5s, and the
+	// hang server's log showed the `PUT /banks/...` arriving before the recall.
+	//
+	// So the bank is warmed in the BACKGROUND and the recall races its own
+	// ceiling. A cold bank means the recall may 404 once; that is already handled
+	// by the same catch that serves full-text, and one degraded search after a
+	// deploy is a better trade than a 12-second one on every deploy.
+	//
+	// `void` rather than a bare call, so the floating promise is deliberate and
+	// stated rather than implied.
+	void ensureBank()
 	let response: RecallResponse
 	try {
 		response = await call<RecallResponse>(
