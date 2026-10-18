@@ -1,3 +1,10 @@
+## [1.3.3](https://github.com/asepharyana/mcpedia/compare/v1.3.2...v1.3.3) (2026-10-18)
+
+
+### Bug Fixes
+
+* **deploy:** stop gating the static SPA on Bitwarden, and widen the probe ([21226d8](https://github.com/asepharyana/mcpedia/commit/21226d80abd649e359449c8198392b0f95781231))
+
 ## [1.3.2](https://github.com/asepharyana/mcpedia/compare/v1.3.1...v1.3.2) (2026-10-18)
 
 
