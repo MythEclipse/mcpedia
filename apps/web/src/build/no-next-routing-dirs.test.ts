@@ -276,6 +276,24 @@ describe("the deploy path invokes no Next tooling", () => {
 		expect(ci).toContain("infra/systemd/*.service")
 		expect(ci).toContain("infra/systemd/launchers/*.sh")
 
+		// The staging copy must CLEAR the host directory first, and must use the
+		// `src/.` form.
+		//
+		// `scp -r systemd-staging /tmp/mcpedia-systemd` copies the source
+		// directory INTO an existing destination rather than replacing it, so
+		// every file lands at /tmp/mcpedia-systemd/systemd-staging/. The host
+		// keeps /tmp between deploys, so this only bites from the SECOND deploy
+		// onward, and it fails PARTIALLY: the stale flat units from the previous
+		// deploy still satisfy the unit preflight, so only the launcher check
+		// fails — and it failed for real on 2026-10-18 with exactly that
+		// signature ("missing /tmp/mcpedia-systemd/mcpedia-api.sh"), because the
+		// launcher was also newly renamed by the infra/ consolidation.
+		expect(ci).toContain("rm -rf /tmp/mcpedia-systemd")
+		expect(ci).toContain("systemd-staging/. ")
+		expect(ci).not.toMatch(
+			/scp[^\n]*systemd-staging\s+"\$VPS_USER@\$VPS_HOST:\/tmp\/mcpedia-systemd"/,
+		)
+
 		// The root-level shapes that used to carry these must not come back: a
 		// dot-prefixed launcher beside package.json, a deploy/ tree, and the
 		// retired Nix entrypoints.

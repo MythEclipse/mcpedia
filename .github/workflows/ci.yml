@@ -299,7 +299,24 @@ jobs:
           # leaves the repo layout free to be organised by kind.
           cp infra/systemd/*.service systemd-staging/
           cp infra/systemd/launchers/*.sh systemd-staging/
-          scp -q -r systemd-staging "$VPS_USER@$VPS_HOST:/tmp/mcpedia-systemd"
+          # CLEAR THE DESTINATION FIRST, exactly as the payload above does.
+          #
+          # `scp -r systemd-staging /tmp/mcpedia-systemd` does NOT mean "make the
+          # destination look like this directory" — when the destination already
+          # exists, scp copies the SOURCE directory INTO it, producing
+          # /tmp/mcpedia-systemd/systemd-staging/*. The host keeps its /tmp across
+          # deploys, so from the second deploy onward every file landed one level
+          # down.
+          #
+          # That failure is worse than a plain miss because it is PARTIAL: the
+          # stale flat files from the previous deploy were still in place, so the
+          # unit check found its .service and passed, and only the launcher check
+          # failed — on a launcher whose NAME had changed, so nothing caught it
+          # until this deploy. Removing the directory makes the deploy's inputs
+          # exactly what this run produced, which is the only way its preflight
+          # checks mean anything.
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" 'rm -rf /tmp/mcpedia-systemd && mkdir -p /tmp/mcpedia-systemd'
+          scp -q -r systemd-staging/. "$VPS_USER@$VPS_HOST:/tmp/mcpedia-systemd/"
 
       - name: Deploy
         env:
