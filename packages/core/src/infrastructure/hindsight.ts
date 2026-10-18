@@ -84,7 +84,30 @@ const DEFAULT_BASE_URL = "http://127.0.0.1:8890"
  * is a read and must not hold a request open behind a slow embedding.
  */
 const RETAIN_TIMEOUT_MS = 120_000
-const RECALL_TIMEOUT_MS = 30_000
+
+/**
+ * Recall's ceiling, and the one number that decides whether a degraded search is
+ * usable.
+ *
+ * 30s was the obvious "generous but bounded" choice, and it made the fallback
+ * WORSE than the failure it replaced. Measured in production while hindsight's
+ * embedding provider was rate-limited: hindsight does not fast-fail a 429 — it
+ * HANGS while the provider client retries internally — so every search waited
+ * the full timeout before serving Postgres results. A 30-second search is not
+ * a working search, and the page showed "Searching…" the whole time.
+ *
+ * The ceiling is now the reader's patience rather than the provider's. A healthy
+ * recall on this corpus is well under a second (it is a local service doing a
+ * vector lookup), so 2.5s is generous for the good path and bounds the bad path
+ * to a delay a person will actually wait through. Slower than this and the
+ * reader has already typed a narrower query.
+ *
+ * This is a deliberate trade: a genuinely slow-but-working hindsight now falls
+ * back to full-text where a 30s ceiling would have waited for it. Full-text is a
+ * real answer, and a slow one is not.
+ */
+const RECALL_TIMEOUT_MS = 2_500
+
 /**
  * Reflect is an LLM call plus a corpus-wide retrieval, so it needs more headroom
  * than either. Measured at ~6s on a three-document bank, but the context it
@@ -92,6 +115,15 @@ const RECALL_TIMEOUT_MS = 30_000
  * the ceiling is set well above what has been observed rather than at it.
  */
 const REFLECT_TIMEOUT_MS = 300_000
+
+/**
+ * The read-only bank/metadata calls, which are not on a reader's critical path.
+ *
+ * `ensureBank` runs once per process behind a memo, and `documentTags` runs
+ * before a delete — neither is a per-keystroke call, so they keep the generous
+ * ceiling. Only `recall`, which a reader waits on, gets the short one.
+ */
+const METADATA_TIMEOUT_MS = 30_000
 
 /**
  * Read hindsight's location PER CALL rather than at module scope.
@@ -578,7 +610,7 @@ async function documentTags(slug: string): Promise<string[] | null> {
 		const doc = await call<{ tags?: string[] }>(
 			`/v1/default/banks/${bankId()}/documents/${encodeURIComponent(slug)}`,
 			{ method: "GET" },
-			RECALL_TIMEOUT_MS,
+			METADATA_TIMEOUT_MS,
 		)
 		return doc.tags ?? []
 	} catch {
@@ -614,7 +646,7 @@ export async function forgetDocument(slug: string): Promise<void> {
 		{
 			method: "DELETE",
 		},
-		RECALL_TIMEOUT_MS,
+		METADATA_TIMEOUT_MS,
 	)
 }
 
@@ -728,7 +760,7 @@ export async function consolidate(): Promise<{ operationId: string }> {
 			method: "POST",
 			body: JSON.stringify({ observation_scopes: [[NAMESPACE_TAG]] }),
 		},
-		RECALL_TIMEOUT_MS,
+		METADATA_TIMEOUT_MS,
 	)
 	return { operationId: response.operation_id ?? "" }
 }
@@ -781,7 +813,7 @@ export async function recallDocumentFacts(
 	}>(
 		`/v1/default/banks/${bankId()}/documents/${encodeURIComponent(slug)}/chunks`,
 		{ method: "GET" },
-		RECALL_TIMEOUT_MS,
+		METADATA_TIMEOUT_MS,
 	)
 	return (response.items ?? [])
 		.map((c) => ({

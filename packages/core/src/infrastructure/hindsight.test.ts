@@ -471,6 +471,57 @@ describe("hindsight adapter", () => {
 			const outcome = await adapter.recallForTest("nothingmatchesthis")
 			expect(outcome).toEqual({ hits: [], degraded: false })
 		})
+
+		it("bounds the interactive recall far below the provider's retry window", async () => {
+			// The number that decides whether a degraded search is USABLE.
+			//
+			// 30s was the obvious "generous but bounded" ceiling, and in
+			// production it made the fallback worse than the failure it replaced:
+			// hindsight does not fast-fail a rate-limited embedding — it HANGS
+			// while the provider client retries — so every search waited the full
+			// timeout before serving Postgres results, and the page sat on
+			// "Searching…" for half a minute. Measured: 30.3s, 16.4s, 30.3s across
+			// three production queries.
+			//
+			// The abort deadline is observable without waiting for it: the
+			// adapter aborts via AbortController + setTimeout, and the signal it
+			// hands to fetch is the one that will fire. Racing a real 2.5s timer
+			// would make this test slow and flaky; asserting the configured
+			// ceiling is deterministic and is the value that regressed.
+			const source = await import("node:fs").then((fs) =>
+				fs.readFileSync(new URL("./hindsight.ts", import.meta.url), "utf8"),
+			)
+			const match = source.match(/const RECALL_TIMEOUT_MS = ([\d_]+)/)
+			expect(match, "RECALL_TIMEOUT_MS is gone").not.toBeNull()
+			const ceiling = Number((match?.[1] ?? "0").replace(/_/g, ""))
+
+			// A reader waits on this. Anything approaching the 30s the provider's
+			// own retry loop can consume is not a search, it is a hang.
+			expect(ceiling, "recall holds a reader too long").toBeLessThanOrEqual(
+				5_000,
+			)
+			// And it must not be so tight that a healthy local lookup gets cut off.
+			expect(ceiling, "too tight for a healthy recall").toBeGreaterThanOrEqual(
+				1_000,
+			)
+		})
+
+		it("keeps the generous ceiling for calls nobody is waiting on", async () => {
+			// The inverse, so "tighten recall" cannot be satisfied by tightening
+			// everything: ensureBank runs once per process behind a memo and
+			// documentTags runs before a delete. Neither is a per-keystroke call,
+			// and a 2.5s ceiling on either would turn a slow bank into a failed
+			// delete.
+			const source = await import("node:fs").then((fs) =>
+				fs.readFileSync(new URL("./hindsight.ts", import.meta.url), "utf8"),
+			)
+			const metadata = source.match(/const METADATA_TIMEOUT_MS = ([\d_]+)/)?.[1]
+			const ceiling = Number((metadata ?? "0").replace(/_/g, ""))
+			expect(
+				ceiling,
+				"the metadata ceiling must stay generous",
+			).toBeGreaterThanOrEqual(30_000)
+		})
 	})
 
 	describe("reflect", () => {
