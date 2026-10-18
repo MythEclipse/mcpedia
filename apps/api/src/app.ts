@@ -9,7 +9,6 @@ import { RPCHandler } from "@orpc/server/fetch"
 import type { Context as HonoContext } from "hono"
 import { Hono } from "hono"
 import { getAuth } from "./auth"
-import { DASHBOARD_HTML } from "./dashboard"
 import type { ApiContext } from "./presentation/context"
 import { createHttpMiddleware } from "./presentation/http-middleware"
 import { appRouter } from "./presentation/routers"
@@ -283,8 +282,23 @@ export async function createApp(deps?: ApiDeps): Promise<Hono> {
 		return c.json({ ok: true, jobId: "fake", kind: "doc", relPath })
 	})
 
-	// --- Phase 7: observability dashboard (public) ---
-	app.get("/dashboard", (c) => c.html(DASHBOARD_HTML))
+	// NOTE: there is deliberately NO `/dashboard` page served from this process.
+	//
+	// There used to be — a self-contained HTML string in ./dashboard with a queue
+	// panel, a service panel and an MCP search box. It was public, and it named
+	// the product, the protocol and BullMQ on a site whose readers are meant to
+	// see a wiki. Worse, its inline script never parsed: the escape helper's map
+	// literal had been written with three consecutive `"` characters (a `\"\"\"`
+	// sequence that a template literal emits VERBATIM, since a template literal
+	// needs no escaping for `"`), so the browser failed at parse time and the
+	// queue, metrics and search panels had never populated. A branded page that
+	// looks live and does nothing.
+	//
+	// It is gone rather than restyled. `/dashboard` is a WIKI page now: the SPA
+	// owns that URL (`apps/web/src/routes.tsx`, "Site overview" — pages, sections,
+	// tags, recent edits, plus the queue strip an operator wants). The Caddyfile
+	// in asepharyana/infra no longer proxies /dashboard here, so the catch-all
+	// serves the SPA instead. The API answering this path would shadow it.
 
 	// oRPC RPC surface. Read-only procedures are public; the four state-changing
 	// ones are gated by x-webhook-secret in the presentation layer's

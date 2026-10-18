@@ -47,7 +47,7 @@ mcpedia/
 │   ├── web/          # Vite SPA (:4016) — dark-mode UI, hierarchical doc tree, TOC, CRUD, exports
 │   ├── mcp/          # MCP server (stdio + Streamable HTTP on :4021) — 18 tools + 4 resources
 │   ├── mcp-client/   # Interactive MCP CLI REPL, one-shot command runner, and TypeScript client SDK
-│   ├── api/          # Hono + oRPC API on :4020, git-sync webhooks, Prometheus metrics, dashboard
+│   ├── api/          # Hono + oRPC API on :4020, git-sync webhooks, Prometheus metrics
 │   └── worker/       # Long-running BullMQ worker for async indexing jobs
 ├── packages/
 │   ├── core/         # Domain + use cases + infrastructure: the business logic (the only DB writer)
@@ -185,7 +185,6 @@ an unauthenticated caller cannot probe a schema it has no right to see.
 - `POST /hooks/reindex` — Enqueues a full-corpus reindex (ideal for Git push webhooks). Requires auth.
 - `POST /hooks/index?slug=<slug>` — Enqueues a single-document reindex. Requires auth.
 - `GET /metrics` — Prometheus exposition: `mcpedia_uptime_seconds`, `mcpedia_queue_jobs{state=...}` (verified live against :4020).
-- `GET /dashboard` — Standalone real-time queue dashboard, public.
 - `GET /health` — Liveness: the process is up. Deliberately does **not** touch Postgres or Redis, so a slow database cannot cause a restart loop that turns a degradation into an outage.
 - `GET /healthz` — Alias of `/health`.
 - `GET /ready` — Readiness: probes Postgres and Redis and returns 503 if either fails. This is the one to point an orchestrator at.

@@ -2,7 +2,6 @@ import type { Hono } from "hono"
 import { beforeEach, expect, test, vi } from "vitest"
 import type { ApiDeps } from "../src/app"
 import { createApp } from "../src/app"
-import { DASHBOARD_HTML } from "../src/dashboard"
 
 // -------------------------------------------------------------------
 // A fake queue that records calls and returns canned counts. Injected into
@@ -289,16 +288,20 @@ test("POST /hooks/index with wrong secret -> 401", async () => {
 	expect(res.status).toBe(401)
 })
 
-test("GET /dashboard returns the self-contained HTML", async () => {
+test("the API serves no HTML dashboard — /dashboard belongs to the SPA", async () => {
+	// This path used to answer with a self-contained HTML page (./dashboard) that
+	// named the product and the protocol. That page is deleted, and this asserts
+	// the API does not answer it at all, so the Caddyfile's catch-all can serve
+	// the SPA's own /dashboard route.
+	//
+	// The status rather than the absence of a string is the assertion that
+	// matters: a re-added page would most likely come back under this exact path,
+	// because it is the path the old one lived at and the path the SPA claims.
 	const app = await createApp(makeDeps(SECRET, fakeQueue({})))
 	const res = await app.request("/dashboard")
-	expect(res.status).toBe(200)
-	const html = await res.text()
-	// The dashboard HTML is a module-level constant — assert the route serves it
-	// verbatim and contains the key landmarks.
-	expect(html).toContain("MCPedia Dashboard")
-	expect(html).toContain("Index Queue (BullMQ)")
-	expect(html).toContain(DASHBOARD_HTML.slice(0, 100))
+	expect(res.status).toBe(404)
+	const contentType = res.headers.get("content-type") ?? ""
+	expect(contentType).not.toContain("text/html")
 })
 
 // --- CRUD procedures over oRPC (auth-gated) ---
