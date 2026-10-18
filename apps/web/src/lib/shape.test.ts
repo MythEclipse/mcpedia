@@ -17,6 +17,7 @@ import {
 	normalizeSearchHits,
 	parseSearchMode,
 	readingTime,
+	sanitizeSnippet,
 	sectionMeta,
 	sectionsOrDefaults,
 	slugToTitle,
@@ -336,6 +337,63 @@ describe("parseSearchMode", () => {
 		expect(parseSearchMode(null)).toBe("hybrid")
 		expect(parseSearchMode("nonsense")).toBe("hybrid")
 		expect(parseSearchMode("")).toBe("hybrid")
+	})
+})
+
+describe("sanitizeSnippet", () => {
+	// The snippet reaches `dangerouslySetInnerHTML` in search.tsx and
+	// CommandMenu.tsx, so this function is the ONLY thing between a document
+	// body and script execution. It had no test at all, which is how the
+	// `.replace()` chain bug documented on the function survived: escaping `>`
+	// unconditionally turned `<mark>x</mark>` into `<mark&gt;x</mark&gt;`, the
+	// browser rendered the literal text, and highlighting silently stopped
+	// working while every result still looked "found".
+
+	// The lexical fallback (packages/core lexical-search.ts) and hindsight's
+	// semantic path both land here, and Postgres documents that `ts_headline`
+	// output is NOT safe for direct page inclusion: it strips "some simple XML
+	// tags", not all HTML. A document body is attacker-influenced content.
+
+	test("preserves the highlight tags the search path depends on", () => {
+		expect(sanitizeSnippet("<mark>RSA</mark> padding")).toBe(
+			"<mark>RSA</mark> padding",
+		)
+	})
+
+	test("neutralises a script tag smuggled in through a document body", () => {
+		// ts_headline echoes the body verbatim, so this is exactly the string a
+		// published page containing `<script>` would put in a snippet.
+		const out = sanitizeSnippet("body <script>alert(1)</script> tail")
+		expect(out).not.toContain("<script>")
+		expect(out).toBe("body &lt;script&gt;alert(1)&lt;/script&gt; tail")
+	})
+
+	test("neutralises an img onerror payload", () => {
+		const out = sanitizeSnippet('<img src=x onerror="alert(1)">')
+		expect(out).not.toContain("<img")
+		expect(out).toBe('&lt;img src=x onerror="alert(1)"&gt;')
+	})
+
+	test("a payload cannot escape by embedding a mark tag", () => {
+		// The dangerous shape: the attacker supplies their own `<mark>` to make
+		// the splitter emit a "trusted" tag, then rides the ESCAPED side. The
+		// split only ever emits the literal four tags, and there is no path by
+		// which an arbitrary tag survives.
+		const out = sanitizeSnippet("<mark><script>alert(1)</script></mark>")
+		expect(out).toBe("<mark>&lt;script&gt;alert(1)&lt;/script&gt;</mark>")
+	})
+
+	test("does not double-escape entities ts_headline already produced", () => {
+		// `&amp;` and numeric entities must survive, or a document containing
+		// "&amp;" renders as "&amp;amp;". This is why the amp replace is
+		// negative-lookahead rather than unconditional.
+		expect(sanitizeSnippet("a &amp; b &#39; c &#x27;")).toBe(
+			"a &amp; b &#39; c &#x27;",
+		)
+	})
+
+	test("escapes a bare ampersand that is not an entity", () => {
+		expect(sanitizeSnippet("Tom & Jerry")).toBe("Tom &amp; Jerry")
 	})
 })
 
