@@ -1,3 +1,10 @@
+## [1.2.9](https://github.com/asepharyana/mcpedia/compare/v1.2.8...v1.2.9) (2026-10-18)
+
+
+### Bug Fixes
+
+* **web:** sidebar headings use the section registry, not the title-cased id ([0d3781a](https://github.com/asepharyana/mcpedia/commit/0d3781a6c595bc0b6a1b1fd59326feb5506f488d))
+
 ## [1.2.8](https://github.com/asepharyana/mcpedia/compare/v1.2.7...v1.2.8) (2026-10-18)
 
 ## [1.2.7](https://github.com/asepharyana/mcpedia/compare/v1.2.6...v1.2.7) (2026-10-18)
