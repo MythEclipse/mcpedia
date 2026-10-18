@@ -23,14 +23,26 @@ Type=simple
 WorkingDirectory=/opt/mcpedia-web/current
 Environment=PORT=4016
 Environment=NODE_ENV=production
-# Same rule as the other three mcpedia units: secrets via bws-exec, and no
-# EnvironmentFile anywhere. A static SPA needs no secret, but the rule is worth
-# more than the exception -- one convention means the next unit authored here
-# cannot quietly reintroduce the deleted-.env dependency.
+# DELIBERATELY NOT WRAPPED IN bws-exec, unlike the other three units.
 #
-# The app name is `mcpedia`, not `mcpedia-web`: all mcpedia secrets carry the
-# `mcpedia_` prefix and bws-exec keys off that prefix.
-ExecStart=/usr/local/bin/bws-exec mcpedia /opt/mcpedia-web/bin/mcpedia-web
+# It was, and that cost a deploy. The rationale was consistency — "one convention
+# means the next unit authored here cannot quietly reintroduce the deleted-.env
+# dependency" — but the sentence above it already said a static SPA needs no
+# secret, and a convention that buys nothing is not worth an availability
+# dependency.
+#
+# What it bought was a failure mode. Every deploy restarts all four units at
+# once, and each one called `bws secret list` against the same Bitwarden project
+# at the same instant. Bitwarden rate-limited it, bws-env retried on its 2s
+# backoff, and this unit sat dead for the ~24s that took. The health probe's
+# budget was 10s, so the deploy declared the release unhealthy and rolled it
+# back — a static file server taken down by an API call it never used.
+#
+# serve.mjs reads exactly two variables, PORT and HOST (apps/web/serve.mjs:38),
+# and this unit sets both. So the dependency is removed rather than the probe
+# widened FOR THIS UNIT. The three units that genuinely need secrets keep
+# bws-exec, and the EnvironmentFile ban still holds everywhere.
+ExecStart=/opt/mcpedia-web/bin/mcpedia-web
 Restart=always
 RestartSec=3
 User=code

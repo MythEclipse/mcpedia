@@ -252,14 +252,32 @@ done
 sudo systemctl restart "${UNITS[@]}"
 
 # ── 6. Health ───────────────────────────────────────────────────────────────
-# `systemctl restart` already waited for the units to be up; the HTTP probes
-# pace themselves (curl --retry) rather than sleeping on a guessed delay.
+# The probes pace themselves (curl --retry) rather than sleeping on a guessed
+# delay, and the budget must cover the SLOWEST legitimate startup.
+#
+# It did not, and that rolled back a healthy release. The units start through
+# `bws-exec`, which fetches the environment from Bitwarden before exec'ing the
+# launcher, and bws-env's own constants allow 4 attempts with a 20s timeout and a
+# 2s backoff — up to ~88s before it gives up. Bitwarden rate-limited the four
+# simultaneous restarts, one unit took ~24s, and the old 10s budget
+# (`--retry 10 --retry-delay 1`) declared the release dead. The rollback then
+# worked correctly, which is why this surfaced as a failed deploy and not an
+# outage — but the probe was measuring Bitwarden's latency, not the release.
+#
+# `systemctl restart` returning is NOT the signal: these units are Type=simple,
+# so systemd reports them started the moment fork+exec succeeds — before the
+# secret fetch, before the port binds. That is exactly the window being probed.
+#
+# So the budget is derived from bws-env's documented worst case, not guessed:
+# --retry-max-time bounds the TOTAL, so a genuinely dead service still fails in
+# 120s rather than hanging the job, while a slow-but-working one passes.
 fail=0
+RETRY_BUDGET="${RETRY_BUDGET:-120}"
 probe() {
   local url="$1" want="$2" code
   code=$(curl -s -o /dev/null -w '%{http_code}' \
-    --retry 10 --retry-connrefused --retry-delay 1 --retry-all-errors \
-    --max-time 15 "$url" || echo 000)
+    --retry 60 --retry-delay 2 --retry-connrefused --retry-all-errors \
+    --retry-max-time "$RETRY_BUDGET" --max-time 15 "$url" || echo 000)
   if grep -qw -- "$code" <<< "$want"; then
     echo "OK   $url -> $code"
   else

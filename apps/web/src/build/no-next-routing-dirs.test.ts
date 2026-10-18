@@ -366,4 +366,82 @@ describe("the deploy path invokes no Next tooling", () => {
 			)
 		}
 	})
+
+	it("does not gate the static SPA on a secret store it never reads", () => {
+		// The web unit served a 200 through bws-exec, which fetches the whole
+		// environment from Bitwarden before exec'ing the launcher — and
+		// apps/web/serve.mjs reads exactly two variables, PORT and HOST, both of
+		// which the unit sets itself.
+		//
+		// That dependency rolled back a healthy deploy: a deploy restarts all
+		// four units at once, each called `bws secret list` against the same
+		// project in the same second, Bitwarden rate-limited it, and the web
+		// unit sat dead for the ~24s bws-env spent retrying. The probe budget was
+		// 10s, so the release was declared unhealthy and rolled back.
+		//
+		// The general rule this pins: a unit must not depend on a
+		// process-startup secret fetch it does not use. Availability costs are
+		// real even when the dependency is "consistent".
+		const web = readFileSync(
+			join(REPO, "infra/systemd/mcpedia-web.service"),
+			"utf8",
+		)
+		// Comment-stripped: the unit explains this decision in prose, and that
+		// explanation has to name bws-exec to be intelligible. Asserting on the
+		// raw text would forbid documenting the rule.
+		const webExec = executableLines(web)
+		expect(
+			webExec,
+			"the SPA unit must not be wrapped in bws-exec",
+		).not.toContain("bws-exec")
+		expect(webExec).toContain("ExecStart=/opt/mcpedia-web/bin/mcpedia-web")
+
+		// And the inverse, so this cannot be "fixed" by unwrapping the units that
+		// genuinely need secrets: every other unit keeps its fetch.
+		for (const unit of ["mcpedia-api", "mcpedia-mcp", "mcpedia-worker"]) {
+			const body = readFileSync(
+				join(REPO, "infra/systemd", `${unit}.service`),
+				"utf8",
+			)
+			const svc = unit.replace("mcpedia-", "")
+			expect(body, `${unit} must fetch its secrets`).toContain(
+				`ExecStart=/usr/local/bin/bws-exec mcpedia /opt/mcpedia-${svc}/bin/${unit}`,
+			)
+		}
+	})
+
+	it("gives the health probe a budget longer than a secret fetch can take", () => {
+		// The probe's budget must cover the slowest legitimate startup, and the
+		// slowest legitimate startup is bounded by bws-env's own retry constants:
+		// BWS_RETRIES=4 x (BWS_TIMEOUT=20s + BWS_BACKOFF=2s) = ~88s, plus boot.
+		//
+		// The old form was `--retry 10 --retry-delay 1`, i.e. ~10s, which fails
+		// against a service that is merely slow to fetch its environment. Two
+		// things make that unrecoverable rather than transient: the units are
+		// Type=simple, so `systemctl restart` returns as soon as fork+exec
+		// succeeds (before the fetch and before the port binds), and a failed
+		// probe rolls the release back.
+		const deploy = readFileSync(deployScript(), "utf8")
+		// Comment-stripped: the script documents this budget in prose, and that
+		// explanation names the flag. Asserting on raw text would let the flag be
+		// deleted while the comment kept the check green — which is exactly what
+		// the first version of this test did.
+		const deployExec = executableLines(deploy)
+		expect(
+			deployExec,
+			"the health probe must bound its TOTAL wait, not just its attempt count",
+		).toContain("--retry-max-time")
+
+		const budget = Number(deploy.match(/RETRY_BUDGET:-(\d+)/)?.[1] ?? 0)
+		expect(
+			budget,
+			"RETRY_BUDGET must be readable from the script",
+		).toBeGreaterThan(0)
+		// 88s is bws-env's worst case; the budget has to clear it with room for
+		// process boot, or a slow Bitwarden turns into a rolled-back deploy.
+		expect(
+			budget,
+			`RETRY_BUDGET=${budget}s is shorter than bws-env's ~88s worst case`,
+		).toBeGreaterThan(88)
+	})
 })
