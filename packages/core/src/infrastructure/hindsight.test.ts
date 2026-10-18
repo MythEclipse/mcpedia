@@ -501,6 +501,61 @@ describe("hindsight adapter", () => {
 			expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("503"))
 		})
 
+		it("swallows a failed bank creation even though nothing awaits it", async () => {
+			// `void ensureBank()` in recall makes the error-swallowing INSIDE
+			// ensureBank load-bearing. Before, a rejection was absorbed by the
+			// caller's `await` in a try/catch or surfaced to it; now the promise is
+			// floated, so an unhandled rejection would take the process down on a
+			// perfectly ordinary condition — a hindsight that is briefly down.
+			//
+			// This asserts the contract the `void` depends on: a bank call that
+			// REJECTS must still leave recall able to answer, and must not
+			// surface as an unhandled rejection.
+			const rejections: unknown[] = []
+			const onRejection = (reason: unknown) => rejections.push(reason)
+			process.on("unhandledRejection", onRejection)
+			// NOT removed in a `finally` around the await. Node reports an
+			// unhandled rejection at the end of the turn in which it went
+			// unhandled, which is AFTER `recallForTest` resolves — so detaching on
+			// the way out records nothing and the assertion passes vacuously.
+			// Tried first: the suite only failed because vitest has its own
+			// run-level detector, which is not this test doing its job.
+			//
+			// `setImmediate` is a real event-loop boundary (the check phase), which
+			// is where the report is delivered. It is a yield, not a delay — no
+			// sleep.
+			try {
+				vi.stubGlobal(
+					"fetch",
+					vi.fn(async (url: string) => {
+						if (
+							String(url).includes("/banks/") &&
+							!String(url).includes("/memories")
+						) {
+							throw new Error("bank creation exploded")
+						}
+						return {
+							ok: true,
+							status: 200,
+							json: async () => ({ results: [] }),
+							text: async () => "{}",
+						}
+					}),
+				)
+				const outcome = await adapter.recallForTest("RSA")
+				// The recall still ran and answered from hindsight.
+				expect(outcome).toEqual({ hits: [], degraded: false })
+
+				await new Promise((resolve) => setImmediate(resolve))
+				expect(
+					rejections,
+					"the floated bank promise rejected unhandled",
+				).toEqual([])
+			} finally {
+				process.off("unhandledRejection", onRejection)
+			}
+		})
+
 		it("does not wait for the bank before searching", async () => {
 			// The first search after a deploy must not pay for `ensureBank`.
 			//
