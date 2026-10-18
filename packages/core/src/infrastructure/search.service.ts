@@ -21,6 +21,7 @@ export {
 	hybridSearch,
 	keywordSearch,
 	recallDocumentFacts,
+	recallForTest,
 	reflect,
 	semanticSearch,
 } from "./hindsight.ts"

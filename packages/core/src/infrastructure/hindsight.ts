@@ -71,6 +71,7 @@ import type { DocumentMeta, SearchHit } from "@mcpedia/types"
 import { and, eq, inArray } from "drizzle-orm"
 import type { IndexingPort } from "../domain/index.js"
 import { toMeta } from "../row-map.ts"
+import { lexicalSearch } from "./lexical-search.ts"
 
 /**
  * The loopback address the systemd unit binds. Overridable so a containerised
@@ -388,34 +389,66 @@ function slugOf(result: RecallResult): string | null {
  *
  * `rank` is hindsight's fused score, not a rank position, so a caller sorting by
  * rank still gets the order hindsight intended.
+ *
+ * ## WHY IT FALLS BACK TO POSTGRES
+ *
+ * hindsight embeds the query before it can rank anything, so an embedding
+ * provider failure takes down every mode at once — 429 quota, billing, an
+ * outage. That is a search engine failing because of something that is not the
+ * corpus, and the corpus is right here in Postgres with a maintained `tsvector`
+ * column. So a failure here degrades to full-text search rather than returning
+ * an error.
+ *
+ * The fallback is REPORTED (`degraded` on the result set) and logged, not
+ * silent. A degraded search that looks like a healthy one is indistinguishable
+ * from a working semantic engine that has quietly become a substring matcher.
  */
-async function recall(q: string, limit: number): Promise<SearchHit[]> {
+export interface RecallOutcome {
+	hits: SearchHit[]
+	/** True when hindsight could not answer and Postgres full-text did. */
+	degraded: boolean
+}
+
+async function recall(q: string, limit: number): Promise<RecallOutcome> {
 	const query = q.trim()
-	if (!query) return []
+	if (!query) return { hits: [], degraded: false }
 
 	await ensureBank()
-	const response = await call<RecallResponse>(
-		`/v1/default/banks/${bankId()}/memories/recall`,
-		{
-			method: "POST",
-			body: JSON.stringify({
-				query,
-				// `types: ["world"]` is load-bearing, not a convenience filter:
-				// without it the top hits are observations, which carry no
-				// metadata and therefore cannot be linked. See finding 2.
-				types: ["world"],
-				// `all_strict`, not the `any` default: this bank may be shared,
-				// and `any` also matches UNTAGGED rows. The document tags below
-				// the namespace tag are per-document and differ everywhere, so
-				// the only tag common to the whole corpus is the namespace one,
-				// and it has to exclude untagged rows to keep another writer's
-				// facts out of the ranking. See finding 4.
-				tags: [NAMESPACE_TAG],
-				tags_match: "all_strict",
-			}),
-		},
-		RECALL_TIMEOUT_MS,
-	)
+	let response: RecallResponse
+	try {
+		response = await call<RecallResponse>(
+			`/v1/default/banks/${bankId()}/memories/recall`,
+			{
+				method: "POST",
+				body: JSON.stringify({
+					query,
+					// `types: ["world"]` is load-bearing, not a convenience filter:
+					// without it the top hits are observations, which carry no
+					// metadata and therefore cannot be linked. See finding 2.
+					types: ["world"],
+					// `all_strict`, not the `any` default: this bank may be shared,
+					// and `any` also matches UNTAGGED rows. The document tags below
+					// the namespace tag are per-document and differ everywhere, so
+					// the only tag common to the whole corpus is the namespace one,
+					// and it has to exclude untagged rows to keep another writer's
+					// facts out of the ranking. See finding 4.
+					tags: [NAMESPACE_TAG],
+					tags_match: "all_strict",
+				}),
+			},
+			RECALL_TIMEOUT_MS,
+		)
+	} catch (error) {
+		// The reason matters to an operator: a 429 is a quota, a refused
+		// connection is a dead service, an abort is a hang. Never swallowed —
+		// the degraded flag alone would not say which.
+		console.error(
+			`hindsight recall failed, serving Postgres full-text instead: ${
+				(error as Error).message
+			}`,
+		)
+		return { hits: await lexicalSearch(query, limit), degraded: true }
+	}
 
 	const best = new Map<string, { result: RecallResult; rank: number }>()
 	for (const [i, result] of (response.results ?? []).entries()) {
@@ -429,7 +462,11 @@ async function recall(q: string, limit: number): Promise<SearchHit[]> {
 		const prev = best.get(slug)
 		if (!prev || rank > prev.rank) best.set(slug, { result, rank })
 	}
-	if (best.size === 0) return []
+	// An EMPTY result is a real answer, not a failure: a query matching nothing
+	// should return nothing rather than silently re-run against a different
+	// engine whose ranking the caller is not being told about. Only an ERROR
+	// falls back.
+	if (best.size === 0) return { hits: [], degraded: false }
 
 	const ordered = [...best.values()]
 		.sort((a, b) => b.rank - a.rank)
@@ -441,19 +478,32 @@ async function recall(q: string, limit: number): Promise<SearchHit[]> {
 	const metas = await loadMetas([...best.keys()])
 	const bySlug = new Map(metas.map((m) => [m.slug, m]))
 
-	return ordered.flatMap(({ result, rank }) => {
-		const doc = bySlug.get(slugOf(result) ?? "")
-		if (!doc) return []
-		return [{ doc, rank, snippet: excerpt(result.text) } satisfies SearchHit]
-	})
+	return {
+		hits: ordered.flatMap(({ result, rank }) => {
+			const doc = bySlug.get(slugOf(result) ?? "")
+			if (!doc) return []
+			return [{ doc, rank, snippet: excerpt(result.text) } satisfies SearchHit]
+		}),
+		degraded: false,
+	}
 }
 
-/** Document-level search: the mode every caller should want. */
+/**
+ * Document-level search: the mode every caller should want.
+ *
+ * Returns `SearchHit[]` rather than the internal `RecallOutcome` so the six
+ * existing call sites — two routers, three MCP tools, the client SDK — keep
+ * working unchanged. Degradation is logged by `recall` (level: error, with the
+ * upstream reason) rather than plumbed through every signature, because the
+ * caller that would act on it is a human reading the journal.
+ *
+ * `recallForTest` below exposes the outcome for tests.
+ */
 export async function hybridSearch(
 	q: string,
 	limit = 10,
 ): Promise<SearchHit[]> {
-	return recall(q, limit)
+	return (await recall(q, limit)).hits
 }
 
 /**
@@ -466,12 +516,16 @@ export async function hybridSearch(
  * would break them for no gain — the ranking is simply hindsight's, which is
  * already hybrid. This is a deliberate behaviour change: "keyword" now means
  * "ranked by a fused score that weights keywords", not "ranked by ts_rank".
+ *
+ * It is, however, the mode closest to the Postgres fallback's actual behaviour,
+ * so when hindsight is unavailable this is the one that degrades most
+ * convincingly.
  */
 export async function keywordSearch(
 	q: string,
 	limit = 20,
 ): Promise<SearchHit[]> {
-	return recall(q, limit)
+	return (await recall(q, limit)).hits
 }
 
 /**
@@ -479,12 +533,29 @@ export async function keywordSearch(
  *
  * Same delegation and the same caveat as `keywordSearch`: hindsight fuses its
  * arms internally and exposes no way to run one alone, so this returns the fused
- * ranking rather than a narrower one.
+ * ranking rather than a narrower one. This is also the mode that suffers MOST
+ * from the Postgres fallback — full-text cannot find "the same idea in different
+ * words" at all — which is why the degradation is logged rather than hidden.
  */
 export async function semanticSearch(
 	q: string,
 	limit = 10,
 ): Promise<SearchHit[]> {
+	return (await recall(q, limit)).hits
+}
+
+/**
+ * The recall outcome, INCLUDING whether it degraded.
+ *
+ * Exported for tests and for any future caller that wants to tell a reader their
+ * results are exact-match-only. The public modes above deliberately do not
+ * expose it; this exists so the degraded path is assertable without inventing a
+ * second entry point that bypasses the real one.
+ */
+export async function recallForTest(
+	q: string,
+	limit = 10,
+): Promise<RecallOutcome> {
 	return recall(q, limit)
 }
 

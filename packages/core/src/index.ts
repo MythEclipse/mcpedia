@@ -172,6 +172,7 @@ export {
 	hybridSearch,
 	keywordSearch,
 	recallDocumentFacts,
+	recallForTest,
 	reflect,
 	semanticSearch,
 } from "./infrastructure/search.service"

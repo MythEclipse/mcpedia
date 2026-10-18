@@ -21,7 +21,7 @@
  * right thing — that the service then honours it is the service's contract, and
  * is why the findings are recorded as comments at the top of hindsight.ts too.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const dbMock = {
 	select: vi.fn(),
@@ -50,6 +50,11 @@ function selectReturning(rows: unknown[]) {
 	const chain = {
 		from: () => chain,
 		where: () => chain,
+		// `orderBy` is on the chain because the lexical fallback orders by
+		// ts_rank_cd; the hindsight path never does. A chain missing it fails the
+		// fallback test with a TypeError rather than an assertion, which reads as
+		// "the harness is broken" instead of "the query is wrong".
+		orderBy: () => chain,
 		limit: () => Promise.resolve(rows),
 		// Biome flags `then` because any object with one is thenable by `await`.
 		// That is the point: Drizzle's query builder IS a thenable, and the
@@ -93,12 +98,26 @@ function bodyOf(calls: { init: RequestInit }[], n: number): unknown {
 }
 
 describe("hindsight adapter", () => {
+	/**
+	 * The fallback path logs the upstream reason. Spied rather than asserted by
+	 * silence: a test that only checks `degraded` would pass while the journal
+	 * said nothing about WHY, and the reason is the whole operator value of the
+	 * log line (a 429 quota, a refused connection and an abort need different
+	 * responses).
+	 */
+	let errorSpy: ReturnType<typeof vi.spyOn>
+
 	beforeEach(async () => {
 		vi.resetModules()
 		vi.unstubAllGlobals()
+		errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
 		process.env.HINDSIGHT_API_URL = "http://hs.test"
 		process.env.HINDSIGHT_BANK_ID = "mcpedia-test"
 		adapter = await loadAdapter()
+	})
+
+	afterEach(() => {
+		errorSpy.mockRestore()
 	})
 
 	describe("hindsightIndex", () => {
@@ -391,8 +410,41 @@ describe("hindsight adapter", () => {
 			expect(calls).toHaveLength(0)
 		})
 
-		it("a non-2xx throws so a caller that logs-and-continues is not fooled", async () => {
-			dbMock.select.mockReturnValue(selectReturning([]))
+		it("degrades to Postgres full-text when hindsight fails, and says so", async () => {
+			// The behaviour this replaces: a non-2xx threw, so EVERY search mode
+			// returned 500 at once. One embedding provider having a bad day took
+			// the whole search surface down while the corpus sat in Postgres with
+			// a generated tsvector column nothing read.
+			//
+			// The degraded path must be visible, not silent: `degraded: true` is
+			// what separates "hindsight answered" from "we quietly served
+			// exact-match results instead of semantic ones".
+			// The projection shape, not a flat row: lexicalSearch selects
+			// `{ doc, rank, snippet }` and the rank/snippet columns are computed
+			// in SQL, so the mock stands in for what the database returns.
+			dbMock.select.mockReturnValue(
+				selectReturning([
+					{
+						doc: {
+							id: "ctf/x",
+							slug: "ctf/x",
+							title: "X",
+							type: "guide",
+							section: "ctf",
+							status: "published",
+							author: "",
+							tags: [],
+							path: "ctf/x.md",
+							body: "an RSA writeup",
+							extraFields: {},
+							createdAt: new Date(0),
+							updatedAt: new Date(0),
+						},
+						rank: 0.5,
+						snippet: "an <mark>RSA</mark> writeup",
+					},
+				]),
+			)
 			vi.stubGlobal(
 				"fetch",
 				vi.fn(async () => ({
@@ -403,9 +455,21 @@ describe("hindsight adapter", () => {
 				})),
 			)
 
-			// Every caller of the indexing port logs-and-continues, so a swallowed
-			// error here would mean "indexed nothing, reported success".
-			await expect(adapter.hybridSearch("q")).rejects.toThrow(/503/)
+			const outcome = await adapter.recallForTest("RSA")
+			expect(outcome.degraded, "the caller must be able to tell").toBe(true)
+			// And the reason reaches the log, because "degraded" alone does not
+			// say whether it was a quota, a dead service or a timeout.
+			expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("503"))
+		})
+
+		it("an EMPTY result is not a failure and does not fall back", async () => {
+			// A query matching nothing is a real answer. Re-running it against a
+			// different engine would hide the difference between "hindsight found
+			// no facts for this" and "hindsight is down", and the caller is only
+			// told about the second.
+			stubFetch({ results: [] })
+			const outcome = await adapter.recallForTest("nothingmatchesthis")
+			expect(outcome).toEqual({ hits: [], degraded: false })
 		})
 	})
 
