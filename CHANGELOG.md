@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/asepharyana/mcpedia/compare/v1.4.0...v1.4.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **search:** cap the degraded path at 2.5s, not 30s ([9e2eda5](https://github.com/asepharyana/mcpedia/commit/9e2eda56800f4389d6aacf467b004a16adf05658))
+
 # [1.4.0](https://github.com/asepharyana/mcpedia/compare/v1.3.3...v1.4.0) (2026-10-18)
 
 
