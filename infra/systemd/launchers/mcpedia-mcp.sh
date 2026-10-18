@@ -3,7 +3,7 @@
 #
 # Replaces the Nix wrapper that exec'd /nix/store/.../bun. The entry point
 # builds its server from node:http and @modelcontextprotocol/sdk, so the system
-# Node runs it directly. See .launcher-mcpedia-api.sh for the shared rationale.
+# See mcpedia-api.sh for the shared rationale.
 set -euo pipefail
 
 cd /opt/mcpedia-mcp/current

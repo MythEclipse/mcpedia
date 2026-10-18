@@ -175,6 +175,39 @@ describe("makeCreateDocument", () => {
 		expect(meta.slug).toBe("docs/alpha")
 	})
 
+	test("a disk failure is REPORTED, not just swallowed", async () => {
+		// Degrading quietly is the policy; degrading INVISIBLY is the bug.
+		//
+		// In the deployed layout the mirror's default target is
+		// `/opt/content` — derived from the bundle's own location, and not
+		// writable by the service user. Every write fails, forever, and the
+		// API answers 200 because the row committed. Without a log line the
+		// only symptom is a backup directory that is quietly empty.
+		//
+		// So this asserts the operator can see WHICH path failed and WHY:
+		// the path identifies the document, the errno identifies the cause.
+		const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			deps.mirror.write.mockRejectedValue(
+				new Error("EACCES: permission denied, mkdir '/opt/content'"),
+			)
+			await makeCreateDocument(deps)({
+				slug: "docs/alpha",
+				title: "Alpha",
+				section: "docs",
+				body: "body",
+			})
+
+			expect(spy).toHaveBeenCalledOnce()
+			const logged = spy.mock.calls[0]?.[0] as string
+			expect(logged).toContain("mirror FAILED")
+			expect(logged).toContain("docs/alpha.md")
+			expect(logged).toContain("EACCES")
+		} finally {
+			spy.mockRestore()
+		}
+	})
+
 	test("rejects a slug that would escape the content root", async () => {
 		await expect(
 			makeCreateDocument(deps)({

@@ -3,22 +3,22 @@
     {
       "package": "mcpedia-api",
       "context": ".",
-      "file": "apps/api/Dockerfile"
+      "file": "infra/docker/Dockerfile.api"
     },
     {
       "package": "mcpedia-mcp",
       "context": ".",
-      "file": "apps/mcp/Dockerfile"
+      "file": "infra/docker/Dockerfile.mcp"
     },
     {
       "package": "mcpedia-worker",
       "context": ".",
-      "file": "apps/worker/Dockerfile"
+      "file": "infra/docker/Dockerfile.worker"
     },
     {
       "package": "mcpedia-web",
       "context": ".",
-      "file": "apps/web/Dockerfile"
+      "file": "infra/docker/Dockerfile.web"
     }
   ]
 }

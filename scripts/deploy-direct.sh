@@ -149,10 +149,16 @@ done
 # the host and every mcpedia unit died with "Failed to load environment files" /
 # result 'resources', before ever reaching its launcher.
 #
-# Shipping the units in deploy/systemd/ and installing them here means the
-# definition a service runs under is reviewable, diffable and rolled back with
-# the code, instead of being host state that survives every deploy unchanged. A
-# unit fix that lives only in /etc cannot be reviewed and will be lost.
+# Shipping the units in the repo (infra/systemd/) and installing them here means
+# the definition a service runs under is reviewable, diffable and rolled back
+# with the code, instead of being host state that survives every deploy
+# unchanged. A unit fix that lives only in /etc cannot be reviewed and will be
+# lost.
+#
+# The units and their launchers arrive FLAT in $SYSTEMD_DIR — CI flattens
+# infra/systemd/*.service and infra/systemd/launchers/*.sh into one staging
+# directory, because this loop reads both from a single root. The nesting in the
+# repo is for humans; the staging layout is this script's contract.
 for unit in mcpedia-api mcpedia-mcp mcpedia-worker mcpedia-web; do
   src="$SYSTEMD_DIR/$unit.service"
   if [ ! -f "$src" ]; then
@@ -169,10 +175,13 @@ done
 # the binary is half the contract.
 #
 # It lives in the repo, not in the artifact, because it is not a build output —
-# and it is scp'd alongside deploy/systemd so the host still never checks out
+# and it is scp'd alongside the units so the host still never checks out
 # anything.
 for svc in "${SERVICES[@]}"; do
-  src="$SYSTEMD_DIR/.launcher-mcpedia-$svc.sh"
+  # Named without the `.launcher-` prefix it used to carry at the repo root:
+  # these files now live in infra/systemd/launchers/ and the directory says what
+  # they are, so a leading dot on each name would only be a fossil.
+  src="$SYSTEMD_DIR/mcpedia-$svc.sh"
   if [ ! -f "$src" ]; then
     echo "missing $src — refusing to deploy without its launcher" >&2
     exit 1
@@ -181,6 +190,26 @@ for svc in "${SERVICES[@]}"; do
 done
 
 sudo systemctl daemon-reload
+
+# ── 4b. Provision the markdown mirror root ─────────────────────────────────
+# CONTENT_ROOT is where the on-disk backup of the database is written, and both
+# writing units name /var/lib/mcpedia/content explicitly (see the CONTENT_ROOT
+# block in mcpedia-api.service / mcpedia-mcp.service).
+#
+# It has to be created BEFORE the restart, and owned by the service user:
+#   - /var/lib/mcpedia does not exist on a fresh host, and a unit cannot create
+#     its own parent under /var/lib — that is root-owned.
+#   - The in-code fallback for CONTENT_ROOT resolves to /opt/content in the
+#     deployed layout, which is NOT creatable by `code`, and the mirror call
+#     sites swallow their errors by design. So a missing directory here does not
+#     fail the deploy; it produces a service that works and silently keeps no
+#     backups.
+# The directory is service state, deliberately OUTSIDE releases/<sha>, so it
+# survives a deploy and is never written inside an artifact the deploy just
+# declared immutable.
+MIRROR_ROOT=/var/lib/mcpedia/content
+sudo install -d -o code -g code -m 0755 "$MIRROR_ROOT"
+echo "mirror root ready: $MIRROR_ROOT (owner code:code)"
 
 # ── 5. Preflight, then flip ────────────────────────────────────────────────
 # The unit must exec the launcher at /opt/mcpedia-<svc>/bin/, and that launcher

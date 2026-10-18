@@ -1,43 +1,92 @@
-<!-- BEGIN:nextjs-agent-rules -->
-
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
-
 # MCPedia Agent Instructions
 
-MCPedia is a content-first knowledge base where documents are stored in **PostgreSQL** as the source of truth (with auto-generated .md backups on disk), indexed into embeddings + search vectors, and accessed via Web UI, tRPC API, and Model Context Protocol (MCP).
+MCPedia is a content-first knowledge base. Documents are stored in **PostgreSQL**
+as the source of truth — with auto-generated `.md` backups on disk — indexed into
+embeddings and search vectors, and reached through a Web UI, an oRPC/tRPC API,
+and a Model Context Protocol (MCP) server.
 
-- **DB-first**: Documents are created/updated/deleted via the MCP `create_document`/`update_document`/`delete_document` tools (require `x-webhook-secret`). Filesystem `.md` files in `content/` are auto-generated backups (gitignored).
-- **Git-sync deploy**: CI builds `.next` on GitHub Actions → tarball → SCP to VPS → unpack. VPS never builds. Content changes flow via MCP API to the DB directly.
+- **DB-first**: documents are created/updated/deleted through the MCP
+  `create_document` / `update_document` / `delete_document` tools (which require
+  the `x-webhook-secret` header). The `.md` files under `content/` are
+  auto-generated backups and are gitignored.
+- **CI builds, the host only deploys**: `.github/workflows/ci.yml` builds the
+  service bundles and the SPA dist on GitHub Actions, ships them as an artifact,
+  and `scripts/deploy-direct.sh` unpacks them into `/opt/mcpedia-<svc>/releases/<sha>`
+  and flips the `current` symlink. The VPS never builds and never checks the repo
+  out.
 
 ## Architecture Principles
 
-1. **Single Core Layer (`@mcpedia/core`)**: All business logic (document CRUD, indexing, search, revisions, path classification) resides in `packages/core`. Never access the database directly from `apps/web`, `apps/mcp`, or `apps/api`.
-2. **DB as Source of Truth**: PostgreSQL stores document body + metadata. Filesystem `.md` files in `content/` are auto-generated backups (gitignored). Use the MCP `create_document`/`update_document` tools to write content.
-3. **Multi-Modal Search**: Keyword search (Postgres FTS `tsvector` + GIN), Semantic search (cosine similarity over chunked embeddings), and Hybrid search (Reciprocal Rank Fusion / RRF) are unified in `@mcpedia/search`.
-4. **Mutations & Security**: State-changing operations (document creation/updates/deletions, reindexing, revision restoration) require authentication (`x-webhook-secret` header or session cookie).
+1. **Single core layer (`@mcpedia/core`)**: all business logic — document CRUD,
+   indexing, search, revisions, path classification — lives in `packages/core`.
+   `apps/web`, `apps/mcp` and `apps/api` must never touch the database directly.
+2. **The database is the source of truth**: Postgres holds the document body and
+   its metadata. Write content with the MCP tools, not by editing files.
+3. **Multi-modal search**: keyword search (Postgres `tsvector` + GIN), semantic
+   search (cosine similarity over chunked embeddings), and hybrid search
+   (Reciprocal Rank Fusion) are unified in `packages/core`.
+4. **Mutations are authenticated**: every state-changing operation — document
+   create/update/delete, reindexing, revision restore — requires either the
+   `x-webhook-secret` header or a session cookie.
+
+## Layout
+
+```
+apps/         api (:4020), mcp (:4021), mcp-client, web (Vite SPA, :4016), worker
+packages/     config, core, db, parser, queue, types
+infra/        docker/ (per-service Dockerfiles + nginx), systemd/ (units + launchers)
+scripts/      deploy-direct.sh, build-bundles.mjs, check-migration-drift.sh, indexers
+docs/         plans/ (design history), archive/
+```
 
 ## Development Workflow
 
-- **Install dependencies**: `bun install`
-- **Run tests**: `bun run test`
-- **Typecheck**: `bun run typecheck`
-- **Build monorepo**: `bunx turbo run build`
-- **Index content**: `pnpm run index` (walks `content/` on disk; use `pnpm run reindex:hindsight` on a deploy host, where the mirror may be absent — it reads bodies from Postgres)
-- **Start dev servers**: `bun run dev`
+- **Install**: `pnpm install`
+- **Test**: `pnpm run test`
+- **Lint / format**: `pnpm run lint`, `pnpm run format:check`
+- **Typecheck**: `pnpm run typecheck`
+- **The full pre-merge gate**: `moon run :check` (typecheck, tests, service
+  bundles, migration-drift). CI runs this; run it before pushing.
+- **Index content**: `pnpm run index` walks `content/` on disk, so it needs a
+  checkout. On a deploy host the mirror may be absent — use
+  `pnpm run reindex:hindsight`, which reads bodies from Postgres.
+- **Dev servers**: `pnpm run dev`, or `pnpm run api | mcp | worker` individually.
 
-<!-- BEGIN:turborepo-agent-rules -->
+## Things that are load-bearing
 
-# This is NOT the Turborepo you know
+These have each broken a deploy. Do not "simplify" them without reading the
+comment at the site — every one of them is the tombstone of a specific failure.
 
-Turborepo configuration, task behavior, and CLI commands can vary between installed versions and may differ from your training data. Resolve the `turbo` package from this file's directory or relevant workspace; in monorepos, it may not be visible from the repository root. For example, run `node -p "require.resolve('turbo/package.json')"` from a workspace that depends on `turbo`.
+- **`scripts/build-bundles.mjs` asserts one entrypoint per bundle.** esbuild
+  inlines two modules into one file and they then share a single
+  `import.meta.url`, so every `import.meta.url === process.argv[1]` guard compares
+  equal and *every* one runs. That shipped two concurrent migrators once.
+- **The drizzle `.sql` journal is copied beside the migrate bundle.** esbuild
+  inlines JavaScript only; a migrator that cannot find its journal reports
+  success while changing nothing.
+- **`CONTENT_ROOT` is set explicitly in the systemd units.** The in-code default
+  is derived from the module's own location, which in the deployed layout
+  (`/opt/mcpedia-<svc>/current/dist/`) resolves to `/opt/content` — a directory
+  the service user cannot create. The mirror writes are wrapped in a swallow-all
+  `catch`, so that misderivation is silent.
+- **`org.opencontainers.image` / Dockerfiles live in `infra/docker/`.** The
+  image list is `.github/docker-images.json`; a path there must exist *and* be
+  git-tracked, or the release fails.
+- **`.moon/tasks/all.yml` must be a DIRECTORY.** A flat `.moon/tasks.yml` is the
+  moon 1.x path and moon 2.x ignores it silently.
+- **The `deploy` job in `ci.yml` is gated on `github.ref`, not `event_name`.**
+  A `workflow_dispatch` runs the workflow file from the dispatched ref and does
+  receive repository secrets, so an event-based gate still let a dispatch against
+  a branch deploy that branch.
 
-Read `docs/README.md` inside that installed package first, then read the relevant pages from its `docs/` directory before changing Turborepo configuration or commands. Heed deprecation notices. These bundled docs match the installed package version and are available without network access.
+## Standing conventions
 
-This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
-<!-- END:turborepo-agent-rules -->
+- Clean Code rules apply to every edit.
+- Tests must target the failure mode being introduced and be proven non-vacuous
+  by mutating the source and watching them fail.
+- `organizeImports: on` in `biome.json`, so import reordering in a diff is
+  intended.
+- Formatting is repo-wide: a bare `pnpm run format` rewrites files unrelated to
+  your change. Revert those (`git checkout -- <paths>`) before committing.
+- No `sleep`, anywhere, including poll loops. Block on a real process or check
+  state once.

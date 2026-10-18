@@ -5,7 +5,7 @@
 # Build from the REPO ROOT, because the service resolves @mcpedia/* through the
 # pnpm workspace and a context of apps/worker would not contain them:
 #
-#   docker build -f apps/worker/Dockerfile -t mcpedia-worker .
+#   docker build -f infra/docker/Dockerfile.worker -t mcpedia-worker .
 #
 # WHY THIS BUILDS A BUNDLE INSTEAD OF RUNNING THE TYPESCRIPT
 # apps/worker/src/index.ts imports sibling workspace packages by bare specifier

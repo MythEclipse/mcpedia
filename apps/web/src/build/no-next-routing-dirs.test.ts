@@ -96,10 +96,10 @@ const REPO = join(WEB, "../..")
 const DEPLOY_EXECUTABLES = [
 	"scripts/deploy-direct.sh",
 	"scripts/build-bundles.mjs",
-	".launcher-mcpedia-api.sh",
-	".launcher-mcpedia-mcp.sh",
-	".launcher-mcpedia-web.sh",
-	".launcher-mcpedia-worker.sh",
+	"infra/systemd/launchers/mcpedia-api.sh",
+	"infra/systemd/launchers/mcpedia-mcp.sh",
+	"infra/systemd/launchers/mcpedia-web.sh",
+	"infra/systemd/launchers/mcpedia-worker.sh",
 ]
 
 describe("the deploy path invokes no Next tooling", () => {
@@ -251,10 +251,101 @@ describe("the deploy path invokes no Next tooling", () => {
 		// and report success. Resolving `current` at exec time is what makes a
 		// rollback a symlink flip.
 		const launcher = readFileSync(
-			join(REPO, ".launcher-mcpedia-web.sh"),
+			join(REPO, "infra/systemd/launchers/mcpedia-web.sh"),
 			"utf8",
 		)
 		expect(launcher).toContain("cd /opt/mcpedia-web/current")
 		expect(launcher).not.toMatch(/releases\/[0-9a-f]{7,40}/)
+	})
+
+	it("keeps the deploy scaffolding under infra/, not scattered at the root", () => {
+		// Everything the deploy needs to RUN lives under infra/: the units, their
+		// launchers, the Dockerfiles and the web image's nginx config. The point
+		// is that a reviewer can find the whole deploy surface in one place, and
+		// that CI's staging step and deploy-direct.sh's loops agree on where it
+		// is.
+		//
+		// The corresponding batch of assertions pins the CONTRACT between them:
+		// CI flattens infra/systemd/*.service and infra/systemd/launchers/*.sh
+		// into ONE directory, and deploy-direct.sh reads both from $SYSTEMD_DIR.
+		// A nesting change on either side is silent — the deploy script's
+		// `[ -f "$src" ] || exit 1` guard turns it into a failed deploy on the
+		// host rather than a failed check here — which is why it is pinned.
+		const ci = readFileSync(join(REPO, ".github/workflows/ci.yml"), "utf8")
+
+		expect(ci).toContain("infra/systemd/*.service")
+		expect(ci).toContain("infra/systemd/launchers/*.sh")
+
+		// The root-level shapes that used to carry these must not come back: a
+		// dot-prefixed launcher beside package.json, a deploy/ tree, and the
+		// retired Nix entrypoints.
+		for (const gone of [
+			".launcher-mcpedia-api.sh",
+			".launcher-mcpedia-mcp.sh",
+			".launcher-mcpedia-web.sh",
+			".launcher-mcpedia-worker.sh",
+			"deploy/mcpedia-api.service",
+			"flake.nix",
+			"web.nix",
+		]) {
+			expect(existsSync(join(REPO, gone)), `${gone} is back`).toBe(false)
+		}
+
+		// And the images the release workflow builds must point at the new
+		// locations, since that list is what actually decides which Dockerfile
+		// runs.
+		const images = JSON.parse(
+			readFileSync(join(REPO, ".github/docker-images.json"), "utf8"),
+		) as { images: { package: string; file: string }[] }
+		for (const img of images.images) {
+			expect(img.file.startsWith("infra/docker/")).toBe(true)
+			expect(existsSync(join(REPO, img.file)), img.file).toBe(true)
+		}
+	})
+
+	it("names CONTENT_ROOT in every unit that can write the mirror", () => {
+		// The one write path whose failure is SILENT, so it gets a tripwire.
+		//
+		// `packages/config` derives its CONTENT_ROOT fallback from the config
+		// module's own location. In the deployed layout that resolves to
+		// /opt/content — under root-owned /opt, which the service user cannot
+		// create — so every mirror write throws EACCES. The mirror call sites
+		// swallow errors on purpose (Postgres is authoritative), so the service
+		// keeps answering 200 and the on-disk backups simply never appear.
+		//
+		// The api and mcp processes are the two that run the document write use
+		// cases; the worker only reindexes from Postgres and the web process
+		// serves static files, so neither needs it.
+		for (const unit of ["mcpedia-api", "mcpedia-mcp"]) {
+			const body = readFileSync(
+				join(REPO, "infra/systemd", `${unit}.service`),
+				"utf8",
+			)
+			expect(body, `${unit}.service must name CONTENT_ROOT`).toContain(
+				"Environment=CONTENT_ROOT=/var/lib/mcpedia/content",
+			)
+		}
+
+		// And the deploy must create that directory, or the unit names a path
+		// that does not exist and the mirror fails just as silently.
+		const deploy = executableLines(readFileSync(deployScript(), "utf8"))
+		expect(deploy).toContain("MIRROR_ROOT=/var/lib/mcpedia/content")
+		expect(deploy).toContain("install -d -o code -g code")
+	})
+
+	it("reports a failed mirror write instead of swallowing it silently", () => {
+		// The policy is right (degrade, never lose the document); the silence was
+		// the bug. Pinned at the source level because the unit test can only
+		// assert the log call it is told about — this asserts no call site
+		// regressed to a bare `catch {}`.
+		const uc = readFileSync(
+			join(REPO, "packages/core/src/application/document.use-cases.ts"),
+			"utf8",
+		)
+		for (const op of ["createDocument", "updateDocument", "deleteDocument"]) {
+			expect(uc, `${op} must report a mirror failure`).toContain(
+				`logMirrorFailure("${op}"`,
+			)
+		}
 	})
 })

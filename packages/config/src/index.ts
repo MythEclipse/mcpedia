@@ -164,11 +164,18 @@ const or = (value: string | undefined, fallback = "") => value || fallback
  * `../../..` walks to `/opt` and the mirror lands in `/opt/content` — shared by
  * all four services, outside the release it belongs to.
  *
- * That happens to be harmless today, and it is exactly the kind of coincidence
- * that stops being true: the next path change moves the mirror into a release
- * directory, where a write mutates an artifact the deploy just declared
- * immutable. Deriving a write target from the layout of the code is the defect,
- * so the target is named instead.
+ * That is not merely untidy on the deploy host: `/opt` is root-owned, so the
+ * service user cannot CREATE `/opt/content` in the first place and every mirror
+ * write fails with EACCES. The fallback therefore survives only for a checkout
+ * (and for the test suite), where `REPO_ROOT` is real; every systemd unit names
+ * `CONTENT_ROOT` explicitly via `Environment=`.
+ *
+ * The general point stands: deriving a WRITE target from the layout of the code
+ * is the defect, so on the deploy host the target is named instead. A misderived
+ * path here is not loud on its own — the mirror is wrapped in a swallow-all
+ * catch, because the database is authoritative — so it surfaces as an empty
+ * backup directory rather than as an error. The units' value is duplicated in
+ * the deploy script's `MIRROR_ROOT`, which is what creates the directory.
  *
  * The mirror is a BACKUP of the database, never the source of truth — documents
  * are written through the MCP tools and Postgres is authoritative. A missing

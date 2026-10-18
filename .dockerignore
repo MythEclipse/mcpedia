@@ -37,10 +37,10 @@ node_modules
 .moon
 
 # --- Secrets and local env -----------------------------------------------------
-# The services take their configuration from the environment at RUNTIME (see
-# deploy/*.service EnvironmentFile). Baking a .env into a layer would leak
-# DATABASE_URL and BETTER_AUTH_SECRET into the image history forever, since a
-# later layer cannot un-write an earlier one.
+# The services take their configuration from the environment at RUNTIME, injected
+# by bws-exec (see the ExecStart lines in infra/systemd/*.service). Baking a .env
+# into a layer would leak DATABASE_URL and BETTER_AUTH_SECRET into the image
+# history forever, since a later layer cannot un-write an earlier one.
 .env
 .env.*
 !.env.example
@@ -53,10 +53,13 @@ node_modules
 .idea
 .vscode
 
-# --- Nix leftovers: the host no longer builds through Nix (deploy-direct.sh) --
-flake.nix
-flake.lock
-web.nix
+# --- Nix: the stack was DELETED, not merely unused ----------------------------
+# flake.nix / flake.lock / web.nix are gone from the repo. The build-and-deploy
+# path is now bundle-in-CI + scp (scripts/deploy-direct.sh), and Nix is not
+# installed on the deploy host, so nothing here can run through it. The two
+# `result` entries stay: they cost nothing and a stray `nix build` symlink
+# accidentally copied into a context is exactly the kind of thing that should be
+# excluded by name rather than by luck.
 result
 result-*
 

@@ -20,7 +20,13 @@
 import { build } from "esbuild"
 import { fileURLToPath } from "node:url"
 import { dirname, resolve } from "node:path"
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs"
+import {
+	copyFileSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+} from "node:fs"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 

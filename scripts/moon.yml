@@ -28,7 +28,7 @@ tasks:
     #
     # Defining `check` in .moon/tasks/all.yml instead would make it INHERITED,
     # and moon runs an inherited task once per project. That would typecheck the
-    # workspace five times over and run all 413 tests fourteen times, once per
+    # workspace five times over and run all 550 tests twelve times, once per
     # project, in parallel. `moon run :check` would still report success and
     # would take minutes doing it.
     #
@@ -61,7 +61,7 @@ tasks:
     # hash never covered packages/db either.
     #
     # So the gate opts out of caching instead. The cost is that `check` always
-    # runs (~16s); the benefit is that it is never green without having actually
+    # runs (~21s); the benefit is that it is never green without having actually
     # looked. A verification gate that can report "cached" without reading the
     # tree is worse than no gate, because it looks like one. The expensive,
     # safely-cacheable work it depends on is still cached: `deps: [typecheck]`

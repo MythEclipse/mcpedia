@@ -5,7 +5,7 @@
 # Build from the REPO ROOT, because the service resolves @mcpedia/* through the
 # pnpm workspace and a context of apps/api would not contain them:
 #
-#   docker build -f apps/api/Dockerfile -t mcpedia-api .
+#   docker build -f infra/docker/Dockerfile.api -t mcpedia-api .
 #
 # WHY THIS BUILDS A BUNDLE INSTEAD OF RUNNING THE TYPESCRIPT
 # apps/api/src/index.ts imports sibling workspace packages by bare specifier

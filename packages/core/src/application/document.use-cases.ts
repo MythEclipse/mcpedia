@@ -101,6 +101,40 @@ function logDegraded(operation: string, slug: string, err: unknown): void {
 }
 
 /**
+ * Log a failed markdown-mirror operation.
+ *
+ * The mirror is never load-bearing — Postgres holds the document and the file is
+ * a backup — so every call site swallows the error on purpose. That policy is
+ * right; swallowing it *silently* was not.
+ *
+ * A misderived `CONTENT_ROOT` and a transient disk blip are the same event from
+ * inside this module: the operation throws, it is discarded, the response is a
+ * 200. In the deployed layout they are worlds apart — the default
+ * `CONTENT_ROOT` resolves to `/opt/content`, which the service user cannot
+ * create, so EVERY write fails forever and nothing anywhere says so. The
+ * database stays correct, which is exactly why nobody notices the backups are
+ * absent until the day they are needed.
+ *
+ * So the failure keeps its non-fatal treatment and gains a reason. The absolute
+ * path is NOT passed in separately: `mkdirSync`/`writeFileSync`/`unlinkSync`
+ * all name it in their own message (`EACCES: permission denied, mkdir
+ * '/opt/content'`). Re-deriving it here would mean importing `CONTENT_ROOT`
+ * into the application layer, which does not know about infrastructure — and
+ * would print a second, possibly staler answer to the same question.
+ */
+function logMirrorFailure(
+	operation: string,
+	relPath: string,
+	err: unknown,
+): void {
+	const reason = err instanceof Error ? err.message : String(err)
+	console.error(
+		`${operation}: markdown mirror FAILED for ${relPath}: ${reason}. ` +
+			`The document is committed and searchable — the on-disk backup is the only thing missing.`,
+	)
+}
+
+/**
  * Create a document: validate, persist, snapshot, index, mirror to disk.
  *
  * Returns the metadata that was written, so the caller can render the new page
@@ -164,8 +198,9 @@ export function makeCreateDocument(deps: DocumentUseCaseDeps) {
 
 		try {
 			await mirror.write({ relPath, meta, body: input.body })
-		} catch {
+		} catch (err) {
 			// Non-fatal: the database is the source of truth, the file is a backup.
+			logMirrorFailure("createDocument", relPath, err)
 		}
 
 		return meta
@@ -256,8 +291,9 @@ export function makeUpdateDocument(deps: DocumentUseCaseDeps) {
 
 		try {
 			await mirror.write({ relPath: doc.path, meta: updated, body })
-		} catch {
+		} catch (err) {
 			// Non-fatal.
+			logMirrorFailure("updateDocument", doc.path, err)
 		}
 
 		return updated
@@ -322,8 +358,9 @@ export function makeDeleteDocument(
 
 		try {
 			await mirror.remove(doc.path)
-		} catch {
+		} catch (err) {
 			// Non-fatal: the row is gone, an orphan file is recoverable by hand.
+			logMirrorFailure("deleteDocument", doc.path, err)
 		}
 
 		return { deleted: true }

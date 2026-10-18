@@ -24,8 +24,9 @@
  * on an unrelated dependency bump.
  */
 
-const LIMIT = Number(process.env.RELEASE_NOTES_LIMIT || 120000);
-const MARKER = '_… earlier changes omitted; see the repository history for the full list._';
+const LIMIT = Number(process.env.RELEASE_NOTES_LIMIT || 120000)
+const MARKER =
+	"_… earlier changes omitted; see the repository history for the full list._"
 
 /**
  * @param {object} context  semantic-release context
@@ -33,37 +34,57 @@ const MARKER = '_… earlier changes omitted; see the repository history for the
  * @returns {string} markdown release body
  */
 function writeReleaseNotes(context, options) {
-  const opts = options || {};
-  const next = context.nextRelease || {};
+	const next = context.nextRelease || {}
 
-  if (!next.notes) return '';
+	if (!next.notes) return ""
 
-  // Under the limit: hand back the generator's own text untouched, so a normal
-  // release is byte-identical to what the built-in writer would produce.
-  if (next.notes.length <= LIMIT) return next.notes;
+	const notes = next.notes
 
-  // Over the limit: keep whole sections from the top until the budget is spent.
-  // Splitting on a blank line keeps Markdown intact — a slice taken mid-heading
-  // emits broken output, which is worse than a shorter body.
-  const sections = next.notes.split(/\n{2,}/);
-  const kept = [];
-  let size = 0;
-  const budget = LIMIT - MARKER.length - 200;
+	// Under the limit: hand back the generator's own text untouched, so a normal
+	// release is byte-identical to what the built-in writer would produce.
+	if (notes.length <= LIMIT) return notes
 
-  for (const section of sections) {
-    const cost = section.length + 2;
-    if (size + cost > budget) break;
-    kept.push(section);
-    size += cost;
-  }
+	// Over the limit: keep the TOP of the body, cut at a LINE boundary.
+	//
+	// Cutting on lines rather than on blank-line-separated "sections" is the
+	// point. A release body is a handful of headings, each followed by an
+	// arbitrarily long bullet list — and consecutive bullets have NO blank line
+	// between them, so a 1,600-entry list is a single "section" however long it
+	// is. Slicing by section therefore has only two outcomes per section: keep
+	// it (and stay over the limit) or drop it (leaving the bare heading it
+	// belonged to). Measured on a 140 KB first-release body, that produced an
+	// 89-character note reading `### Features` and nothing else — the cap held,
+	// and the release was empty.
+	//
+	// Line-cutting keeps whole bullets and spends the budget: same shape the
+	// generator produced, truncated where it ran out of room.
+	//
+	// The budget arithmetic has to account for the SUFFIX exactly, which is
+	// `\n\n` + MARKER + `\n` = MARKER.length + 3. Trimming by one character less
+	// leaves the result over LIMIT by exactly 1 — measured, not theorised.
+	const SUFFIX = `\n\n${MARKER}\n`
+	const budget = LIMIT - SUFFIX.length
+	const kept = []
+	let size = 0
 
-  // Always keep at least the first section, even if it alone exceeds the budget:
-  // a heading plus a truncated marker beats an empty release body.
-  if (kept.length === 0) kept.push(sections[0]);
+	for (const line of notes.split("\n")) {
+		const cost = line.length + 1
+		// A line that ALONE exceeds the remaining budget is hard-sliced rather
+		// than kept whole. Taking it whole would defeat the cap — the one case
+		// where "keep at least something so the body is never empty", applied
+		// naively, returns a body that still fails GitHub's validation. Commit
+		// subjects are nowhere near this long, but these notes are generated
+		// from commit messages and one pathological line is not worth an
+		// unhandled failure on the release that matters most (the first).
+		if (cost > budget - size) {
+			kept.push(line.slice(0, Math.max(budget - size - 1, 0)))
+			break
+		}
+		kept.push(line)
+		size += cost
+	}
 
-  const omitted = sections.length - kept.length;
-  const elision = omitted > 0 ? `\n\n${MARKER}\n` : '';
-  return kept.join('\n\n') + elision;
+	return kept.join("\n") + SUFFIX
 }
 
-module.exports = writeReleaseNotes;
+module.exports = writeReleaseNotes

@@ -291,11 +291,14 @@ jobs:
           scp -q scripts/deploy-direct.sh "$VPS_USER@$VPS_HOST:/tmp/mcpedia-deploy.sh"
           # The launchers are repo files rather than build output, but they still
           # have to be on the host: ExecStart invokes them, and the host no longer
-          # checks anything out. They ride in the same directory as the units so
-          # the deploy can refuse to proceed if either is missing.
+          # checks anything out.
           mkdir -p systemd-staging
-          cp -r deploy/systemd/. systemd-staging/
-          cp .launcher-mcpedia-*.sh systemd-staging/
+          # Units and launchers are staged FLAT, side by side, even though they
+          # live in two directories in the repo. The deploy script reads both
+          # from one $SYSTEMD_DIR, so flattening here keeps that contract and
+          # leaves the repo layout free to be organised by kind.
+          cp infra/systemd/*.service systemd-staging/
+          cp infra/systemd/launchers/*.sh systemd-staging/
           scp -q -r systemd-staging "$VPS_USER@$VPS_HOST:/tmp/mcpedia-systemd"
 
       - name: Deploy

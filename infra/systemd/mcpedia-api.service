@@ -30,6 +30,26 @@ WorkingDirectory=/opt/mcpedia-api/current
 # The app name is `mcpedia`, not `mcpedia-api`: all mcpedia secrets are
 # `mcpedia_`-prefixed and bws-exec keys off that prefix. `bws-env
 # mcpedia-api` exits 1 with "no secret ber-prefix 'mcpedia-api_'".
+#
+# ── CONTENT_ROOT is NAMED here, not left to the in-code default ──────────────
+#
+# `packages/config` falls back to `resolve(REPO_ROOT, "content")`, and REPO_ROOT
+# is derived from the config module's own location — which is fine in a checkout
+# and wrong everywhere else. The deployed bundle lives at
+# /opt/mcpedia-<svc>/current/dist/index.js, so `../../..` walks to `/opt` and
+# the fallback names `/opt/content`.
+#
+# That path cannot be created: /opt is root-owned and these units run as `code`,
+# so the very first `mkdirSync` throws EACCES. The mirror call sites swallow
+# their errors by design (Postgres is authoritative, the file is a backup), so
+# the symptom was an API that answered 200 while the on-disk backup — the thing
+# `content/` is documented to be — never existed at all.
+#
+# So the target is written down, where a reviewer can see it: a service-owned
+# directory that survives a release swap and is not inside an artifact the
+# deploy declares immutable. `scripts/deploy-direct.sh` creates it before the
+# units restart; see MIRROR_ROOT there.
+Environment=CONTENT_ROOT=/var/lib/mcpedia/content
 ExecStart=/usr/local/bin/bws-exec mcpedia /opt/mcpedia-api/bin/mcpedia-api
 Restart=always
 RestartSec=5

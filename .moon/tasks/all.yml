@@ -32,15 +32,15 @@ tasks:
     # which compiler ran.
     command: '../../node_modules/typescript/bin/tsc'
     args: ['--noEmit']
-    # Only the 5 apps/ projects ship a tsconfig.json. The 8 packages/ projects
+    # Only the 5 apps/ projects ship a tsconfig.json. The 6 packages/ projects
     # publish raw TypeScript through `exports: { ".": "./src/index.ts" }` and are
     # typechecked TRANSITIVELY by whichever app imports them — verified by
     # injecting a type error into packages/core and watching apps/api report it.
-    # (`scripts` is a 9th tsconfig-less project: in neither apps/ nor packages/.)
+    # (`scripts` is a 7th tsconfig-less project: in neither apps/ nor packages/.)
     #
     # A `condition` check SKIPS the task when its script exits 0, hence the `!`:
     # "skip when there is no tsconfig here". Without this gate, `tsc --noEmit`
-    # prints its help text and exits 1 in the 8 tsconfig-less packages, so
+    # prints its help text and exits 1 in the 7 tsconfig-less projects, so
     # `moon run :typecheck` fails.
     checks:
       - check: 'condition'
@@ -48,7 +48,7 @@ tasks:
     inputs:
       - '@globs(sources)'
       # 'tsconfig.json' as a literal input makes moon emit a hasher warning in the
-      # 9 projects that have none ("Attempted to hash ... but it does not exist,
+      # 7 projects that have none ("Attempted to hash ... but it does not exist,
       # skipping"). The glob form below is satisfied by tsconfig.json when it
       # exists and by nothing when it does not, with no warning.
       - '@globs(configs)'
@@ -86,13 +86,13 @@ tasks:
 
   build:
     # Only apps/web and apps/mcp-client define a real build (vite build / esbuild);
-    # the other 11 packages publish raw TypeScript via exports "./src/index.ts"
+    # the other 10 projects publish raw TypeScript via exports "./src/index.ts"
     # and have no build step. Do NOT set implicitDeps: ['^:build'] here — it would
-    # depend on tasks that do not exist for 11 of the 14 projects.
+    # depend on tasks that do not exist for 10 of the 12 projects.
     #
     # `outputs` is deliberately omitted. Declaring `dist/**` on an INHERITED
     # build makes `moon run :build` fail outright with task_runner::missing_outputs
-    # for the 11 projects that write nothing there ("defines outputs but after
+    # for the 10 projects that write nothing there ("defines outputs but after
     # being ran, either none or not all of them exist"). Those projects override
     # or drop the task in their own moon.yml; only the two that actually emit
     # dist/ declare outputs, and they do so locally.

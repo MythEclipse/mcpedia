@@ -10,8 +10,8 @@ MCPedia keeps content as plain Markdown files under `content/` as a Git-tracked 
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│     Web UI      │    │   MCP Server    │    │  tRPC / Hono    │    │  BullMQ Worker  │
-│   (Next.js 16)  │    │  (Stdio + HTTP) │    │   API (:4020)   │    │ (Async Queue)   │
+│     Web UI      │    │   MCP Server    │    │  oRPC / Hono    │    │  BullMQ Worker  │
+│  (Vite SPA)     │    │  (Stdio + HTTP) │    │   API (:4020)   │    │ (Async Queue)   │
 └────────┬────────┘    └────────┬────────┘    └────────┬────────┘    └────────┬────────┘
          │                      │                      │                      │
          └──────────────────────┴──────────┬───────────┴──────────────────────┘
@@ -31,9 +31,9 @@ MCPedia keeps content as plain Markdown files under `content/` as a Git-tracked 
 
 ### Core Principles
 
-1. **Content as Source of Truth**: Markdown files with YAML frontmatter under `content/` are primary. The database holds metadata, search indices, chunk embeddings, and revision history.
+1. **The database is the source of truth**: PostgreSQL holds each document's body and metadata, its revisions, and its search index. The `.md` files under `content/` are auto-generated *backups* — write documents through the MCP tools, never by editing files.
 2. **Single Core Layer**: All business logic (CRUD, indexing, search, revisions, path classification) is encapsulated in `@mcpedia/core`. Interfaces never touch the database directly.
-3. **Multi-Modal Search**: Keyword search (Postgres FTS), semantic search (vector cosine similarity), and hybrid search (Reciprocal Rank Fusion / RRF) work out of the box.
+3. **Multi-Modal Search**: Keyword search, semantic search, and hybrid search (Reciprocal Rank Fusion / RRF) work out of the box, all served through a hindsight bank.
 4. **Resilient Revision System**: Content edits snapshot revisions automatically; metadata-only edits are deduplicated. Restoring a revision automatically rebuilds semantic search chunks.
 5. **Dual Interface**: Full human-friendly web experience + first-class AI agent integration via MCP.
 
@@ -44,26 +44,26 @@ MCPedia keeps content as plain Markdown files under `content/` as a Git-tracked 
 ```
 mcpedia/
 ├── apps/
-│   ├── web/          # Next.js 16 (Turbopack) — dark-mode UI, hierarchical doc tree, TOC, CRUD
-│   ├── mcp/          # MCP server (stdio + Streamable HTTP on :4021) — 13 tools + 4 resources
+│   ├── web/          # Vite SPA (:4016) — dark-mode UI, hierarchical doc tree, TOC, CRUD, exports
+│   ├── mcp/          # MCP server (stdio + Streamable HTTP on :4021) — 18 tools + 4 resources
 │   ├── mcp-client/   # Interactive MCP CLI REPL, one-shot command runner, and TypeScript client SDK
-│   ├── api/          # Hono + tRPC v11 API on :4020, git-sync webhooks, Prometheus metrics, dashboard
-│   └── worker/       # Long-running BullMQ worker for async indexing and embedding jobs
+│   ├── api/          # Hono + oRPC API on :4020, git-sync webhooks, Prometheus metrics, dashboard
+│   └── worker/       # Long-running BullMQ worker for async indexing jobs
 ├── packages/
-│   ├── core/         # Document, Content, Search, Index, Revision, and Path services (the business logic)
-│   ├── db/           # Drizzle ORM schema, client, and migrations
-│   ├── parser/       # Frontmatter (gray-matter) parsing & stringification with dynamic field support
-│   ├── search/       # Postgres FTS query (ts_rank + ts_headline), vector cosine, and RRF hybrid fusion
-│   ├── embeddings/   # Chunking algorithms & embedding provider integrations
+│   ├── core/         # Domain + use cases + infrastructure: the business logic (the only DB writer)
+│   ├── db/           # Drizzle ORM schema, client, and migration journal
+│   ├── parser/       # Frontmatter parsing & stringification with dynamic field support
 │   ├── queue/        # Redis (ioredis) client & BullMQ queue/worker definitions
 │   ├── types/        # Shared TypeScript domain types and interfaces
 │   └── config/       # Authoritative environment configuration loader (.env)
-├── content/          # Markdown knowledge base organized by sections and nested folders
-│   ├── docs/         # System and architectural documentation
-│   ├── writeups/     # Technical writeups, CTF solutions, and debugging reports
-│   ├── research/     # Research notes and evaluations
-│   └── notes/        # Engineering notes and quick references
-└── scripts/          # indexer.ts (full corpus reindexing), enqueue.ts (one-shot job enqueue)
+├── content/          # Auto-generated .md BACKUPS of the database (gitignored, not source)
+├── infra/
+│   ├── docker/       # One Dockerfile per service + the web image's nginx config
+│   └── systemd/      # Unit definitions and their launchers
+├── docs/
+│   ├── plans/        # Design history: redesign specs, migration plans, rationale
+│   └── archive/      # Superseded runbooks
+└── scripts/          # deploy-direct.sh, build-bundles.mjs, indexers, drift check
 ```
 
 ---
@@ -72,11 +72,14 @@ mcpedia/
 
 ### 1. Multi-Modal Search
 
+All three modes are served by a **hindsight** bank: hindsight chunks and embeds on its own side, so the repo no longer carries a chunker, an embedding provider, or a cosine comparator. The old Postgres `tsvector` + GIN path and the local `EMBED_*` provider were both deleted with it.
+
 | Search Mode | Mechanism | Best Used For |
 |---|---|---|
-| **Keyword Search** | PostgreSQL `tsvector` (`simple` config, weighted A/B) + GIN index + `ts_rank` + `ts_headline` | Exact terms, code symbols, error codes, identifiers |
-| **Semantic Search** | Text chunking (1000 chars, 150 overlap) + vector embeddings + cosine similarity ranking | Conceptual questions, paraphrased queries, intent matching |
-| **Hybrid Search** | Reciprocal Rank Fusion ($RRF = \sum \frac{1}{k + rank}$) fusing keyword and semantic signals | General-purpose search with optimal relevance |
+| **Keyword Search** | hindsight's keyword index over retained facts | Exact terms, code symbols, error codes, identifiers |
+| **Semantic Search** | hindsight's embedding index, ranked by its own similarity score | Conceptual questions, paraphrased queries, intent matching |
+| **Hybrid Search** | Reciprocal Rank Fusion ($RRF = \sum \frac{1}{k + rank}$) fusing the two signals | General-purpose search with optimal relevance |
+| **Reflect** | Synthesis across the whole corpus, over consolidated observations | "What does this corpus know about X?", cross-document reasoning |
 
 ### 2. Hierarchical Folder Navigation
 
@@ -105,54 +108,87 @@ Content frontmatter supports arbitrary custom key-value pairs without schema mod
 
 MCPedia runs an MCP server accessible via **Stdio** (for local subagents) and **Streamable HTTP** (for remote agents over the network at `:4021`).
 
-### MCP Tools (13 Total)
+### MCP Tools (18 Total)
+
+The count is asserted against this server's own source by
+`apps/web/src/lib/mcp-tools.test.ts`, because it previously drifted: three places
+on the home page claimed 13 while the server answered with 18.
 
 #### Read Tools (Public)
 | Tool | Description |
 |---|---|
-| `search_documents` | Full-text keyword search over the knowledge base with headline snippets |
-| `semantic_search` | Embedding-based cosine search across chunked content |
-| `hybrid_search` | Fused full-text and semantic search via Reciprocal Rank Fusion |
+| `search_documents` | Keyword-weighted search across the knowledge base |
+| `semantic_search` | Embedding search for conceptual or paraphrased queries |
+| `hybrid_search` | Fused keyword and semantic search via Reciprocal Rank Fusion |
+| `reflect` | Synthesises an answer across the whole corpus |
 | `get_document` | Fetches the full Markdown body of a document by slug |
 | `list_documents` | Lists documents, optionally filtered by section or status |
+| `list_sections` | Lists active sections with their document counts |
+| `list_section_registry` | The full registry: label, icon, description, order, hidden |
 | `get_related_documents` | Finds documents sharing tags with a given slug |
 | `queue_status` | Returns current BullMQ indexing queue metrics |
 
 #### Mutating & Admin Tools (Requires `x-webhook-secret`)
 | Tool | Description |
 |---|---|
-| `create_document` | Creates a new document (writes Markdown file, database row, revision, and chunks) |
+| `create_document` | Creates a document (Postgres row, revision, index entry, disk backup) |
 | `update_document` | Updates an existing document's body, metadata, or dynamic custom fields |
-| `delete_document` | Removes a document file, database rows, revisions, and chunks |
+| `delete_document` | Removes a document's row, revisions, index entries and backup file |
 | `index_document` | Enqueues a single-document background reindex job |
 | `reindex_all` | Enqueues a full-corpus background reindexing job |
-| `restore_revision` | Restores a document to a specific revision and rebuilds search chunks |
+| `restore_revision` | Restores a document to a specific revision and rebuilds its index entry |
+| `upsert_section` | Registers a section or updates one that exists |
+| `delete_section` | Unregisters a section (removes its registry row) |
 
 ### MCP Resources
 
 | Resource URI | Description | MIME Type |
 |---|---|---|
 | `mcpedia://docs` | List of all published documents in the knowledge base | `application/json` |
-| `mcpedia://docs/{+slug}` | Full Markdown body of a single document from disk | `text/markdown` |
-| `mcpedia://docs/{+slug}/chunks` | Preview of embedded semantic chunks for a document | `application/json` |
+| `mcpedia://docs/{+slug}` | Full Markdown body of a single document | `text/markdown` |
+| `mcpedia://docs/{+slug}/facts` | The facts hindsight retained for a document | `application/json` |
 | `mcpedia://docs/{+slug}/revisions` | Summary of revision history for a document | `application/json` |
+
+The `/chunks` resource was removed with the local embedding stack: it served a
+preview of the chunks *this repo* computed, and hindsight now owns chunking. The
+`/facts` resource exposes what hindsight actually retained instead. Template
+ordering matters — `/facts` and `/revisions` are registered before `{+slug}`,
+which would otherwise swallow them.
 
 ---
 
-## HTTP, tRPC & Webhook Endpoints
+## HTTP, oRPC & Webhook Endpoints
 
-The API application (`apps/api`) runs on **:4020** with Hono and tRPC v11:
+The API application (`apps/api`) runs on **:4020** with Hono and **oRPC** (not
+tRPC — the router was ported so the SPA can share types through a contract-free
+`os.router` composition).
 
-### tRPC Procedures
-- **Queries**: `search`, `semanticSearch`, `hybridSearch`, `getDocument`, `listDocuments`, `related`, `revisions`, `getRevision`, `jobStatus`, `queueStatus`.
-- **Mutations** (Protected by `x-webhook-secret`): `createDocument`, `updateDocument`, `deleteDocument`, `restoreRevision`.
+The RPC surface is 21 procedures. **Both `/rpc` and `/trpc` are mounted** and
+resolve to the same handlers: `/rpc` is the current name the SPA uses, and
+`/trpc` is retained because the production Caddyfile still proxies `/trpc/*` to
+:4020.
+
+| Router | Procedures |
+|---|---|
+| `auth` | `me` |
+| `health` | `ping` |
+| `search` | `keyword`, `semantic`, `hybrid` |
+| `documents` | `get`, `list`, `sections`, `sectionsRegistry`, `related`, `folderInfo`, `export`, `create`*, `update`*, `remove`*, `upsertSection`*, `removeSection`* |
+| `revisions` | `list`, `get`, `restore`* |
+| `queue` | `job`, `status` |
+
+*\* write-gated* — requires the `x-webhook-secret` header **or** a valid
+better-auth session cookie. The gate runs before input validation on purpose, so
+an unauthenticated caller cannot probe a schema it has no right to see.
 
 ### Webhooks & Observability
-- `POST /hooks/reindex` — Triggers a full corpus reindex (ideal for Git push webhooks).
-- `POST /hooks/index?slug=<slug>` — Reindexes a single document.
-- `GET /metrics` — Prometheus metrics exposition (`mcpedia_uptime_seconds`, `mcpedia_queue_jobs{state=...}`).
-- `GET /dashboard` — Standalone real-time web dashboard for queue monitoring and live search.
-- `GET /health` — Health check endpoint.
+- `POST /hooks/reindex` — Enqueues a full-corpus reindex (ideal for Git push webhooks). Requires auth.
+- `POST /hooks/index?slug=<slug>` — Enqueues a single-document reindex. Requires auth.
+- `GET /metrics` — Prometheus exposition: `mcpedia_uptime_seconds`, `mcpedia_queue_jobs{state=...}` (verified live against :4020).
+- `GET /dashboard` — Standalone real-time queue dashboard, public.
+- `GET /health` — Liveness: the process is up. Deliberately does **not** touch Postgres or Redis, so a slow database cannot cause a restart loop that turns a degradation into an outage.
+- `GET /healthz` — Alias of `/health`.
+- `GET /ready` — Readiness: probes Postgres and Redis and returns 503 if either fails. This is the one to point an orchestrator at.
 
 ---
 
@@ -212,34 +248,59 @@ before `0001` still gets `0001` applied rather than silently skipping it.
 
 ### Prerequisites
 
-- [Bun](https://bun.sh/) (v1.1+)
-- [PostgreSQL](https://www.postgresql.org/) (with `tsvector` support)
-- [Redis](https://redis.io/) (for BullMQ async workers)
+- [Node.js](https://nodejs.org/) >= 22.12 — the runtime the systemd units and the
+  container images use. Development *scripts* also run under `tsx`; Bun is not
+  required and is not a dependency of this repo.
+- [pnpm](https://pnpm.io/) 10.33.2 — pinned exactly via `packageManager`. A
+  floating pnpm resolves the workspace differently from the lockfile CI
+  verified, and `--frozen-lockfile` reports that as "lockfile is not up to date".
+- [PostgreSQL](https://www.postgresql.org/) — the source of truth.
+- [Redis](https://redis.io/) — BullMQ job queue.
+- A reachable **hindsight** endpoint — chunking, embedding, search and
+  consolidation all live there. Without it the document read paths still work;
+  search and indexing degrade.
 
 ### 1. Installation & Environment Setup
 
 ```bash
-# Clone repository
 git clone https://github.com/asepharyana/mcpedia.git
 cd mcpedia
 
-# Install workspace dependencies
-bun install
-
-# Configure environment variables
-cp .env.example .env
+pnpm install
 ```
 
-Ensure `.env` contains your database connection, Redis configuration, webhook secret, and admin password.
+There is **no `.env.example`** in this repo. Create `.env` at the repo root
+yourself; `packages/config` reads it and it deliberately OVERRIDES any inherited
+shell value, so a stray `DATABASE_URL` in your shell can never point the app at
+the wrong database. The keys that matter:
+
+| Key | Required? | Notes |
+|---|---|---|
+| `DATABASE_URL` | yes | `postgres://` or `postgresql://`. The API refuses to start without it. |
+| `BETTER_AUTH_SECRET` | yes | Signs session cookies. Min 16 chars (`openssl rand -hex 32`). **No default, ever.** |
+| `BETTER_AUTH_URL` | yes | Valid URL used to derive trusted origins. |
+| `WEBHOOK_SECRET` | for MCP/API writes | The `x-webhook-secret` header value. Unset means the write path is disabled, not broken. |
+| `REDIS_URL` | no | Defaults to the shared instance in `packages/config`. |
+| `HINDSIGHT_API_URL` | no | Defaults to the adapter's local endpoint. |
+| `HINDSIGHT_BANK_ID` | no | Defaults to `mcpedia`. |
+| `CONTENT_ROOT` | **on a deploy host** | Where the `.md` backup mirror is written. See the warning below. |
+
+> **`CONTENT_ROOT` must be set outside a checkout.** Its fallback is derived from
+> the config module's own location, which in the deployed layout
+> (`/opt/mcpedia-<svc>/current/dist/`) resolves to `/opt/content` — a directory
+> the service user cannot create, since `/opt` is root-owned. The mirror writes
+> are wrapped in a catch by design, so that failure is *silent*: documents save
+> and serve fine while the backups never exist. Both writing units name
+> `/var/lib/mcpedia/content` explicitly and the deploy script creates it.
 
 ### 2. Database Setup
-
-Apply migrations to initialize the schema (`documents`, `document_chunks`,
-`document_revisions`):
 
 ```bash
 pnpm db:migrate
 ```
+
+Migrations are applied by a **bundled** migrator (`apps/api/dist/migrate.js`),
+the same artifact the deploy uses, so local and production cannot diverge.
 
 The migration chain is a single generated baseline, `drizzle/0000_military_wolfpack.sql`,
 produced by `pnpm --filter @mcpedia/db db:generate` from `packages/db/src/schema.ts`.
@@ -253,25 +314,34 @@ produced by `pnpm --filter @mcpedia/db db:generate` from `packages/db/src/schema
 ### 3. Build & Index
 
 ```bash
-# Typecheck and build all packages
-bunx turbo run build
+# The full pre-merge gate: typecheck, tests, service bundles, migration drift.
+moon run :check
 
-# Run initial full indexation (parses content/, embeds chunks, writes DB)
-bun run index
+# Or the pieces:
+pnpm run typecheck             # moon run :typecheck
+pnpm run build:bundles         # esbuild -> apps/*/dist (api, mcp, worker, migrate)
+pnpm run test                  # vitest, one root config, whole workspace
+
+# Index a CHECKOUT's content/ tree into Postgres + hindsight.
+pnpm run index
 ```
+
+On a deploy host the mirror may be absent, so `pnpm run index` (which walks
+`content/` on disk) is not the tool — use `pnpm run reindex:hindsight`, which
+reads bodies from Postgres and repairs the index from the source of truth.
 
 ### 4. Running Services
 
 ```bash
-# Start all development services (Web, API, MCP, Worker) concurrently
-bun run dev
+# Every service at once (moon runs the per-project dev tasks)
+pnpm run dev
 
-# Or run services individually:
-bun --cwd apps/web run dev     # Web UI on :3000 (or :4016 in production)
-bun run api                    # Hono + tRPC API on :4020
-bun run worker                 # BullMQ background worker
-bun run mcp                    # MCP server (stdio mode)
-bun run mcp:http               # MCP server (Streamable HTTP mode on :4021)
+# Or individually:
+pnpm --filter @mcpedia/web run dev   # Vite dev server (proxies /rpc, /trpc, /api/auth)
+pnpm run api                         # Hono + oRPC API on :4020
+pnpm run worker                      # BullMQ background worker
+pnpm run mcp                         # MCP server (stdio mode)
+pnpm run mcp:http                    # MCP server (Streamable HTTP on :4021)
 ```
 
 ---
@@ -280,23 +350,29 @@ bun run mcp:http               # MCP server (Streamable HTTP mode on :4021)
 
 | Command | Action |
 |---|---|
-| `bun run index` | Run full synchronous reindexer over `content/` |
-| `bun run enqueue --all` | Enqueue a full reindex job to Redis/BullMQ |
-| `bun run enqueue <slug>` | Enqueue a single-document reindex job |
-| `bun run worker` | Start the BullMQ background worker |
-| `bun run api` | Start the Hono + tRPC API server |
-| `bun run mcp` | Run MCP server in stdio mode |
-| `bun run mcp:http` | Run MCP server in Streamable HTTP mode |
-| `bun run chat` | Launch interactive MCP Client REPL |
-| `bun run ask <cmd> [args]` | Run one-shot MCP client command |
-| `bun run test` | Run the comprehensive test suite across all packages |
-| `bun run typecheck` | Run TypeScript type checking across all workspaces |
+| `moon run :check` | **The gate**: typecheck + tests + service bundles + migration drift |
+| `pnpm run typecheck` | `moon run :typecheck` (the 5 apps with a tsconfig; packages are checked transitively) |
+| `pnpm run lint` / `pnpm run format:check` | Biome lint / format check |
+| `pnpm run test` | Vitest, one root config covering apps/ and packages/ |
+| `pnpm run build` | `moon run :build` (only `web` and `mcp-client` emit) |
+| `pnpm run build:bundles` | esbuild the api/mcp/worker/migrate bundles into `apps/*/dist` |
+| `pnpm run index` | Walk a checkout's `content/` and ingest it |
+| `pnpm run reindex:hindsight` | Repair the index from Postgres (the deploy-host path) |
+| `pnpm run enqueue --all` \| `pnpm run enqueue <slug>` | Enqueue a full or single-document reindex job |
+| `pnpm run dev` / `api` / `worker` / `mcp` / `mcp:http` | Start individual services |
+| `pnpm run db:migrate` / `db:generate` / `db:push` / `db:studio` | Drizzle migration and introspection commands |
+| `pnpm --filter @mcpedia/mcp-client run chat` | Interactive MCP client REPL |
+| `pnpm --filter @mcpedia/mcp-client run ask "<question>"` | One-shot MCP client query |
 
 ---
 
 ## Content Format
 
-Content files reside in `content/<section>/` as Markdown files with YAML frontmatter:
+Documents are stored in Postgres. The `.md` files under `content/<section>/` are
+written *by* the application as backups, and they are gitignored — they are not
+the input, they are the output. Write content through the MCP tools.
+
+The mirror's file format, for reading a backup by hand:
 
 ```yaml
 ---
@@ -326,31 +402,65 @@ Tables, code snippets, and custom sections are fully supported.
 
 ## Production Deployment
 
-Production services run as supervised systemd units behind a Caddy reverse proxy:
+Deploys are **push-to-main and automatic**. `.github/workflows/ci.yml` runs the
+gate, builds the service bundles and the SPA, uploads them as an artifact, then
+`scripts/deploy-direct.sh` runs on the host to unpack them. The VPS never builds
+and never checks the repo out.
 
 ```bash
-# Copy systemd unit templates
-sudo cp deploy/*.service /etc/systemd/system/
-sudo systemctl daemon-reload
-
-# Enable and start all supervised services
-sudo systemctl enable --now mcpedia-web mcpedia-api mcpedia-worker mcpedia-mcp
-
 # Inspect service logs
-journalctl -u mcpedia-web -u mcpedia-api -u mcpedia-worker -u mcpedia-mcp -f
+journalctl -u mcpedia-api -u mcpedia-mcp -u mcpedia-worker -u mcpedia-web -f
 ```
+
+### How a release lands
+
+```
+releases/<sha>/          # immutable: nothing writes here after `current` flips
+current -> releases/<sha>/
+```
+
+`KEEP_RELEASES` defaults to 2 — the live release plus one rollback target.
+
+- **Units and launchers live in `infra/systemd/`**, not only on the host, and
+  `deploy-direct.sh` installs them on every deploy. A unit that exists only in
+  `/etc` cannot be reviewed and is silently lost; the current units previously
+  pointed `WorkingDirectory` at a checkout that no longer exists, which stayed
+  invisible until the next reboot because nothing restarts a running process.
+- **`/opt/mcpedia-<svc>/bin/mcpedia-<svc>`** is the launcher each unit execs. It
+  `cd`s into `current/` rather than a pinned SHA, so a rollback is a symlink flip.
+- **`CONTENT_ROOT=/var/lib/mcpedia/content`** is created by the deploy script and
+  named by the writing units. See the warning under Quick Start — this is the one
+  write path whose failure is silent.
+- **Migrations run before the swap**, as their own process. A schema that cannot
+  be migrated aborts the deploy with the previous release still serving.
+- **Health probes** hit the four services and both public URLs; a failure rolls
+  `current` back to the previous release.
 
 ---
 
 ## Testing
 
-The test suite runs with in-memory mocks without requiring an active database or Redis instance:
+One root `vitest.config.mts` covers the whole workspace — every `*.test.ts(x)`
+under `apps/*/src` and `packages/*/src`:
 
 ```bash
-bun run test
+pnpm run test          # 45 files / 540 tests
+moon run :check        # the same tests, plus typecheck, bundles and drift
 ```
 
-All 32+ unit and integration tests across packages and apps validate chunking, frontmatter parsing, cosine similarity, revision deduplication, auth gates, and route handlers.
+Tests run without a live database or Redis: the use cases are built by
+factories, so a test supplies `vi.fn()` collaborators and never opens a pool.
+The suite covers frontmatter parsing, path classification, revision
+deduplication, the auth gates on both write paths, the browser-bundle
+server-import guard, and the deploy payload shape.
+
+Two suites exist specifically to stop a class of silent failure returning, and
+are worth reading before touching what they guard:
+
+- `apps/web/src/build/no-next-routing-dirs.test.ts` — fails if a Next-era file
+  or a root-level `.launcher-*` reappears.
+- `packages/queue/src/worker.test.ts` — pins the index worker against reporting
+  success while having indexed nothing.
 
 ## Releases and container images
 
