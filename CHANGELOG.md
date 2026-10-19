@@ -1,3 +1,10 @@
+## [1.4.6](https://github.com/asepharyana/mcpedia/compare/v1.4.5...v1.4.6) (2026-10-19)
+
+
+### Bug Fixes
+
+* auto-fix code quality [skip ci] ([62ce91e](https://github.com/asepharyana/mcpedia/commit/62ce91e94667af4852e7cb5e3a60e998764968de))
+
 ## [1.4.5](https://github.com/asepharyana/mcpedia/compare/v1.4.4...v1.4.5) (2026-10-18)
 
 ## [1.4.4](https://github.com/asepharyana/mcpedia/compare/v1.4.3...v1.4.4) (2026-10-18)
