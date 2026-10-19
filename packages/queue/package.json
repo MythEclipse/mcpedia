@@ -13,7 +13,7 @@
     "@mcpedia/config": "workspace:*",
     "@mcpedia/core": "workspace:*",
     "@mcpedia/db": "workspace:*",
-    "bullmq": "^6.3.14",
+    "bullmq": "^6.3.15",
     "ioredis": "^6.0.0"
   },
   "devDependencies": {
