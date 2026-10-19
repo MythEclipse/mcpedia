@@ -18,9 +18,9 @@
 		"@mcpedia/db": "workspace:*",
 		"@mcpedia/parser": "workspace:*",
 		"@mcpedia/types": "workspace:*",
-		"docx": "^9.10.0",
+		"docx": "^9.11.0",
 		"drizzle-orm": "^0.45.4",
-		"ts-pattern": "^5.9.1"
+		"ts-pattern": "^5.9.2"
 	},
 	"scripts": {
 		"test": "vitest run"
