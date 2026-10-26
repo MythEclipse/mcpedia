@@ -47,9 +47,6 @@ importers:
       '@orpc/client':
         specifier: 1.16.1
         version: 1.16.1
-      '@orpc/contract':
-        specifier: 1.16.1
-        version: 1.16.1
       '@orpc/openapi':
         specifier: 1.16.1
         version: 1.16.1
@@ -137,9 +134,6 @@ importers:
       '@mcpedia/types':
         specifier: workspace:*
         version: link:../../packages/types
-      '@orpc/client':
-        specifier: 1.16.1
-        version: 1.16.1
       '@orpc/server':
         specifier: 1.16.1
         version: 1.16.1
@@ -262,9 +256,6 @@ importers:
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4(kysely@0.29.7)(postgres@3.4.9)
-      ts-pattern:
-        specifier: ^5.9.2
-        version: 5.9.2
 
   packages/db:
     dependencies:

@@ -20,7 +20,6 @@
     "@mcpedia/db": "workspace:*",
     "@mcpedia/queue": "workspace:*",
     "@orpc/client": "1.16.1",
-    "@orpc/contract": "1.16.1",
     "@orpc/openapi": "1.16.1",
     "@orpc/server": "1.16.1",
     "better-auth": "1.7.12",
