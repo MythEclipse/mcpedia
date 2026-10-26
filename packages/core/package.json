@@ -18,7 +18,7 @@
 		"@mcpedia/db": "workspace:*",
 		"@mcpedia/parser": "workspace:*",
 		"@mcpedia/types": "workspace:*",
-		"docx": "^9.13.0",
+		"docx": "^9.14.0",
 		"drizzle-orm": "^0.45.4",
 		"ts-pattern": "^5.9.2"
 	},
