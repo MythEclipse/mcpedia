@@ -1,3 +1,10 @@
+## [1.4.11](https://github.com/asepharyana/mcpedia/compare/v1.4.10...v1.4.11) (2026-10-26)
+
+
+### Bug Fixes
+
+* auto-fix code quality ([dad9671](https://github.com/asepharyana/mcpedia/commit/dad9671ecd7b2eb0272e6fc76e24978f6be93c34))
+
 ## [1.4.10](https://github.com/asepharyana/mcpedia/compare/v1.4.9...v1.4.10) (2026-10-23)
 
 
