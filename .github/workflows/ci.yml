@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           # `fetch-depth: 0` is LOAD-BEARING, not a size preference.
           #
@@ -68,12 +68,12 @@ jobs:
           fetch-depth: 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
 
       # Installed BEFORE moon, not after: moon hashes task inputs from the
@@ -176,7 +176,7 @@ jobs:
           find payload -type f -printf '  %-44p %8s bytes\n' | sort
 
       - name: Upload release payload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mcpedia-payload
           path: payload/
@@ -239,13 +239,13 @@ jobs:
       # payload. A fix to either could never take effect if the copy that
       # applies it were the stale one.
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         # This job only consumes the payload and scp's files from the checkout —
         # it never runs moon — so full history is not needed here. The gate job
         # above DOES need it (see its `fetch-depth: 0` comment).
 
       - name: Download release payload
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mcpedia-payload
           path: payload
