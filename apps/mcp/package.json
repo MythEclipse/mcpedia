@@ -18,7 +18,7 @@
 		"@mcpedia/config": "workspace:*",
 		"@mcpedia/core": "workspace:*",
 		"@mcpedia/queue": "workspace:*",
-		"@modelcontextprotocol/sdk": "^1.29.0",
+		"@modelcontextprotocol/sdk": "^1.32.2",
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {
