@@ -21,7 +21,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.104.5",
     "@tanstack/react-router": "1.170.46",
-    "better-auth": "1.7.12",
+    "better-auth": "1.7.13",
     "github-slugger": "^2.0.0",
     "lucide-react": "^1.61.0",
     "react": "19.3.1",
