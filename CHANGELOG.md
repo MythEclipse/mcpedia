@@ -1,3 +1,5 @@
+## [1.4.19](https://github.com/MythEclipse/mcpedia/compare/v1.4.18...v1.4.19) (2026-11-01)
+
 ## [1.4.18](https://github.com/asepharyana/mcpedia/compare/v1.4.17...v1.4.18) (2026-10-30)
 
 
