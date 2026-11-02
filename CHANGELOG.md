@@ -1,3 +1,10 @@
+## [1.4.22](https://github.com/MythEclipse/mcpedia/compare/v1.4.21...v1.4.22) (2026-11-02)
+
+
+### Bug Fixes
+
+* **db:** guard must resolve migrations folder in bundled layout too ([2da229e](https://github.com/MythEclipse/mcpedia/commit/2da229e2c24b817b8d0d6df49880f5e428d72f41))
+
 ## [1.4.21](https://github.com/MythEclipse/mcpedia/compare/v1.4.20...v1.4.21) (2026-11-02)
 
 
