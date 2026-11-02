@@ -77,7 +77,32 @@ type QueryableDb = Pick<PostgresJsDatabase, "execute">
 const TABLE = "public.documents"
 
 /** Where `db:migrate` and `db:migrate:adopt` keep the journal. */
-const MIGRATIONS_FOLDER = new URL("../drizzle", import.meta.url).pathname
+/**
+ * Same two-layout problem as `migrate.ts`: this module sits at
+ * `packages/db/src/` in source, where `../drizzle` is `packages/db/drizzle`,
+ * but bundling puts it at `apps/api/dist/migrate.js`, where the same relative
+ * path points at a directory that does not exist.
+ *
+ * Getting this wrong is silent and expensive: the guard reads no journal, so
+ * `pending` is empty, `runMigrations` concludes the database is already
+ * current, and it goes straight to the seed. The seed then fails on
+ * `insert into "sections"` because the baseline was never applied — so the
+ * deploy reports a seed error while the real fault is a missing path.
+ */
+function resolveMigrationsFolder(): string {
+	const candidates = [
+		new URL("./drizzle", import.meta.url).pathname, // bundled: apps/api/dist/drizzle
+		new URL("../drizzle", import.meta.url).pathname, // source: packages/db/drizzle
+	]
+	for (const candidate of candidates) {
+		if (existsSync(candidate)) return candidate
+	}
+	throw new Error(
+		`migrations folder not found; looked in: ${candidates.join(", ")}`,
+	)
+}
+
+const MIGRATIONS_FOLDER = resolveMigrationsFolder()
 
 /**
  * Read the first row out of a drizzle `db.execute()` result.
