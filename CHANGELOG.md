@@ -1,3 +1,11 @@
+## [1.4.20](https://github.com/MythEclipse/mcpedia/compare/v1.4.19...v1.4.20) (2026-11-02)
+
+
+### Bug Fixes
+
+* **db:** import existsSync used by migrations-folder probe ([e6c2c1f](https://github.com/MythEclipse/mcpedia/commit/e6c2c1fbc07ce4568995a2f54d90f185588dea93))
+* **db:** resolve migrations folder in both source and bundled layouts ([cd774b1](https://github.com/MythEclipse/mcpedia/commit/cd774b1cc9c37cc9d7a22dd9c0b4f9bcdd3f334d))
+
 ## [1.4.19](https://github.com/MythEclipse/mcpedia/compare/v1.4.18...v1.4.19) (2026-11-01)
 
 ## [1.4.18](https://github.com/asepharyana/mcpedia/compare/v1.4.17...v1.4.18) (2026-10-30)
