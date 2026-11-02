@@ -1,3 +1,10 @@
+## [1.4.21](https://github.com/MythEclipse/mcpedia/compare/v1.4.20...v1.4.21) (2026-11-02)
+
+
+### Bug Fixes
+
+* **build:** copy drizzle meta/ journal — without it no migration runs ([467ad53](https://github.com/MythEclipse/mcpedia/commit/467ad53292471277addfb4f15ab8d3a2cd1a4654))
+
 ## [1.4.20](https://github.com/MythEclipse/mcpedia/compare/v1.4.19...v1.4.20) (2026-11-02)
 
 
