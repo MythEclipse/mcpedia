@@ -35,6 +35,7 @@
  * `db:migrate` script in this package's package.json — so the local path and the
  * deploy path cannot disagree about what "migrated" means.
  */
+import { existsSync } from "node:fs"
 import { migrate } from "drizzle-orm/postgres-js/migrator"
 import type { AnyDatabase } from "./migrate-guard"
 import { assertMigrationTargetIsClean } from "./migrate-guard"
