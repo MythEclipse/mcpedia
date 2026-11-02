@@ -40,7 +40,37 @@ import type { AnyDatabase } from "./migrate-guard"
 import { assertMigrationTargetIsClean } from "./migrate-guard"
 import { seedSections } from "./seed-sections"
 
-const migrationsFolder = new URL("../drizzle", import.meta.url).pathname
+/**
+ * Locate the migrations directory.
+ *
+ * WHY THIS IS NOT ONE RELATIVE PATH: this module lives at
+ * `packages/db/src/migrate.ts` in source, where `../drizzle` resolves to
+ * `packages/db/drizzle`. Bundling moves it to `apps/api/dist/migrate.js`, where
+ * the same relative path resolves to `apps/api/drizzle` — a directory that does
+ * not exist, because `scripts/build-bundles.mjs` copies the .sql files to
+ * `apps/api/dist/drizzle` instead.
+ *
+ * The failure mode is what made this worth a comment: `migrate()` given a
+ * missing folder applies NOTHING and does not throw. The run proceeds to
+ * `seedSections`, which fails on `insert into "sections"` because the baseline
+ * was never applied — a seed error masking a path error, on every deploy.
+ *
+ * So probe both layouts and take the one that exists.
+ */
+function resolveMigrationsFolder(): string {
+	const candidates = [
+		new URL("./drizzle", import.meta.url).pathname, // bundled: apps/api/dist/drizzle
+		new URL("../drizzle", import.meta.url).pathname, // source: packages/db/drizzle
+	]
+	for (const candidate of candidates) {
+		if (existsSync(candidate)) return candidate
+	}
+	throw new Error(
+		`migrations directory not found; looked in: ${candidates.join(", ")}`,
+	)
+}
+
+const migrationsFolder = resolveMigrationsFolder()
 
 /**
  * Preflight, then apply every pending migration.
