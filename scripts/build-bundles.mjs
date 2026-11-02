@@ -22,9 +22,11 @@ import { fileURLToPath } from "node:url"
 import { dirname, resolve } from "node:path"
 import {
 	copyFileSync,
+	cpSync,
 	mkdirSync,
 	readdirSync,
 	readFileSync,
+	existsSync,
 	rmSync,
 } from "node:fs"
 
@@ -162,13 +164,24 @@ console.log(
 const DRIZZLE_SRC = resolve(root, "packages/db/drizzle")
 const DRIZZLE_DEST = resolve(root, "apps/api/dist/drizzle")
 
+// WHY THE WHOLE DIRECTORY, NOT JUST THE .sql FILES:
+// drizzle's migrator decides what to apply by reading `meta/_journal.json`,
+// which lists every migration tag and its `when`. Copying only the .sql files
+// produces a folder the migrator considers EMPTY — it applies nothing, reports
+// no error, and the first thing to touch the schema afterwards is the seed,
+// which fails on a table the skipped baseline should have created. That is how
+// this shipped: every deploy failed at `insert into "sections"` while the real
+// fault was a missing journal.
 rmSync(DRIZZLE_DEST, { recursive: true, force: true })
-mkdirSync(DRIZZLE_DEST, { recursive: true })
-let copied = 0
-for (const file of readdirSync(DRIZZLE_SRC)) {
-	if (!file.endsWith(".sql")) continue
-	copyFileSync(resolve(DRIZZLE_SRC, file), resolve(DRIZZLE_DEST, file))
-	copied += 1
+cpSync(DRIZZLE_SRC, DRIZZLE_DEST, { recursive: true })
+
+const copied = readdirSync(DRIZZLE_DEST).filter((f) => f.endsWith(".sql")).length
+const journal = resolve(DRIZZLE_DEST, "meta/_journal.json")
+if (!existsSync(journal)) {
+	throw new Error(
+		`missing ${journal} — without the journal drizzle applies no migrations at ` +
+			`all and the deploy fails later, at the seed, for an unrelated-looking reason`,
+	)
 }
 if (copied === 0) {
 	// Loud, because the failure this prevents is silent.
