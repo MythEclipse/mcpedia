@@ -1,3 +1,10 @@
+## [1.4.23](https://github.com/MythEclipse/mcpedia/compare/v1.4.22...v1.4.23) (2026-11-05)
+
+
+### Bug Fixes
+
+* **deps:** stop the auto-merge gate reading its own check run ([008fd2c](https://github.com/MythEclipse/mcpedia/commit/008fd2cde662cf754ffcd6c177b888fe63fe01b7))
+
 ## [1.4.22](https://github.com/MythEclipse/mcpedia/compare/v1.4.21...v1.4.22) (2026-11-02)
 
 
