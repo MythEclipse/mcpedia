@@ -31,5 +31,10 @@
     "tsx": "^4.20.3",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "next": "16.4.5"
+    }
   }
 }
