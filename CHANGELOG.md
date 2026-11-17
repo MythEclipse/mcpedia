@@ -1,3 +1,10 @@
+## [1.4.26](https://github.com/MythEclipse/mcpedia/compare/v1.4.25...v1.4.26) (2026-11-17)
+
+
+### Bug Fixes
+
+* **deps:** bump esbuild to 0.25.0 for GHSA-67mh-4wv8-2f99 ([a80740d](https://github.com/MythEclipse/mcpedia/commit/a80740d5ed87a408782fcfbf776250d67bf4d593))
+
 ## [1.4.25](https://github.com/MythEclipse/mcpedia/compare/v1.4.24...v1.4.25) (2026-11-17)
 
 
