@@ -1,3 +1,10 @@
+## [1.4.27](https://github.com/MythEclipse/mcpedia/compare/v1.4.26...v1.4.27) (2026-11-17)
+
+
+### Bug Fixes
+
+* **deps:** bump postcss-selector-parser to 6.1.5 for GHSA-rj75-hqrm-r3gf ([9d51cad](https://github.com/MythEclipse/mcpedia/commit/9d51cad8f33f0c13a2f579c8e4f3b411b982a8b7))
+
 ## [1.4.26](https://github.com/MythEclipse/mcpedia/compare/v1.4.25...v1.4.26) (2026-11-17)
 
 
