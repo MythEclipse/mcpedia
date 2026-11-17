@@ -1,3 +1,12 @@
+## [1.4.30](https://github.com/MythEclipse/mcpedia/compare/v1.4.29...v1.4.30) (2026-11-17)
+
+
+### Bug Fixes
+
+* auto-fix code quality ([42cd72d](https://github.com/MythEclipse/mcpedia/commit/42cd72d781e5ea79542c87b8a7e080220e206f92))
+* auto-fix code quality ([e406b48](https://github.com/MythEclipse/mcpedia/commit/e406b48cf39b09829cff8a95a9c3012aa5e58f04))
+* **deps:** bump postcss-selector-parser to 6.1.5 for GHSA-rj75-hqrm-r3gf ([a211af4](https://github.com/MythEclipse/mcpedia/commit/a211af4c53f5523edcc086733f01c84a1ceed01b))
+
 ## [1.4.29](https://github.com/MythEclipse/mcpedia/compare/v1.4.28...v1.4.29) (2026-11-17)
 
 
