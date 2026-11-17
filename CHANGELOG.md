@@ -1,3 +1,10 @@
+## [1.4.25](https://github.com/MythEclipse/mcpedia/compare/v1.4.24...v1.4.25) (2026-11-17)
+
+
+### Bug Fixes
+
+* **deps:** bump next to 16.4.5 for GHSA-mfr8-8qww-v76h, GHSA-673q-mjm6-r5xr, GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r ([a724dfa](https://github.com/MythEclipse/mcpedia/commit/a724dfabd6cf31494c44aa867918dc88312fd7ac))
+
 ## [1.4.24](https://github.com/MythEclipse/mcpedia/compare/v1.4.23...v1.4.24) (2026-11-16)
 
 
